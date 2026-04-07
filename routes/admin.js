@@ -13,10 +13,12 @@ router.get('/', requireMaster, (req, res) => {
 
 // ─── USUARIOS ───────────────────────────────────────────────
 router.get('/usuarios', requireMaster, async (req, res) => {
-  const soloActivos = req.session?.soloActivos !== false;
-  const usuarios = await sql`SELECT u.*, g.nombre AS gomeria_nombre FROM usuarios u LEFT JOIN gomeria g ON u.gomeria_id = g.id ${soloActivos ? sql`WHERE u.activo = 1` : sql``} ORDER BY u.usuario`;
+  const soloActivos = req.query.todos !== '1';
+  const usuarios = soloActivos
+    ? await sql`SELECT u.*, g.nombre AS gomeria_nombre FROM usuarios u LEFT JOIN gomeria g ON u.gomeria_id = g.id WHERE u.activo = 1 ORDER BY u.usuario`
+    : await sql`SELECT u.*, g.nombre AS gomeria_nombre FROM usuarios u LEFT JOIN gomeria g ON u.gomeria_id = g.id ORDER BY u.usuario`;
   const gomerias = await sql`SELECT * FROM gomeria WHERE activo = 1 ORDER BY nombre`;
-  res.render('admin/usuarios/index', { user: req.user, usuarios, gomerias, currentPage: 'admin' });
+  res.render('admin/usuarios/index', { user: req.user, usuarios, gomerias, soloActivos, currentPage: 'admin' });
 });
 
 router.get('/usuarios/nuevo', requireMaster, async (req, res) => {
