@@ -1,0 +1,58 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>MASTER BUS</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link href="/css/style.css" rel="stylesheet" type="text/css" />
+<link href="/css/tables.css" rel="stylesheet" type="text/css" />
+<link rel="icon" type="image/png" href="/images/icon.png" />
+<script type="text/javascript" src="/js/jquery.min.js"></script>
+<script type="text/javascript" src="/js/jquery-ui.min.js"></script>
+<script type="text/javascript" src="/js/functions.js"></script>
+<script type="text/javascript" src="/js/calendar/jquery-ui.js"></script>
+<link rel="stylesheet" href="/js/calendar/jquery-ui.css">
+<%- typeof extraHead !== 'undefined' ? extraHead : '' %>
+</head>
+<body>
+  <div class="main">
+    <div class="header">
+      <div class="header_resize">
+        <div class="logo">
+          <h1><a href="/"><img src="/images/masterbus-logo.png"></a></h1>
+        </div>
+        <div class="menu_nav">
+          <ul>
+            <% if (typeof user !== 'undefined' && user) { %>
+              <li class="<%= currentPage === 'inicio' ? 'active' : '' %>"><a href="/">Inicio</a></li>
+              <li class="<%= currentPage === 'reportes' ? 'active' : '' %>"><a href="/reportes">Reportes</a></li>
+              <% if (user.tipo === 1) { %>
+              <li class="<%= currentPage === 'admin' ? 'active' : '' %>"><a href="/admin">Administrar</a></li>
+              <% } %>
+              <li class="<%= currentPage === 'manual' ? 'active' : '' %>"><a href="/manual">Manual</a></li>
+              <li><a href="/logout">Salir</a></li>
+            <% } else { %>
+              <li class="active"><a href="/login">Ingresar</a></li>
+            <% } %>
+          </ul>
+        </div>
+        <div class="clr"></div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="content_resize">
+        <div class="mainbar">
+          <div class="article">
+            <%- body %>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="footer_resize">
+          <p class="rf">Sistema desarrollado por <strong>Master Bus S.A</strong></p>
+          <div class="clr"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

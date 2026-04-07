@@ -1,0 +1,22 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  var nombre = document.getElementById('nombre').value;
+  if (!nombre) { alert('Ingrese el nombre'); return; }
+  $.ajax({ type:'POST', url:'/ajax/save_almacen', data:{ nombre },
+    success: function(data) { if(data) { alert(data); location.href='/admin/almacen'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Nuevo Almacén</h3>
+  <p><strong>Nombre:</strong> <input type="text" id="nombre" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/almacen';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

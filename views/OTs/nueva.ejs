@@ -1,0 +1,45 @@
+<%
+const currentPage = 'inicio';
+const body = `
+<script>
+function guardar_ot() {
+  var numero = document.getElementById('numero').value;
+  var recapadora = document.getElementById('recapadora_id').value;
+  var fecha = document.getElementById('fecha').value;
+  if (!numero || !fecha) { alert('Complete todos los campos requeridos'); return; }
+  $.ajax({
+    type: 'POST', url: '/ajax/nueva_ot',
+    data: { numero, recapadora_id: recapadora, fecha,
+            gomeria_id: document.getElementById('gomeria_id').value,
+            unidad_id: document.getElementById('unidad_id').value },
+    success: function(id) {
+      if (id) location.href = '/OTs/ver?ot=' + id;
+      else alert('Error al crear la OT');
+    }
+  });
+}
+</script>
+
+<h3>Nueva Orden de Trabajo</h3>
+<div style="width:350px; margin:0 auto;">
+  <p><strong>Número OT:</strong> <input type="text" id="numero" style="float:right;" /></p>
+  <p><strong>Recapadora:</strong>
+    <select id="recapadora_id" style="float:right;">
+      <option value="">Seleccione...</option>
+      ${recapadoras.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('')}
+    </select>
+  </p>
+  <p><strong>Gomería:</strong>
+    <select id="gomeria_id" style="float:right;">
+      <option value="">Seleccione...</option>
+      ${gomerias.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('')}
+    </select>
+  </p>
+  <p><strong>Fecha:</strong> <input type="text" id="fecha" style="float:right;" placeholder="DD/MM/AAAA" /></p>
+  <input type="button" value="Guardar" style="float:left; width:100px;" onclick="guardar_ot();" />
+  <input type="button" value="Cancelar" style="float:right; width:100px;" onclick="location.href='/OTs/list';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

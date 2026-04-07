@@ -1,0 +1,41 @@
+<%
+const currentPage = 'inicio';
+const body = `
+<form method="get" action="/recapadoras" style="float:left">
+  <strong>Recapadora:</strong>
+  <select name="recapadora">
+    <option value="0">Todas</option>
+    ${recapadoras.map(r => `<option value="${r.id}" ${r.id==filtros.recapadora?'selected':''}>${r.nombre}</option>`).join('')}
+  </select>
+  <strong style="margin-left:10px;">Estado:</strong>
+  <select name="estado">
+    <option value="-1" ${filtros.estado==-1?'selected':''}>Todos</option>
+    <option value="0" ${filtros.estado==0?'selected':''}>Abierta</option>
+    <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
+  </select>
+  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:20px; width:75px;" />
+</form>
+<input type="button" value="Nueva OT" style="float:right; width:100px;" onclick="location.href='/OTs/nueva'">
+<div style="clear:both; margin-bottom:20px;"></div>
+
+<table>
+  <thead>
+    <th>OT Número</th>
+    <th>Recapadora</th>
+    <th>Fecha</th>
+    <th>Estado</th>
+    <th style="width:100px;">Editar</th>
+  </thead>
+  ${ots.length === 0 ? '<tr><td colspan="5" align="center">Sin órdenes de trabajo</td></tr>' :
+    ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center">${o.numero||o.id}</td>
+      <td align="center">${o.recapadora_nombre||'-'}</td>
+      <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center"><strong>${o.estado==0?'Abierta':'Cerrada'}</strong></td>
+      <td align="center"><a href="/OTs/ver?ot=${o.id}">${o.estado==1?'CERRADA':'VER'}</a></td>
+    </tr>`).join('')
+  }
+</table>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

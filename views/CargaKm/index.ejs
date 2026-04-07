@@ -1,0 +1,38 @@
+<%
+const currentPage = 'inicio';
+const body = `
+<script>
+function cargar(id) {
+  var km = document.getElementById('km_' + id).value;
+  $.ajax({ type:'POST', url:'/ajax/cargar_km', data:{ id, km },
+    success: function() { alert('Kilómetros actualizados correctamente'); location.href = '/CargaKm/result?id=' + id; }
+  });
+}
+function carga_masiva() {
+  var data = {};
+  document.querySelectorAll('[id^=km_]').forEach(function(el) { if(el.value) data[el.id] = el.value; });
+  $.ajax({ type:'POST', url:'/ajax/carga_masiva_km', data,
+    success: function() { alert('Carga masiva finalizada correctamente.'); location.reload(); }
+  });
+}
+</script>
+
+<h3>Carga de Kilómetros</h3>
+<input type="button" class="adm_button" value="Carga Masiva" onclick="carga_masiva();" style="margin-bottom:15px;" />
+<table>
+  <thead>
+    <th>Unidad</th>
+    <th>Km Actual</th>
+    <th>Nuevo Km</th>
+    <th></th>
+  </thead>
+  ${unidades.map((u, i) => `<tr class="${i%2===0?'light':'dark'}">
+    <td>${u.unidad}</td>
+    <td align="center">${u.km_actual||0}</td>
+    <td align="center"><input type="text" id="km_${u.id}" style="width:100px;" placeholder="Nuevo km" /></td>
+    <td align="center"><input type="button" value="Cargar" onclick="cargar(${u.id})" style="width:70px;" /></td>
+  </tr>`).join('')}
+</table>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

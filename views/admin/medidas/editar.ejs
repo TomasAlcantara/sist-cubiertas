@@ -1,0 +1,20 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  $.ajax({ type:'POST', url:'/ajax/save_medida', data:{ id: ${medida.id}, medida: document.getElementById('medida').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/medidas'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Editar Medida</h3>
+  <p><strong>Medida:</strong> <input type="text" id="medida" value="${medida.medida}" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/medidas';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

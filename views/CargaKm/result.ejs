@@ -1,0 +1,11 @@
+<%
+const currentPage = 'inicio';
+const body = `
+<h3>Kilómetros actualizados</h3>
+<p><strong>Unidad:</strong> ${micro.unidad}</p>
+<p><strong>Km actual:</strong> ${micro.km_actual}</p>
+<br>
+<input type="button" value="Volver" onclick="location.href='/CargaKm'" class="adm_button" />
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

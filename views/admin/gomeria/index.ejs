@@ -1,0 +1,21 @@
+<%
+const currentPage = 'admin';
+const body = `
+<div style="float:right;">
+  <input type="button" value="Nueva Gomería" onclick="location.href='/admin/gomeria/nuevo';" style="width:150px;"/>
+</div>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead><th>Nombre</th><th style="width:200px;">Editar</th></thead>
+  ${gomerias.map((g,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td>${g.nombre}</td>
+    <td align="center">
+      <a href="/admin/gomeria/editar?id=${g.id}">EDITAR</a> |
+      <a style="cursor:pointer;" onclick="active(${g.id}, ${g.activo==1?0:1}, 'gomeria')">${g.activo==1?'BAJA':'ALTA'}</a>
+    </td>
+  </tr>`).join('')}
+</table>
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

@@ -1,0 +1,42 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function select_tipo(id) {
+  document.getElementById(id).checked = true;
+  for (var i = 1; i <= 4; i++) {
+    var img = document.getElementById('mod_' + i);
+    if (img) img.style.opacity = (i == id) ? '1' : '0.4';
+  }
+}
+function check_form() {
+  var unidad = document.getElementById('unidad').value;
+  var desc = document.getElementById('descripcion').value;
+  if (!unidad || !desc) { alert('Complete unidad y descripción'); return; }
+  var tipo = document.querySelector('input[name=tipo_unidad]:checked').value;
+  $.ajax({ type:'POST', url:'/ajax/save_micro', data:{ unidad, descripcion: desc, tipo_unidad: tipo },
+    success: function(data) { if(data) { alert(data); location.href='/admin/micros'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Nueva Unidad</h3>
+  <p><strong>Unidad:</strong> <input type="text" id="unidad" style="float:right;" /></p>
+  <p><strong>Descripción:</strong> <input type="text" id="descripcion" style="float:right;" /></p>
+  <p><strong>Tipo de unidad:</strong><br/>
+    <input type="radio" id="1" name="tipo_unidad" value="1" checked style="display:none;" />
+    <input type="radio" id="2" name="tipo_unidad" value="2" style="display:none;" />
+    <input type="radio" id="3" name="tipo_unidad" value="3" style="display:none;" />
+    <input type="radio" id="4" name="tipo_unidad" value="4" style="display:none;" />
+    <span onclick="select_tipo(1)" style="cursor:pointer; margin-right:8px; font-size:24px;" id="mod_1">🚌</span>
+    <span onclick="select_tipo(2)" style="cursor:pointer; margin-right:8px; font-size:24px; opacity:0.4;" id="mod_2">🚐</span>
+    <span onclick="select_tipo(3)" style="cursor:pointer; margin-right:8px; font-size:24px; opacity:0.4;" id="mod_3">🚚</span>
+    <span onclick="select_tipo(4)" style="cursor:pointer; margin-right:8px; font-size:24px; opacity:0.4;" id="mod_4">🚗</span>
+  </p>
+  <input type="button" value="Guardar" style="float:left;" onclick="check_form();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/micros';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

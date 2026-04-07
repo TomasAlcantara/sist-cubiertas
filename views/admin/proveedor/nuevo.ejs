@@ -1,0 +1,25 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  var prov = document.getElementById('proveedor').value;
+  if (!prov) { alert('Ingrese el proveedor'); return; }
+  $.ajax({ type:'POST', url:'/ajax/save_proveedor',
+    data:{ proveedor: prov, tel: document.getElementById('tel').value, mail: document.getElementById('mail').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/proveedor'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Nuevo Proveedor</h3>
+  <p><strong>Proveedor:</strong> <input type="text" id="proveedor" style="float:right;" /></p>
+  <p><strong>Tel:</strong> <input type="text" id="tel" style="float:right;" /></p>
+  <p><strong>Mail:</strong> <input type="text" id="mail" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/proveedor';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

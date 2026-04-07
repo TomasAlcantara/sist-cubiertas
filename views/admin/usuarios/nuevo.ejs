@@ -1,0 +1,52 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar_datos() {
+  var u = document.getElementById('usuario').value;
+  var p = document.getElementById('password').value;
+  if (!u || !p) { alert('Complete usuario y contraseña'); return; }
+  $.ajax({ type:'POST', url:'/ajax/save_usuario',
+    data: { usuario: u, password: p, tipo: document.getElementById('tipo').value,
+            nombre: document.getElementById('nombre').value, mail: document.getElementById('mail').value,
+            avisa: document.getElementById('avisa').value, gomeria: document.getElementById('gomeria').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/usuarios'; } else alert('Error al guardar'); }
+  });
+}
+function diplay_me(obj) {
+  var isGomeria = obj.value == 0;
+  document.getElementById('pnombre').style.display = isGomeria ? 'none' : '';
+  document.getElementById('pavisa').style.display = isGomeria ? 'none' : '';
+  document.getElementById('pgomeria').style.display = isGomeria ? '' : 'none';
+}
+</script>
+<div style="width:320px; margin:0 auto;">
+  <h3>Nuevo Usuario</h3>
+  <form id="formulario">
+    <p><strong>Usuario:</strong> <input type="text" id="usuario" name="usuario" style="float:right;" /></p>
+    <p><strong>Contraseña:</strong> <input type="password" id="password" name="password" style="float:right;" /></p>
+    <p><strong>Tipo:</strong>
+      <select id="tipo" name="tipo" style="float:right;" onchange="diplay_me(this)">
+        <option value="0">Gomeria</option>
+        <option value="1">Master Bus</option>
+      </select>
+    </p>
+    <p id="pnombre" style="display:none;"><strong>Nombre:</strong> <input type="text" id="nombre" name="nombre" style="float:right;" /></p>
+    <p id="pmail"><strong>Mail:</strong> <input type="text" id="mail" name="mail" style="float:right;" /></p>
+    <p id="pavisa" style="display:none;"><strong>Avisar por mail:</strong>
+      <select id="avisa" name="avisa" style="float:right;"><option value="0">NO</option><option value="1">SI</option></select>
+    </p>
+    <p id="pgomeria"><strong>Gomería:</strong>
+      <select id="gomeria" name="gomeria" style="float:right; width:177px;">
+        <option value="0">Seleccione...</option>
+        ${gomerias.map(g=>`<option value="${g.id}">${g.nombre}</option>`).join('')}
+      </select>
+    </p>
+    <input type="button" value="Guardar" style="float:left; width:80px;" onclick="guardar_datos();" />
+    <input type="button" value="Cancelar" style="float:right; width:80px;" onclick="location.href='/admin/usuarios';" />
+    <div class="clr"></div>
+  </form>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

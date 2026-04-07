@@ -1,0 +1,24 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  var marca = document.getElementById('marca').value;
+  var modelo = document.getElementById('modelo').value;
+  if (!marca || !modelo) { alert('Complete marca y modelo'); return; }
+  $.ajax({ type:'POST', url:'/ajax/save_modelo', data:{ marca, modelo },
+    success: function(data) { if(data) { alert(data); location.href='/admin/modelo_cubierta'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Nuevo Modelo de Cubierta</h3>
+  <p><strong>Marca:</strong> <input type="text" id="marca" style="float:right;" /></p>
+  <p><strong>Modelo:</strong> <input type="text" id="modelo" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/modelo_cubierta';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

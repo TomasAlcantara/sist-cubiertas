@@ -1,0 +1,54 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<title>MASTER BUS</title>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<link href="/css/style.css" rel="stylesheet" type="text/css" />
+<link href="/css/tables.css" rel="stylesheet" type="text/css" />
+<link rel="icon" type="image/png" href="/images/icon.png" />
+</head>
+<body>
+  <div class="main">
+    <div class="header">
+      <div class="header_resize">
+        <div class="logo">
+          <h1><a href="/login"><img src="/images/masterbus-logo.png"></a></h1>
+        </div>
+        <div class="menu_nav">
+          <ul>
+            <li class="active"><a href="/login">Ingresar</a></li>
+          </ul>
+        </div>
+        <div class="clr"></div>
+      </div>
+    </div>
+    <div class="content">
+      <div class="content_resize">
+        <div class="mainbar">
+          <div class="article">
+            <div style="width:300px; margin: 0 auto;">
+              <h2>Ingresar al sistema</h2>
+              <% if (error) { %>
+                <p style="color: red;"><%= error %></p>
+              <% } %>
+              <form method="post" action="/login">
+                <p><strong>Usuario</strong><input type="text" name="usr" style="float: right;" /></p>
+                <p><strong>Contraseña</strong><input type="password" name="pass" style="float: right;" /></p>
+                <input type="submit" value="Ingresar" style="float: left; width:100px" />
+                <input type="button" value="Cancelar" style="float: right; width:100px" onclick="location.href='/'" />
+                <div class="clr"></div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <div class="footer_resize">
+          <p class="rf">Sistema desarrollado por <strong>Master Bus S.A</strong></p>
+          <div class="clr"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,18 @@
+<%
+const currentPage = 'admin';
+const body = `
+<div style="float:right;">
+  <input type="button" value="Nueva Medida" onclick="location.href='/admin/medidas/nuevo';" style="width:150px;"/>
+</div>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead><th>Medida</th><th style="width:200px;">Editar</th></thead>
+  ${medidas.map((m,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td>${m.medida}</td>
+    <td align="center"><a href="/admin/medidas/editar?medida=${m.id}">EDITAR</a></td>
+  </tr>`).join('')}
+</table>
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

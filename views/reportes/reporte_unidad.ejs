@@ -1,0 +1,30 @@
+<%
+const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
+const currentPage = 'reportes';
+const body = `
+<h3>Reporte por Interno</h3>
+<form method="get" action="/reportes/reporte_unidad">
+  <strong>Unidad:</strong>
+  <select name="unidad">
+    <option value="0">Seleccione...</option>
+    ${unidades.map(u=>`<option value="${u.id}" ${u.id==unidad?'selected':''}>${u.unidad}</option>`).join('')}
+  </select>
+  <input type="button" value="Ver" onclick="this.form.submit()" style="margin-left:10px; width:75px;" />
+</form>
+<div class="clr" style="margin-bottom:10px;"></div>
+${cubiertas.length > 0 ? `
+<table>
+  <thead><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th></thead>
+  ${cubiertas.map((c,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td align="center">${c.posicion||'-'}</td>
+    <td align="center">${c.fuego||'-'}</td>
+    <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
+    <td align="center">${c.medida||'-'}</td>
+    <td align="center">${estadoNombre(c.estado)}</td>
+    <td align="center">${c.km||0}</td>
+  </tr>`).join('')}
+</table>` : unidad > 0 ? '<p>Sin cubiertas para esta unidad.</p>' : ''}
+<br><a href="/reportes">&laquo; Volver</a>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

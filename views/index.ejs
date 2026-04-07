@@ -1,0 +1,12 @@
+<%
+const body = `
+<input type="button" class="adm_button" value="Almacenes" onclick="location.href='/almacen';" />
+<input type="button" class="adm_button" value="Gomerias" onclick="location.href='/gomerias';" style="margin-left:10px" />
+<input type="button" class="adm_button" value="Listado de OTs" onclick="location.href='/OTs/list';" style="margin-left:10px" />
+<input type="button" class="adm_button" value="Carga de km" onclick="location.href='/CargaKm';" style="margin-left:10px" />
+<input type="button" class="adm_button" value="Cubiertas" onclick="location.href='/cubiertas';" style="margin-left:10px" />
+<input type="button" class="adm_button" value="Recapadoras" onclick="location.href='/recapadoras';" style="margin-left:10px" />
+`;
+const currentPage = 'inicio';
+%>
+<%- include('layout', { body, user, currentPage }) %>

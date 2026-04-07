@@ -1,0 +1,27 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  $.ajax({ type:'POST', url:'/ajax/save_micro',
+    data:{ id: ${micro.id}, unidad: document.getElementById('unidad').value,
+           descripcion: document.getElementById('descripcion').value,
+           tipo_unidad: document.querySelector('input[name=tipo_unidad]:checked').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/micros'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Editar Unidad</h3>
+  <p><strong>Unidad:</strong> <input type="text" id="unidad" value="${micro.unidad}" style="float:right;" /></p>
+  <p><strong>Descripción:</strong> <input type="text" id="descripcion" value="${micro.descripcion||''}" style="float:right;" /></p>
+  <p><strong>Tipo:</strong>
+    ${[1,2,3,4].map(t=>`<input type="radio" name="tipo_unidad" value="${t}" ${micro.tipo_unidad==t?'checked':''}/> Tipo ${t}  `).join('')}
+  </p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/micros';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

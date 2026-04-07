@@ -1,0 +1,25 @@
+<%
+const currentPage = 'reportes';
+const body = `
+<h3>Reporte de Estados</h3>
+<table style="max-width:400px;">
+  <thead><th>Estado</th><th>Cantidad</th></thead>
+  <tr class="light"><td>Nuevas</td><td align="center">${resumen.nuevas||0}</td></tr>
+  <tr class="dark"><td>Usadas</td><td align="center">${resumen.usadas||0}</td></tr>
+  <tr class="light"><td>Recapadas</td><td align="center">${resumen.recapadas||0}</td></tr>
+  <tr class="sdark"><td><strong>Total</strong></td><td align="center"><strong>${resumen.total||0}</strong></td></tr>
+</table>
+<br>
+<h3>Por Modelo</h3>
+<table>
+  <thead><th>Marca</th><th>Modelo</th><th>Estado</th><th>Cantidad</th></thead>
+  ${porModelo.map((r,i) => `<tr class="${i%2===0?'light':'dark'}">
+    <td>${r.marca||'-'}</td><td>${r.modelo||'-'}</td>
+    <td>${r.estado==1?'Nueva':r.estado==2?'Usada':'Recapada'}</td>
+    <td align="center">${r.cantidad}</td>
+  </tr>`).join('')}
+</table>
+<br><a href="/reportes">&laquo; Volver</a>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

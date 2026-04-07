@@ -1,0 +1,20 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  $.ajax({ type:'POST', url:'/ajax/save_gomeria', data:{ id: ${gomeria.id}, nombre: document.getElementById('nombre').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/gomeria'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Editar Gomería</h3>
+  <p><strong>Nombre:</strong> <input type="text" id="nombre" value="${gomeria.nombre}" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/gomeria';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

@@ -1,0 +1,27 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function anular(id) {
+  if (!confirm('¿Confirma que desea anular la OT N° ' + id + '?')) return;
+  $.ajax({ type:'POST', url:'/ajax/anular_ot', data:{ ot_id: id },
+    success: function() { alert('OT anulada correctamente'); location.reload(); }
+  });
+}
+</script>
+<h3>Anular Orden de Trabajo</h3>
+<table>
+  <thead><th>OT Número</th><th>Recapadora</th><th>Fecha</th><th style="width:100px;">Anular</th></thead>
+  ${ots.length === 0 ? '<tr><td colspan="4" align="center">Sin OTs abiertas</td></tr>' :
+    ots.map((o,i)=>`<tr class="${i%2===0?'light':'dark'}">
+      <td align="center">${o.numero||o.id}</td>
+      <td align="center">${o.recapadora_nombre||'-'}</td>
+      <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center"><a style="cursor:pointer; color:red;" onclick="anular(${o.id})">ANULAR</a></td>
+    </tr>`).join('')
+  }
+</table>
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

@@ -1,0 +1,25 @@
+<%
+const currentPage = 'admin';
+const body = `
+<div style="float:right;">
+  <input type="button" value="Nuevo Proveedor" onclick="location.href='/admin/proveedor/nuevo';" style="width:160px;"/>
+</div>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead><th>Proveedor</th><th>Teléfono</th><th>Mail</th><th style="width:150px;">Editar</th></thead>
+  ${proveedores.map((p,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td>${p.proveedor}</td>
+    <td align="center">${p.tel||'-'}</td>
+    <td align="center">${p.mail||'-'}</td>
+    <td align="center"><a href="/admin/proveedor/editar?proveedor=${p.id}">EDITAR</a></td>
+  </tr>`).join('')}
+</table>
+${totalPages > 1 ? `<div style="text-align:center; margin-top:10px;">
+  ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
+    p==pagina ? `<strong style='color:#00F;'>${p}</strong>` : `<a href='?pagina=${p}'>${p}</a>`
+  ).join(' | ')}
+</div>` : ''}
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

@@ -1,0 +1,64 @@
+<%
+const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
+const currentPage = 'inicio';
+const body = `
+<script>
+function orderby(id) {
+  var ob = ${filtros.orderby};
+  if (id == ob) id += 10;
+  location.href = '?fuego=${filtros.fuego}&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=' + id;
+}
+</script>
+
+<form id="formulario" method="get" action="/cubiertas">
+  <strong>Fuego:</strong> <input type="text" id="fuego" name="fuego" value="${filtros.fuego}" maxlength="8">
+  <strong style="margin-left:10px;">Modelo:</strong>
+  <select id="modelo" name="modelo">
+    <option value="0">Todos</option>
+    ${modelos.map(m => `<option value="${m.id}" ${m.id==filtros.modelo?'selected':''}>${m.marca} ${m.modelo}</option>`).join('')}
+  </select>
+  <strong style="margin-left:10px;">Estado:</strong>
+  <select id="estado" name="estado">
+    <option value="0">Todos</option>
+    <option value="1" ${filtros.estado==1?'selected':''}>Nueva</option>
+    <option value="2" ${filtros.estado==2?'selected':''}>Usada</option>
+    <option value="3" ${filtros.estado==3?'selected':''}>Recapada</option>
+  </select>
+  <strong style="margin-left:10px;">Proveedor:</strong>
+  <select id="proveedor" name="proveedor">
+    <option value="0">Todos</option>
+    ${proveedores.map(p => `<option value="${p.id}" ${p.id==filtros.proveedor?'selected':''}>${p.proveedor}</option>`).join('')}
+  </select>
+  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:10px; width:75px;">
+</form>
+<div class="clr" style="margin-bottom:10px;"></div>
+
+<table>
+  <thead>
+    <th onclick="orderby(1)" style="cursor:pointer;">Fuego</th>
+    <th onclick="orderby(2)" style="cursor:pointer;">Modelo</th>
+    <th onclick="orderby(3)" style="cursor:pointer;">Medida</th>
+    <th onclick="orderby(4)" style="cursor:pointer;">Estado</th>
+    <th onclick="orderby(5)" style="cursor:pointer;">Km</th>
+    <th>Ubicación</th>
+  </thead>
+  ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin resultados</td></tr>' :
+    cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center">${c.fuego||'-'}</td>
+      <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
+      <td align="center">${c.medida||'-'}</td>
+      <td align="center">${estadoNombre(c.estado)}</td>
+      <td align="center">${c.km||0}</td>
+      <td align="center">${c.almacen_nombre||c.gomeria_nombre||c.unidad||'-'}</td>
+    </tr>`).join('')
+  }
+</table>
+
+${totalPages > 1 ? `<div style="text-align:center; margin-top:10px;">
+  ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
+    p==pagina ? `<strong style='color:#00F;'>${p}</strong>` : `<a href='?fuego=${filtros.fuego}&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=${filtros.orderby}&pagina=${p}'>${p}</a>`
+  ).join(' | ')}
+</div>` : ''}
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

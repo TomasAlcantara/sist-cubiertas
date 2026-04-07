@@ -1,0 +1,8 @@
+<%
+const body = `
+<h3>Seleccione la gomeria:</h3>
+${gomerias.map(g => `<input type="button" class="adm_button" value="${g.nombre}" onclick="location.href='/gomerias/view?id=${g.id}';" style="margin-right:10px;"/>`).join('')}
+`;
+const currentPage = 'inicio';
+%>
+<%- include('../layout', { body, user, currentPage }) %>

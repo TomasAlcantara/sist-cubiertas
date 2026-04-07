@@ -1,0 +1,37 @@
+<%
+const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
+const currentPage = 'inicio';
+const body = `
+<h3>OT N° ${ot.numero || ot.id}</h3>
+<p><strong>Recapadora:</strong> ${ot.recapadora_nombre||'-'}</p>
+<p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
+<p><strong>Unidad:</strong> ${ot.unidad||'-'}</p>
+<p><strong>Fecha:</strong> ${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</p>
+<p><strong>Estado:</strong> ${ot.estado==0?'Abierta':'Cerrada'}</p>
+${ot.factura ? '<p><strong>Factura:</strong> '+ot.factura+'</p>' : ''}
+${ot.costo ? '<p><strong>Costo:</strong> $'+ot.costo+'</p>' : ''}
+
+<h3>Cubiertas en esta OT</h3>
+<table>
+  <thead>
+    <th>Fuego</th>
+    <th>Modelo</th>
+    <th>Medida</th>
+    <th>Estado</th>
+    <th>Km</th>
+  </thead>
+  ${cubiertas.length === 0 ? '<tr><td colspan="5" align="center">Sin cubiertas</td></tr>' :
+    cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center">${c.fuego||'-'}</td>
+      <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
+      <td align="center">${c.medida||'-'}</td>
+      <td align="center">${estadoNombre(c.estado)}</td>
+      <td align="center">${c.km||0}</td>
+    </tr>`).join('')
+  }
+</table>
+<br>
+<a href="/OTs/list">&laquo; Volver al listado</a>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

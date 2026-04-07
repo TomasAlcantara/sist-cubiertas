@@ -1,0 +1,35 @@
+<%
+const currentPage = 'admin';
+const body = `
+<form method="get" action="/admin/modelo_cubierta">
+  <strong>Marca:</strong> <input type="text" name="marca" value="${filtros.marca}" style="width:120px;" />
+  <strong style="margin-left:10px;">Modelo:</strong> <input type="text" name="modelo" value="${filtros.modelo}" style="width:120px;" />
+  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:10px; width:60px;" />
+</form>
+<div style="float:left; margin-top:10px;">
+  <input type="checkbox" id="active_only" checked style="cursor:pointer;" onclick="solo_activos(this);"/>
+  <label for="active_only" style="cursor:pointer">Mostrar solo los activos</label>
+</div>
+<div style="float:right; margin-top:10px;">
+  <input type="button" value="Nuevo Modelo" onclick="location.href='/admin/modelo_cubierta/nuevo';" style="width:150px;"/>
+</div>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead><th>Marca</th><th>Modelo</th><th style="width:150px;">Editar</th></thead>
+  ${modelos.map((m,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td>${m.marca}</td><td>${m.modelo}</td>
+    <td align="center">
+      <a href="/admin/modelo_cubierta/editar?modelo=${m.id}">EDITAR</a> |
+      <a style="cursor:pointer;" onclick="active(${m.id}, ${m.activo==1?0:1}, 'marcas_ruedas')">${m.activo==1?'BAJA':'ALTA'}</a>
+    </td>
+  </tr>`).join('')}
+</table>
+${totalPages > 1 ? `<div style="text-align:center; margin-top:10px;">
+  ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
+    p==pagina ? `<strong style='color:#00F;'>${p}</strong>` : `<a href='?marca=${filtros.marca}&modelo=${filtros.modelo}&pagina=${p}'>${p}</a>`
+  ).join(' | ')}
+</div>` : ''}
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

@@ -1,0 +1,24 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  $.ajax({ type:'POST', url:'/ajax/save_proveedor',
+    data:{ id: ${proveedor.id}, proveedor: document.getElementById('proveedor').value,
+           tel: document.getElementById('tel').value, mail: document.getElementById('mail').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/proveedor'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Editar Proveedor</h3>
+  <p><strong>Proveedor:</strong> <input type="text" id="proveedor" value="${proveedor.proveedor}" style="float:right;" /></p>
+  <p><strong>Tel:</strong> <input type="text" id="tel" value="${proveedor.tel||''}" style="float:right;" /></p>
+  <p><strong>Mail:</strong> <input type="text" id="mail" value="${proveedor.mail||''}" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/proveedor';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

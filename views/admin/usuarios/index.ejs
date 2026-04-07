@@ -1,0 +1,29 @@
+<%
+const currentPage = 'admin';
+const body = `
+<div style="float:left;">
+  <input type="checkbox" id="active_only" checked style="cursor:pointer;" onclick="solo_activos(this);"/>
+  <label for="active_only" style="cursor:pointer">Mostrar solo los activos</label>
+</div>
+<div style="float:right;">
+  <input type="button" value="Nuevo Usuario" onclick="location.href='/admin/usuarios/nuevo';" style="width:150px;"/>
+</div>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead>
+    <th>ID</th><th>Usuario</th><th>Tipo</th><th style="width:150px;">Editar</th>
+  </thead>
+  ${usuarios.map((u,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td align="center">${u.id}</td>
+    <td>${u.usuario}</td>
+    <td align="center">${u.tipo==1?'Master Bus':'Gomeria'}</td>
+    <td align="center">
+      <a href="/admin/usuarios/editar?usuario=${u.id}">EDITAR</a> |
+      <a style="cursor:pointer;" onclick="active(${u.id}, ${u.activo==1?0:1}, 'usuarios')">${u.activo==1?'BAJA':'ALTA'}</a>
+    </td>
+  </tr>`).join('')}
+</table>
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

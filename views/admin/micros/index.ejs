@@ -1,0 +1,35 @@
+<%
+const currentPage = 'admin';
+const body = `
+<form method="get" action="/admin/micros" style="margin-bottom:10px;">
+  <strong>Unidad:</strong>
+  <select name="id">
+    <option value="">Todos</option>
+    ${allMicros.map(m=>`<option value="${m.id}">${m.unidad}</option>`).join('')}
+  </select>
+  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:10px; width:60px;">
+  <input type="button" value="Nueva Unidad" onclick="location.href='/admin/micros/nuevo';" style="width:140px; float:right;"/>
+</form>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead><th>Unidad</th><th>Descripción</th><th>Km Actual</th><th style="width:180px;">Editar</th></thead>
+  ${micros.map((m,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td>${m.unidad}</td>
+    <td>${m.descripcion||''}</td>
+    <td align="center">${m.km_actual||0}</td>
+    <td align="center">
+      <a href="/admin/ruedas_micro/modelo?v=${m.id}">VER</a> |
+      <a href="/admin/micros/editar?rueda=${m.id}">EDITAR</a> |
+      <a style="cursor:pointer;" onclick="active(${m.id}, ${m.activo==1?0:1}, 'micro')">${m.activo==1?'BAJA':'ALTA'}</a>
+    </td>
+  </tr>`).join('')}
+</table>
+${totalPages > 1 ? `<div style="text-align:center; margin-top:10px;">
+  ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
+    p==pagina ? `<strong style='color:#00F;'>${p}</strong>` : `<a href='?pagina=${p}'>${p}</a>`
+  ).join(' | ')}
+</div>` : ''}
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

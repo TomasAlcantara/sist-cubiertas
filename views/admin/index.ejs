@@ -1,0 +1,21 @@
+<%
+const body = `
+<div>
+  <h3>Administración General</h3>
+  <input type="button" class="adm_button" value="Usuarios" onclick="location.href='/admin/usuarios';" />
+  <input type="button" class="adm_button" value="Almacenes" onclick="location.href='/admin/almacen';" />
+  <input type="button" class="adm_button" value="Gomerias" onclick="location.href='/admin/gomeria';" />
+  <input type="button" class="adm_button" value="Recapadoras" onclick="location.href='/admin/recapadora';" />
+  <input type="button" class="adm_button" value="Anular OT" onclick="location.href='/admin/anulaOT';" />
+</div>
+<div style="margin-top:20px;">
+  <h3>Administración de unidades</h3>
+  <input type="button" class="adm_button" value="Modelos de Cubiertas" onclick="location.href='/admin/modelo_cubierta';" />
+  <input type="button" class="adm_button" value="Unidades" onclick="location.href='/admin/micros';" />
+  <input type="button" class="adm_button" value="Medidas" onclick="location.href='/admin/medidas';" />
+  <input type="button" class="adm_button" value="Proveedores" onclick="location.href='/admin/proveedor';" />
+</div>
+`;
+const currentPage = 'admin';
+%>
+<%- include('../layout', { body, user, currentPage }) %>

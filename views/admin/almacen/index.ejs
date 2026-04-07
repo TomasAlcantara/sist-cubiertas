@@ -1,0 +1,21 @@
+<%
+const currentPage = 'admin';
+const body = `
+<div style="float:right;">
+  <input type="button" value="Nuevo Almacén" onclick="location.href='/admin/almacen/nuevo';" style="width:150px;"/>
+</div>
+<div class="clr" style="margin-bottom:10px;"></div>
+<table>
+  <thead><th>Nombre</th><th style="width:200px;">Editar</th></thead>
+  ${almacenes.map((a,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td>${a.nombre}</td>
+    <td align="center">
+      <a href="/admin/almacen/editar?id=${a.id}">EDITAR</a> |
+      <a style="cursor:pointer;" onclick="active(${a.id}, ${a.activo==1?0:1}, 'almacen')">${a.activo==1?'BAJA':'ALTA'}</a>
+    </td>
+  </tr>`).join('')}
+</table>
+<br><a href="/admin">&laquo; Volver</a>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

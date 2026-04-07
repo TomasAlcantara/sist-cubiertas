@@ -1,0 +1,22 @@
+<%
+const currentPage = 'admin';
+const body = `
+<script>
+function guardar() {
+  $.ajax({ type:'POST', url:'/ajax/save_modelo',
+    data:{ id: ${modelo.id}, marca: document.getElementById('marca').value, modelo: document.getElementById('modelo').value },
+    success: function(data) { if(data) { alert(data); location.href='/admin/modelo_cubierta'; } else alert('Error'); }
+  });
+}
+</script>
+<div style="width:280px; margin:0 auto;">
+  <h3>Editar Modelo</h3>
+  <p><strong>Marca:</strong> <input type="text" id="marca" value="${modelo.marca}" style="float:right;" /></p>
+  <p><strong>Modelo:</strong> <input type="text" id="modelo" value="${modelo.modelo}" style="float:right;" /></p>
+  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
+  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/modelo_cubierta';" />
+  <div class="clr"></div>
+</div>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

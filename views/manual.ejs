@@ -1,0 +1,222 @@
+<%
+const currentPage = 'manual';
+const body = `
+<style>
+.manual h2 { color: #621b1d; border-bottom: 2px solid #621b1d; padding-bottom: 5px; margin-top: 30px; }
+.manual h3 { color: #4f5452; margin-top: 20px; }
+.manual .tip { background: #f0f7ff; border-left: 4px solid #0066cc; padding: 8px 12px; margin: 10px 0; border-radius: 4px; }
+.manual .warn { background: #fff8e1; border-left: 4px solid #f0a500; padding: 8px 12px; margin: 10px 0; border-radius: 4px; }
+.manual table { margin-top: 10px; }
+.manual ul { margin: 6px 0 10px 20px; }
+.manual li { margin-bottom: 4px; }
+.manual .paso { background: #f9f9f9; border: 1px solid #ddd; border-radius: 6px; padding: 10px 14px; margin: 8px 0; }
+.manual .paso strong { color: #621b1d; }
+</style>
+
+<div class="manual">
+<h2>📋 Manual de Usuario — Sistema de Cubiertas MasterBus</h2>
+<p>Bienvenido al sistema de gestión de cubiertas. Este manual explica cómo usar cada sección del sistema.</p>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>1. Ingreso al Sistema</h2>
+<div class="paso">
+  <strong>Paso 1:</strong> Ingresá tu <strong>usuario</strong> y <strong>contraseña</strong> en la pantalla de login.<br/>
+  <strong>Paso 2:</strong> Hacé click en <strong>Ingresar</strong>.<br/>
+  <strong>Paso 3:</strong> Si los datos son correctos, el sistema te lleva al menú principal.
+</div>
+<div class="tip">Para salir del sistema usá el botón <strong>Salir</strong> del menú superior.</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>2. Menú Principal</h2>
+<p>Desde la pantalla de inicio tenés acceso a los 6 módulos principales:</p>
+<table>
+  <thead><th>Botón</th><th>¿Para qué sirve?</th></thead>
+  <tr class="light"><td><strong>Almacenes</strong></td><td>Ver el stock de cubiertas en cada depósito</td></tr>
+  <tr class="dark"><td><strong>Gomerías</strong></td><td>Ver las cubiertas que están en cada gomería</td></tr>
+  <tr class="light"><td><strong>Listado de OTs</strong></td><td>Ver y gestionar las Órdenes de Trabajo</td></tr>
+  <tr class="dark"><td><strong>Carga de Km</strong></td><td>Actualizar los kilómetros de cada unidad</td></tr>
+  <tr class="light"><td><strong>Cubiertas</strong></td><td>Listado completo de todas las cubiertas</td></tr>
+  <tr class="dark"><td><strong>Recapadoras</strong></td><td>Ver OTs de recapado por recapadora</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>3. Almacenes</h2>
+<p>Muestra todos los depósitos activos. Hacé click en el nombre del almacén para ver su contenido.</p>
+
+<h3>Ver cubiertas de un almacén</h3>
+<ul>
+  <li>Podés filtrar por <strong>Fuego</strong> (número de serie), <strong>Modelo</strong> y <strong>Estado</strong>.</li>
+  <li>Hacé click en los encabezados de columna para ordenar la tabla.</li>
+  <li>El botón <strong>Filtrar</strong> aplica los filtros seleccionados.</li>
+</ul>
+
+<h3>Mover una cubierta</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Hacé click en <strong>MOVER</strong> en la fila de la cubierta.<br/>
+  <strong>Paso 2:</strong> Se abre una ventana con todos los almacenes disponibles.<br/>
+  <strong>Paso 3:</strong> Hacé click en el almacén destino.<br/>
+  <strong>Paso 4:</strong> La cubierta se mueve automáticamente y la lista se actualiza.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>4. Gomerías</h2>
+<p>Funciona igual que Almacenes: seleccionás la gomería y ves las cubiertas que están ahí.</p>
+<ul>
+  <li>Podés filtrar por Fuego, Modelo y Estado.</li>
+  <li>Podés mover cubiertas a un almacén desde esta vista.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>5. Órdenes de Trabajo (OTs)</h2>
+
+<h3>Ver el listado de OTs</h3>
+<ul>
+  <li>Podés filtrar por <strong>Recapadora</strong> y <strong>Estado</strong> (Abierta / Cerrada / Todas).</li>
+  <li>Las OTs abiertas muestran el botón <strong>CERRAR</strong>.</li>
+  <li>Las OTs cerradas muestran solo <strong>VER</strong>.</li>
+</ul>
+
+<h3>Crear una nueva OT</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Hacé click en <strong>Nueva OT</strong>.<br/>
+  <strong>Paso 2:</strong> Completá el número de OT, recapadora y fecha.<br/>
+  <strong>Paso 3:</strong> Hacé click en <strong>Guardar</strong>.
+</div>
+
+<h3>Cerrar una OT</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> En el listado, hacé click en <strong>CERRAR</strong> en la OT que quieras cerrar.<br/>
+  <strong>Paso 2:</strong> Se abre un formulario para ingresar los kilómetros actuales, factura y costo.<br/>
+  <strong>Paso 3:</strong> Completá los datos y confirmá.<br/>
+  <strong>Paso 4:</strong> El sistema cierra la OT y actualiza los km de la unidad automáticamente.
+</div>
+<div class="warn">Una OT cerrada no se puede volver a abrir. Verificá los datos antes de confirmar.</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>6. Carga de Kilómetros</h2>
+<p>Permite actualizar el odómetro de cada unidad.</p>
+
+<h3>Carga individual</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Buscá la unidad en la tabla.<br/>
+  <strong>Paso 2:</strong> Ingresá el nuevo km en el campo correspondiente.<br/>
+  <strong>Paso 3:</strong> Hacé click en <strong>Cargar</strong>.
+</div>
+
+<h3>Carga masiva</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Completá el nuevo km en todas las unidades que quieras actualizar.<br/>
+  <strong>Paso 2:</strong> Hacé click en <strong>Carga Masiva</strong> (botón arriba de la tabla).<br/>
+  <strong>Paso 3:</strong> El sistema actualiza todas las unidades de una sola vez.
+</div>
+<div class="tip">Dejá vacío el campo de las unidades que no querés actualizar.</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>7. Cubiertas</h2>
+<p>Listado completo de todas las cubiertas del sistema con filtros avanzados.</p>
+<ul>
+  <li><strong>Fuego:</strong> número de serie de la cubierta.</li>
+  <li><strong>Modelo:</strong> marca y modelo de la cubierta.</li>
+  <li><strong>Estado:</strong> Nueva / Usada / Recapada.</li>
+  <li><strong>Proveedor:</strong> filtra por proveedor de compra.</li>
+  <li>Hacé click en los encabezados para ordenar la tabla.</li>
+  <li>Si hay muchos resultados, usá la paginación al pie de la tabla.</li>
+</ul>
+<table>
+  <thead><th>Estado</th><th>Descripción</th></thead>
+  <tr class="light"><td>Nueva</td><td>Cubierta sin uso</td></tr>
+  <tr class="dark"><td>Usada</td><td>Cubierta en uso o retirada del servicio</td></tr>
+  <tr class="light"><td>Recapada</td><td>Cubierta que pasó por proceso de recapado</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>8. Recapadoras</h2>
+<p>Muestra las OTs organizadas por recapadora. Podés filtrar por recapadora y estado.</p>
+<ul>
+  <li>Hacé click en <strong>VER</strong> para ver el detalle de una OT.</li>
+  <li>Para crear una OT nueva usá el botón <strong>Nueva OT</strong>.</li>
+</ul>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>9. Reportes</h2>
+<p>Desde el menú <strong>Reportes</strong> podés generar 5 tipos de informes:</p>
+<table>
+  <thead><th>Reporte</th><th>¿Qué muestra?</th></thead>
+  <tr class="light"><td><strong>Por Cubierta</strong></td><td>Busca una cubierta por su fuego y muestra su historial y ubicación actual</td></tr>
+  <tr class="dark"><td><strong>De Estados</strong></td><td>Resumen de cuántas cubiertas hay por estado (nueva, usada, recapada) y por modelo</td></tr>
+  <tr class="light"><td><strong>Por Interno</strong></td><td>Muestra todas las cubiertas montadas en una unidad</td></tr>
+  <tr class="dark"><td><strong>Por Gomería</strong></td><td>Lista las cubiertas que están en una gomería específica</td></tr>
+  <tr class="light"><td><strong>Por Proveedor</strong></td><td>Muestra las cubiertas adquiridas a un proveedor</td></tr>
+</table>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>10. Administración</h2>
+<div class="warn">Esta sección es solo para usuarios con perfil <strong>Master Bus</strong>.</div>
+
+<h3>Administración General</h3>
+<table>
+  <thead><th>Sección</th><th>¿Qué permite?</th></thead>
+  <tr class="light"><td><strong>Usuarios</strong></td><td>Crear, editar y dar de baja usuarios del sistema</td></tr>
+  <tr class="dark"><td><strong>Almacenes</strong></td><td>Agregar o editar depósitos</td></tr>
+  <tr class="light"><td><strong>Gomerías</strong></td><td>Agregar o editar gomerías</td></tr>
+  <tr class="dark"><td><strong>Recapadoras</strong></td><td>Agregar o editar recapadoras</td></tr>
+  <tr class="light"><td><strong>Anular OT</strong></td><td>Eliminar una OT abierta del sistema</td></tr>
+</table>
+
+<h3>Administración de Unidades</h3>
+<table>
+  <thead><th>Sección</th><th>¿Qué permite?</th></thead>
+  <tr class="light"><td><strong>Modelos de Cubiertas</strong></td><td>Agregar marcas y modelos de cubiertas</td></tr>
+  <tr class="dark"><td><strong>Unidades</strong></td><td>Agregar o editar los vehículos/internos. Desde VER se puede colocar y quitar cubiertas en cada posición</td></tr>
+  <tr class="light"><td><strong>Medidas</strong></td><td>Agregar medidas de cubiertas (ej: 295/80R22.5)</td></tr>
+  <tr class="dark"><td><strong>Proveedores</strong></td><td>Agregar proveedores con teléfono y mail</td></tr>
+</table>
+
+<h3>Colocar cubiertas en una unidad</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Ir a Administrar → Unidades → <strong>VER</strong> en la unidad deseada.<br/>
+  <strong>Paso 2:</strong> La tabla muestra las posiciones: DD, TIE, TII, TDI, TDE, RA, DI.<br/>
+  <strong>Paso 3:</strong> Hacé click en <strong>COLOCAR</strong> (posición vacía) o <strong>CAMBIAR</strong> (posición ocupada).<br/>
+  <strong>Paso 4:</strong> Se abre un buscador de cubiertas. Filtrá por almacén, fuego, modelo o estado.<br/>
+  <strong>Paso 5:</strong> Hacé click en <strong>Seleccionar</strong> en la cubierta deseada.
+</div>
+<div class="tip">
+  <strong>Posiciones de las cubiertas:</strong><br/>
+  DD = Delantera Derecha &nbsp;|&nbsp; TIE = Trasera Interna Exterior &nbsp;|&nbsp; TII = Trasera Interna Interior<br/>
+  TDI = Trasera Doble Interna &nbsp;|&nbsp; TDE = Trasera Doble Externa &nbsp;|&nbsp; RA = Rueda Auxilio &nbsp;|&nbsp; DI = Delantera Izquierda
+</div>
+
+<h3>Crear un usuario nuevo</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Ir a Administrar → Usuarios → <strong>Nuevo Usuario</strong>.<br/>
+  <strong>Paso 2:</strong> Completá usuario y contraseña.<br/>
+  <strong>Paso 3:</strong> Seleccioná el tipo:<br/>
+  &nbsp;&nbsp;• <strong>Master Bus</strong>: acceso completo a todo el sistema.<br/>
+  &nbsp;&nbsp;• <strong>Gomería</strong>: acceso limitado, debe asociarse a una gomería.<br/>
+  <strong>Paso 4:</strong> Hacé click en <strong>Guardar</strong>.
+</div>
+
+<!-- ═══════════════════════════════════════════ -->
+<h2>11. Preguntas Frecuentes</h2>
+
+<h3>¿Cómo busco una cubierta específica?</h3>
+<p>Usá el módulo <strong>Cubiertas</strong> y filtrá por el número de fuego. También podés usar <strong>Reportes → Por Cubierta</strong>.</p>
+
+<h3>¿Cómo sé dónde está una cubierta?</h3>
+<p>La columna <strong>Ubicación</strong> en el listado de Cubiertas muestra si está en un almacén, gomería o unidad.</p>
+
+<h3>¿Qué pasa si me equivoco al cerrar una OT?</h3>
+<p>Contactá al administrador del sistema para que use <strong>Administrar → Anular OT</strong>. Las OTs cerradas no se pueden reabrir.</p>
+
+<h3>¿Puedo dar de baja un almacén o gomería?</h3>
+<p>Sí, desde <strong>Administrar → Almacenes/Gomerías</strong>, el botón <strong>BAJA</strong> lo desactiva sin borrarlo. Para reactivarlo usá <strong>ALTA</strong>.</p>
+
+<h3>¿Olvidé mi contraseña?</h3>
+<p>Contactá al administrador del sistema para que la resetee desde <strong>Administrar → Usuarios → Editar</strong>.</p>
+
+<br/><hr/>
+<p style="text-align:center; color:#999; font-size:11px;">Sistema MasterBus — Mundo Ratio &nbsp;|&nbsp; <a href="/">Volver al inicio</a></p>
+</div>
+`;
+%>
+<%- include('layout', { body, user, currentPage }) %>

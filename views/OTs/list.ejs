@@ -1,0 +1,75 @@
+<%
+const currentPage = 'inicio';
+const body = `
+<script>
+function showdiv(event, id) {
+  document.getElementById('posicion').innerHTML = document.getElementById('trab_list_' + id).innerHTML;
+  var x = event.clientX + window.scrollX;
+  var y = event.clientY + window.scrollY;
+  document.getElementById('flotante').style.left = (15 + x) + 'px';
+  document.getElementById('flotante').style.top = (15 + y) + 'px';
+  document.getElementById('flotante').style.display = 'block';
+}
+function closediv() {
+  document.getElementById('flotante').style.display = 'none';
+}
+function open_carga(id) {
+  $.ajax({ type:'POST', url:'/ajax/mb_cerrar_ot', data:{ ot_id: id },
+    success: function(data) {
+      if (data) {
+        document.getElementById('cerrar_ot').innerHTML = data;
+        document.getElementById('back').style.display = '';
+        document.getElementById('cerrar_ot').style.display = '';
+      }
+    }
+  });
+}
+function close_carga() {
+  document.getElementById('back').style.display = 'none';
+  document.getElementById('cerrar_ot').style.display = 'none';
+}
+</script>
+
+<div id="back" style="display:none;" onclick="close_carga();"></div>
+<div id="cerrar_ot" style="width:700px; height:530px; position:fixed; background:#FFF; z-index:99; display:none; top:80px; left:50%; transform:translateX(-50%);"></div>
+
+<form method="get" action="/OTs/list" style="float:left">
+  <strong>Recapadora:</strong>
+  <select name="recapadora">
+    <option value="0">Todas</option>
+    ${recapadoras.map(r => `<option value="${r.id}" ${r.id==filtros.recapadora?'selected':''}>${r.nombre}</option>`).join('')}
+  </select>
+  <strong style="margin-left:10px;">Estado:</strong>
+  <select name="estado">
+    <option value="-1" ${filtros.estado==-1?'selected':''}>Todos</option>
+    <option value="0" ${filtros.estado==0?'selected':''}>Abierta</option>
+    <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
+  </select>
+  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:20px; width:75px;" />
+</form>
+<input type="button" value="Nueva OT" style="float:right; width:100px;" onclick="location.href='/OTs/nueva'">
+<div style="clear:both; margin-bottom:20px;"></div>
+
+<table>
+  <thead>
+    <th>OT Número</th>
+    <th>Recapadora</th>
+    <th>Fecha</th>
+    <th>Estado</th>
+    <th style="width:100px;">Editar</th>
+  </thead>
+  ${ots.length === 0 ? '<tr><td colspan="5" align="center">Sin órdenes de trabajo</td></tr>' :
+    ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center">${o.numero||o.id}</td>
+      <td align="center">${o.recapadora_nombre||'-'}</td>
+      <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center"><strong>${o.estado==0?'Abierta':'Cerrada'}</strong></td>
+      <td align="center"><a href="/OTs/ver?ot=${o.id}">${o.estado==1?'CERRADA':'VER'}</a>${o.estado==0?' | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>':''}</td>
+    </tr>`).join('')
+  }
+</table>
+
+<div id="flotante"><span id="posicion"></span></div>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

@@ -1,0 +1,8 @@
+<%
+const body = `
+<h3>Seleccione el almacén:</h3>
+${almacenes.map(a => `<input type="button" class="adm_button" value="${a.nombre}" onclick="location.href='/almacen/view?id=${a.id}';" style="margin-right:10px; margin-bottom:20px;"/>`).join('')}
+`;
+const currentPage = 'inicio';
+%>
+<%- include('../layout', { body, user, currentPage }) %>
