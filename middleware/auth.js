@@ -16,7 +16,7 @@ function requireAuth(req, res, next) {
 
 function requireMaster(req, res, next) {
   requireAuth(req, res, () => {
-    if (req.user.tipo !== 1) return res.redirect('/');
+    if (parseInt(req.user.tipo) !== 1) return res.redirect('/');
     next();
   });
 }
