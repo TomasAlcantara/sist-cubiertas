@@ -13,38 +13,39 @@ router.get('/', requireAuth, async (req, res) => {
   const modelos = await sql`SELECT * FROM marcas_ruedas WHERE activo = 1 ORDER BY marca, modelo`;
   const proveedores = await sql`SELECT * FROM proveedor ORDER BY proveedor`;
 
-  let orderExpr = 'c.fuego ASC';
   const ordMap = { 1: 'c.fuego ASC', 11: 'c.fuego DESC', 2: 'mr.marca ASC', 12: 'mr.marca DESC', 3: 'm.medida ASC', 13: 'm.medida DESC', 4: 'c.estado ASC', 14: 'c.estado DESC', 5: 'c.km ASC', 15: 'c.km DESC' };
-  if (ordMap[parseInt(orderby)]) orderExpr = ordMap[parseInt(orderby)];
+  const orderExpr = ordMap[parseInt(orderby)] || 'c.fuego ASC';
 
-  const cubiertas = await sql`
-    SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida,
-           p.proveedor AS proveedor_nombre,
-           a.nombre AS almacen_nombre, g.nombre AS gomeria_nombre, mi.unidad
-    FROM cubiertas c
-    LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-    LEFT JOIN medidas m ON c.medida_id = m.id
-    LEFT JOIN proveedor p ON c.proveedor_id = p.id
-    LEFT JOIN almacen a ON c.almacen_id = a.id
-    LEFT JOIN gomeria g ON c.gomeria_id = g.id
-    LEFT JOIN micro mi ON c.micro_id = mi.id
-    WHERE c.activo = 1
-      AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
-      AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
-      AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
-      AND (${parseInt(proveedor)} = 0 OR c.proveedor_id = ${parseInt(proveedor)})
-    ORDER BY ${sql.unsafe(orderExpr)}
-    LIMIT ${PER_PAGE} OFFSET ${offset}
-  `;
+  const cubiertas = await sql(
+    `SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida,
+            p.proveedor AS proveedor_nombre,
+            a.nombre AS almacen_nombre, g.nombre AS gomeria_nombre, mi.unidad
+     FROM cubiertas c
+     LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+     LEFT JOIN medidas m ON c.medida_id = m.id
+     LEFT JOIN proveedor p ON c.proveedor_id = p.id
+     LEFT JOIN almacen a ON c.almacen_id = a.id
+     LEFT JOIN gomeria g ON c.gomeria_id = g.id
+     LEFT JOIN micro mi ON c.micro_id = mi.id
+     WHERE c.activo = 1
+       AND ($1 = '' OR c.fuego ILIKE $2)
+       AND ($3 = 0 OR c.modelo_id = $3)
+       AND ($4 = 0 OR c.estado = $4)
+       AND ($5 = 0 OR c.proveedor_id = $5)
+     ORDER BY ${orderExpr}
+     LIMIT $6 OFFSET $7`,
+    [fuego, '%' + fuego + '%', parseInt(modelo), parseInt(estado), parseInt(proveedor), PER_PAGE, offset]
+  );
 
-  const countRows = await sql`
-    SELECT COUNT(*) AS total FROM cubiertas c
-    WHERE c.activo = 1
-      AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
-      AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
-      AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
-      AND (${parseInt(proveedor)} = 0 OR c.proveedor_id = ${parseInt(proveedor)})
-  `;
+  const countRows = await sql(
+    `SELECT COUNT(*) AS total FROM cubiertas c
+     WHERE c.activo = 1
+       AND ($1 = '' OR c.fuego ILIKE $2)
+       AND ($3 = 0 OR c.modelo_id = $3)
+       AND ($4 = 0 OR c.estado = $4)
+       AND ($5 = 0 OR c.proveedor_id = $5)`,
+    [fuego, '%' + fuego + '%', parseInt(modelo), parseInt(estado), parseInt(proveedor)]
+  );
   const total = parseInt(countRows[0].total);
   const totalPages = Math.ceil(total / PER_PAGE);
 
