@@ -9,7 +9,7 @@ router.post('/inactive', requireAuth, async (req, res) => {
   const { id, active, table } = req.body;
   const allowed = ['usuarios', 'almacen', 'gomeria', 'recapadora', 'micro', 'marcas_ruedas', 'cubiertas'];
   if (!allowed.includes(table)) return res.status(400).send('tabla no permitida');
-  await sql`UPDATE ${sql(table)} SET activo = ${active} WHERE id = ${id}`;
+  await sql(`UPDATE ${table} SET activo = $1 WHERE id = $2`, [active, id]);
   res.send('ok');
 });
 
