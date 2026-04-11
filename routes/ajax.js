@@ -50,7 +50,7 @@ router.post('/mover_cubierta', requireAuth, async (req, res) => {
 
 // POST /ajax/nuevo_estado - Cambiar estado de cubierta
 router.post('/nuevo_estado', requireAuth, async (req, res) => {
-  const { r_id, estado, remito, fecha_remito, ot_factura, ot_fecha, ot_costo } = req.body;
+  const { r_id, estado } = req.body;
   await sql`UPDATE cubiertas SET estado = ${parseInt(estado)} WHERE id = ${r_id}`;
   res.send('ok');
 });
@@ -157,20 +157,21 @@ router.post('/save_medida', requireMaster, async (req, res) => {
   }
 });
 
-// POST /ajax/listar_ruedas - Listar cubiertas para selección en micro
+// POST /ajax/listar_ruedas - Listar cubiertas para selección en micro u OT
 router.post('/listar_ruedas', requireAuth, async (req, res) => {
-  const { almacen = 0, fuego = '', modelo = 0, estado = 0, micro_id, km, pos, seleccionadas = '' } = req.body;
+  const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro' } = req.body;
 
   const cubiertas = await sql`
-    SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, m.medida, c.estado
+    SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
     FROM cubiertas c
     LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-    LEFT JOIN medidas m ON c.medida_id = m.id
+    LEFT JOIN medidas med ON c.medida_id = med.id
     WHERE c.activo = 1
       AND c.micro_id IS NULL
       AND (${parseInt(almacen)} = 0 OR c.almacen_id = ${parseInt(almacen)})
       AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
       AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
+      AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
       AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
     ORDER BY c.fuego
     LIMIT 50
@@ -178,19 +179,46 @@ router.post('/listar_ruedas', requireAuth, async (req, res) => {
 
   const estadoNombre = (e) => e === 1 ? 'Nueva' : e === 2 ? 'Usada' : 'Recapada';
 
-  let html = '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th></th></thead>';
+  let html = '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Kilómetros</th><th></th></thead>';
   for (const c of cubiertas) {
+    const fuegoSafe = (c.fuego || '').replace(/'/g, "\\'");
+    const modeloSafe = ((c.marca || '') + ' ' + (c.modelo_nombre || '')).trim().replace(/'/g, "\\'");
+    const medidaSafe = (c.medida || '-').replace(/'/g, "\\'");
+    const btn = modo === 'ot'
+      ? `<input type="button" value="Seleccionar" onclick="seleccionar_ot(${c.id}, '${fuegoSafe}', '${modeloSafe}', '${medidaSafe}')" />`
+      : `<input type="button" value="Seleccionar" onclick="colocar(${c.id}, ${micro_id}, '${pos}')" />`;
     html += `<tr>
       <td>${c.fuego || '-'}</td>
-      <td>${c.marca} ${c.modelo_nombre}</td>
+      <td>${c.marca || ''} ${c.modelo_nombre || ''}</td>
       <td>${c.medida || '-'}</td>
       <td>${estadoNombre(c.estado)}</td>
-      <td><input type="button" value="Seleccionar" onclick="colocar(${c.id}, ${micro_id}, '${pos}')" /></td>
+      <td>${c.km || 0}</td>
+      <td>${btn}</td>
     </tr>`;
   }
   html += '</table>';
   res.send(html);
 });
+
+// GET /ajax/cubiertas_unidad - Obtener cubiertas actuales de un micro por posición
+router.get('/cubiertas_unidad', requireAuth, async (req, res) => {
+  const { unidad_id } = req.query;
+  if (!unidad_id) return res.json({ tipo_unidad: 1, cubiertas: [] });
+  const [micros, cubiertas] = await Promise.all([
+    sql`SELECT tipo_unidad FROM micro WHERE id = ${parseInt(unidad_id)}`,
+    sql`
+      SELECT c.id, c.fuego, c.posicion
+      FROM cubiertas c
+      WHERE c.micro_id = ${parseInt(unidad_id)} AND c.activo = 1 AND c.posicion IS NOT NULL
+      ORDER BY c.posicion
+    `
+  ]);
+  res.json({
+    tipo_unidad: micros[0]?.tipo_unidad || 1,
+    cubiertas
+  });
+});
+
 
 // POST /ajax/colocar_rueda - Colocar cubierta en posición de micro
 router.post('/colocar_rueda', requireAuth, async (req, res) => {
@@ -221,29 +249,151 @@ router.post('/almacenar_ruedas', requireAuth, async (req, res) => {
   res.send('ok');
 });
 
-// POST /ajax/mb_cerrar_ot - Cerrar OT
+// POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
 router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
+  const { ot_id } = req.body;
+  const rows = await sql`
+    SELECT o.*, m.unidad, m.km_actual, g.nombre AS gomeria_nombre
+    FROM ots o
+    LEFT JOIN micro m ON o.unidad_id = m.id
+    LEFT JOIN gomeria g ON o.gomeria_id = g.id
+    WHERE o.id = ${ot_id}
+  `;
+  if (!rows.length) return res.send('');
+  const ot = rows[0];
+
+  const cubiertas = await sql`
+    SELECT oc.posicion, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida
+    FROM ot_cubiertas oc
+    JOIN cubiertas c ON oc.cubierta_id = c.id
+    LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+    LEFT JOIN medidas med ON c.medida_id = med.id
+    WHERE oc.ot_id = ${ot_id} AND oc.posicion IS NOT NULL
+    ORDER BY oc.posicion
+  `;
+
+  const trabajos = [];
+  if (ot.rotacion) trabajos.push('Rotación');
+  if (ot.arreglo) trabajos.push('Arreglo');
+  if (ot.cambio) trabajos.push('Cambio');
+  if (ot.alinear) trabajos.push('Alinear');
+  if (ot.balanceo) trabajos.push('Balanceo');
+  if (ot.armar) trabajos.push('Armar');
+
+  let html = `
+    <div style="padding:16px; font-size:13px;">
+      <img src="/images/rojo.png" style="float:right; border:0; margin:2px; height:15px; cursor:pointer;" onclick="close_carga();" />
+      <h3 style="margin:0 0 10px 0;">Cerrar OT N° ${ot_id}</h3>
+      <p><strong>Unidad:</strong> ${ot.unidad||'-'} &nbsp;&nbsp; <strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
+      ${trabajos.length ? `<p><strong>Trabajos:</strong> ${trabajos.join(', ')}</p>` : ''}
+      ${cubiertas.length ? `
+        <p><strong>Cubiertas a cambiar:</strong></p>
+        <table style="width:100%; border-collapse:collapse; font-size:12px;">
+          <thead><tr><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th></tr></thead>
+          ${cubiertas.map(c => `<tr>
+            <td align="center">${c.posicion||'-'}</td>
+            <td align="center">${c.fuego||'-'}</td>
+            <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
+            <td align="center">${c.medida||'-'}</td>
+          </tr>`).join('')}
+        </table>
+      ` : ''}
+      <hr style="margin:12px 0;" />
+      <p>
+        <strong>Km actuales de la unidad:</strong>
+        <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:120px; margin-left:10px;" placeholder="km" />
+      </p>
+      <p>
+        <strong>N° Factura:</strong>
+        <input type="text" id="factura_cierre" style="width:180px; margin-left:10px;" placeholder="Opcional" />
+      </p>
+      <p>
+        <strong>Costo $:</strong>
+        <input type="number" id="costo_cierre" style="width:120px; margin-left:10px;" placeholder="Opcional" />
+      </p>
+      <div style="margin-top:14px; text-align:center;">
+        <input type="button" value="Confirmar cierre" onclick="confirmar_cerrar(${ot_id})" style="width:160px;" />
+        <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px; margin-left:12px;" />
+      </div>
+    </div>`;
+  res.send(html);
+});
+
+// POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
+router.post('/confirmar_cerrar_ot', requireAuth, async (req, res) => {
   const { ot_id, km_actual, factura, costo } = req.body;
-  if (!km_actual) return res.send('');
+  if (!km_actual) return res.status(400).send('km requerido');
+
   await sql`UPDATE ots SET estado = 1, factura = ${factura||null}, costo = ${costo||null} WHERE id = ${ot_id}`;
-  if (km_actual) {
-    const ot = await sql`SELECT unidad_id FROM ots WHERE id = ${ot_id}`;
-    if (ot.length && ot[0].unidad_id) {
-      await sql`UPDATE micro SET km_actual = ${parseInt(km_actual)} WHERE id = ${ot[0].unidad_id}`;
+
+  const ot = await sql`SELECT unidad_id FROM ots WHERE id = ${ot_id}`;
+  const unidad_id = ot[0]?.unidad_id;
+  if (unidad_id) {
+    await sql`UPDATE micro SET km_actual = ${parseInt(km_actual)} WHERE id = ${unidad_id}`;
+  }
+
+  const cambios = await sql`
+    SELECT cubierta_id, cubierta_anterior_id, posicion
+    FROM ot_cubiertas
+    WHERE ot_id = ${ot_id} AND posicion IS NOT NULL AND cubierta_id IS NOT NULL
+  `;
+
+  for (const c of cambios) {
+    await sql`
+      UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL
+      WHERE id = ${c.cubierta_id}
+    `;
+    if (c.cubierta_anterior_id) {
+      await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = 1 WHERE id = ${c.cubierta_anterior_id}`;
+    } else if (unidad_id) {
+      await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = 1 WHERE micro_id = ${unidad_id} AND posicion = ${c.posicion} AND id != ${c.cubierta_id}`;
     }
   }
+
   res.send('ok');
 });
 
-// POST /ajax/nueva_ot - Crear nueva OT
+// POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
 router.post('/nueva_ot', requireAuth, async (req, res) => {
-  const { numero, recapadora_id, fecha, gomeria_id, unidad_id } = req.body;
+  const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
+  if (!fecha) return res.send('');
+
   const result = await sql`
-    INSERT INTO ots (numero, recapadora_id, fecha, gomeria_id, unidad_id)
-    VALUES (${numero}, ${recapadora_id||null}, ${fecha}, ${gomeria_id||null}, ${unidad_id||null})
+    INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar)
+    VALUES (
+      ${fecha}, ${gomeria_id||null}, ${unidad_id||null}, ${observaciones||null},
+      ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
+      ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}
+    )
     RETURNING id
   `;
-  res.send(result[0].id.toString());
+  const ot_id = result[0].id;
+
+  // Recibir cambios como JSON: { pos: cubierta_id, ... }
+  // El frontend envía cambios_ot_json = JSON.stringify({ddi: 5, ddd: 8, ...})
+  const cambiosJson = req.body.cambios_ot_json;
+  if (cambiosJson) {
+    try {
+      const cambios = JSON.parse(cambiosJson); // { posicion: cubierta_nueva_id }
+      for (const [posicion, cubierta_id] of Object.entries(cambios)) {
+        if (!cubierta_id) continue;
+        // Buscar cubierta anterior en esa posición
+        const anterior = await sql`
+          SELECT id FROM cubiertas
+          WHERE micro_id = ${unidad_id||null} AND posicion = ${posicion} AND activo = 1
+          LIMIT 1
+        `;
+        const anterior_id = anterior[0]?.id || null;
+        await sql`
+          INSERT INTO ot_cubiertas (ot_id, cubierta_id, posicion, cubierta_anterior_id)
+          VALUES (${ot_id}, ${parseInt(cubierta_id)}, ${posicion}, ${anterior_id})
+          ON CONFLICT (ot_id, cubierta_id) DO UPDATE SET posicion = EXCLUDED.posicion, cubierta_anterior_id = EXCLUDED.cubierta_anterior_id
+        `;
+      }
+    } catch(e) { /* JSON inválido, ignorar */ }
+  }
+
+  res.send(ot_id.toString());
 });
 
 // POST /ajax/agregar_cubierta_ot - Agregar cubierta a OT

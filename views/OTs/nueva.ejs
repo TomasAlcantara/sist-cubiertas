@@ -1,44 +1,263 @@
 <%
 const currentPage = 'inicio';
+const hoy = new Date().toLocaleDateString('es-AR');
 const body = `
+<style>
+#back { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:98; }
+#filter_list { display:none; width:750px; padding:10px; position:fixed; background:#FFF; z-index:99; top:60px; left:50%; transform:translateX(-50%); overflow:auto; max-height:560px; border:1px solid #aaa; box-shadow:2px 2px 8px rgba(0,0,0,0.3); }
+#rueda_list table { width:100%; border-collapse:collapse; }
+#rueda_list td, #rueda_list th { padding:3px 6px; border:1px solid #ddd; font-size:12px; }
+.bus-row { display:flex; align-items:center; justify-content:center; }
+.rueda { width:52px; height:68px; background:#111; border:2px solid #444; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; margin:2px; flex-direction:column; }
+.rueda:hover { background:#222; border-color:#666; }
+.rueda.seleccionada { border-color:#c00; }
+.rueda .fn { color:#cc0000; font-size:10px; font-weight:bold; text-align:center; word-break:break-all; line-height:1.2; padding:2px; }
+.rueda .fn.vacia { color:#555; font-size:18px; }
+.bus-top-bot { background:#fff; border:2px solid #333; width:200px; height:16px; }
+.bus-side { background:#fff; border-left:2px solid #333; border-right:2px solid #333; width:200px; }
+.bus-axle { background:#ddd; border-left:2px solid #333; border-right:2px solid #333; width:200px; height:24px; }
+.bus-spacer { width:56px; }
+.aux-row { margin-top:8px; display:flex; align-items:center; justify-content:center; gap:8px; }
+.aux-row span { font-size:12px; font-weight:bold; }
+</style>
+
 <script>
+var cambios_ot = {};
+var current_pos = '';
+
+var LAYOUTS = {
+  1: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:140 },
+  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], bodyH:80  },
+  3: { del:['ddi','ddd'], tr1:['tie','tde'],              tr2:[], bodyH:140 },
+  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:140 }
+};
+
+function mkRueda(pos) {
+  return '<div class="rueda" id="pos-'+pos+'" onclick="abrir_modal(\\''+pos+'\\')"><span class="fn vacia" id="fn-'+pos+'">+</span></div>';
+}
+
+function renderDiagrama(tipo) {
+  var L = LAYOUTS[tipo] || LAYOUTS[1];
+  var del  = L.del,  tr1 = L.tr1, tr2 = L.tr2;
+  var midD = Math.ceil(del.length/2);
+  var midT = Math.ceil(tr1.length/2);
+
+  var h = '';
+
+  // Eje delantero
+  h += '<div class="bus-row">';
+  del.slice(0,midD).forEach(function(p){ h += mkRueda(p); });
+  h += '<div class="bus-spacer"></div><div style="width:200px;"></div><div class="bus-spacer"></div>';
+  del.slice(midD).forEach(function(p){ h += mkRueda(p); });
+  h += '</div>';
+
+  // Tapa superior bus
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+
+  // Cuerpo bus
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-side" style="height:'+L.bodyH+'px;"></div><div class="bus-spacer"></div></div>';
+
+  // Tapa inferior bus
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+
+  // Primer eje trasero
+  h += '<div class="bus-row">';
+  tr1.slice(0,midT).forEach(function(p){ h += mkRueda(p); });
+  h += '<div class="bus-axle"></div>';
+  tr1.slice(midT).forEach(function(p){ h += mkRueda(p); });
+  h += '</div>';
+
+  // Segundo eje trasero (tipo 2)
+  if (tr2.length) {
+    var midT2 = Math.ceil(tr2.length/2);
+    h += '<div class="bus-row">';
+    tr2.slice(0,midT2).forEach(function(p){ h += mkRueda(p); });
+    h += '<div class="bus-axle"></div>';
+    tr2.slice(midT2).forEach(function(p){ h += mkRueda(p); });
+    h += '</div>';
+  }
+
+  // Auxilio
+  h += '<div class="aux-row"><span>Auxilio</span>'+mkRueda('ra')+'</div>';
+
+  document.getElementById('diagrama-wrap').innerHTML = h;
+}
+
+function cargar_tires(unidad_id) {
+  if (!unidad_id) {
+    document.getElementById('diagrama-wrap').innerHTML = '<p style="color:#999;font-size:12px;text-align:center;">Seleccione una unidad para ver el diagrama</p>';
+    cambios_ot = {};
+    return;
+  }
+  $.ajax({ type:'GET', url:'/ajax/cubiertas_unidad?unidad_id='+unidad_id,
+    success: function(data) {
+      var tipo = data.tipo_unidad || 1;
+      renderDiagrama(tipo);
+      (data.cubiertas || []).forEach(function(c) {
+        var el = document.getElementById('fn-'+c.posicion);
+        if (el) { el.innerHTML = c.fuego || '-'; el.classList.remove('vacia'); }
+      });
+      cambios_ot = {};
+    }
+  });
+}
+
+function abrir_modal(pos) {
+  current_pos = pos;
+  document.getElementById('back').style.display = '';
+  document.getElementById('filter_list').style.display = '';
+  document.getElementById('rueda_list').innerHTML = '';
+  filtrar_ot();
+}
+
+function cerrar_modal() {
+  document.getElementById('back').style.display = 'none';
+  document.getElementById('filter_list').style.display = 'none';
+}
+
+function filtrar_ot() {
+  $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
+    data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
+            modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
+            estado:document.getElementById('f_estado').value, modo:'ot' },
+    success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
+  });
+}
+
+function seleccionar_ot(id, fuego) {
+  cambios_ot[current_pos] = id;
+  var el = document.getElementById('fn-'+current_pos);
+  if (el) { el.innerHTML = fuego || id; el.classList.remove('vacia'); }
+  var p = document.getElementById('pos-'+current_pos);
+  if (p) p.classList.add('seleccionada');
+  cerrar_modal();
+}
+
 function guardar_ot() {
-  var numero = document.getElementById('numero').value;
-  var recapadora = document.getElementById('recapadora_id').value;
-  var fecha = document.getElementById('fecha').value;
-  if (!numero || !fecha) { alert('Complete todos los campos requeridos'); return; }
-  $.ajax({
-    type: 'POST', url: '/ajax/nueva_ot',
-    data: { numero, recapadora_id: recapadora, fecha,
-            gomeria_id: document.getElementById('gomeria_id').value,
-            unidad_id: document.getElementById('unidad_id').value },
+  var unidad_id  = document.getElementById('unidad_id').value;
+  var gomeria_id = document.getElementById('gomeria_id').value;
+  var fecha      = document.getElementById('fecha').value;
+  if (!unidad_id) { alert('Seleccione una unidad'); return; }
+  if (!fecha)     { alert('Ingrese la fecha de solicitud'); return; }
+  $.ajax({ type:'POST', url:'/ajax/nueva_ot',
+    data: { unidad_id, gomeria_id, fecha,
+            observaciones: document.getElementById('observaciones').value,
+            rotacion:  document.getElementById('cb_rotacion').checked  ? '1':'0',
+            arreglo:   document.getElementById('cb_arreglo').checked   ? '1':'0',
+            cambio:    document.getElementById('cb_cambio').checked    ? '1':'0',
+            alinear:   document.getElementById('cb_alinear').checked   ? '1':'0',
+            balanceo:  document.getElementById('cb_balanceo').checked  ? '1':'0',
+            armar:     document.getElementById('cb_armar').checked     ? '1':'0',
+            cambios_ot_json: JSON.stringify(cambios_ot) },
     success: function(id) {
-      if (id) location.href = '/OTs/ver?ot=' + id;
+      if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al crear la OT');
     }
   });
 }
 </script>
 
-<h3>Nueva Orden de Trabajo</h3>
-<div style="width:350px; margin:0 auto;">
-  <p><strong>Número OT:</strong> <input type="text" id="numero" style="float:right;" /></p>
-  <p><strong>Recapadora:</strong>
-    <select id="recapadora_id" style="float:right;">
+<!-- Modal backdrop -->
+<div id="back" onclick="cerrar_modal();"></div>
+
+<!-- Modal selector de cubiertas -->
+<div id="filter_list">
+  <img src="/images/rojo.png" style="float:right; border:0; margin:2px; height:15px; cursor:pointer;" onclick="cerrar_modal();" />
+  <div class="clr"></div>
+  <form onsubmit="return false;" style="margin:6px;">
+    <strong>Almacén:</strong>
+    <select id="f_almacen">
+      <option value="0">Todos</option>
+      ${almacenes.map(a => `<option value="${a.id}">${a.nombre}</option>`).join('')}
+    </select>
+    <strong style="margin-left:8px;">Fuego:</strong>
+    <input type="text" id="f_fuego" style="width:80px;" />
+    <strong style="margin-left:8px;">Modelo:</strong>
+    <select id="f_modelo">
+      <option value="0">Todos</option>
+      ${modelos.map(m => `<option value="${m.id}">${m.marca} ${m.modelo}</option>`).join('')}
+    </select>
+    <br style="margin:4px 0;" />
+    <strong>Medida:</strong>
+    <select id="f_medida">
+      <option value="0">Todas</option>
+      ${medidas.map(m => `<option value="${m.id}">${m.medida}</option>`).join('')}
+    </select>
+    <strong style="margin-left:8px;">Estado:</strong>
+    <select id="f_estado">
+      <option value="0">Todos</option>
+      <option value="1">Nueva</option>
+      <option value="2">Usada</option>
+      <option value="3">Recapada</option>
+    </select>
+    <input type="button" value="Filtrar" onclick="filtrar_ot()" style="margin-left:10px; width:75px;" />
+  </form>
+  <div id="rueda_list"></div>
+</div>
+
+<!-- Titulo -->
+<p style="text-align:center; font-size:15px; font-weight:bold; margin-bottom:8px;">Nueva Orden de trabajo</p>
+
+<!-- Imprimir -->
+<div style="text-align:right; margin-bottom:6px;">
+  <input type="button" value="Imprimir" onclick="window.print();" style="width:90px;" />
+</div>
+
+<!-- Campos principales -->
+<div style="width:420px; margin:0 auto;">
+  <p>
+    <strong>Unidad:</strong>
+    <select id="unidad_id" style="float:right; width:240px;" onchange="cargar_tires(this.value)">
       <option value="">Seleccione...</option>
-      ${recapadoras.map(r => `<option value="${r.id}">${r.nombre}</option>`).join('')}
+      ${unidades.map(u => `<option value="${u.id}">${u.unidad}</option>`).join('')}
     </select>
   </p>
-  <p><strong>Gomería:</strong>
-    <select id="gomeria_id" style="float:right;">
+  <p>
+    <strong>Gomería:</strong>
+    <select id="gomeria_id" style="float:right; width:240px;">
       <option value="">Seleccione...</option>
       ${gomerias.map(g => `<option value="${g.id}">${g.nombre}</option>`).join('')}
     </select>
   </p>
-  <p><strong>Fecha:</strong> <input type="text" id="fecha" style="float:right;" placeholder="DD/MM/AAAA" /></p>
-  <input type="button" value="Guardar" style="float:left; width:100px;" onclick="guardar_ot();" />
-  <input type="button" value="Cancelar" style="float:right; width:100px;" onclick="location.href='/OTs/list';" />
+  <p>
+    <strong>Fecha de solicitud:</strong>
+    <input type="text" id="fecha" style="float:right; width:130px;" value="${hoy}" placeholder="DD/MM/AAAA" />
+  </p>
   <div class="clr"></div>
+</div>
+
+<!-- Trabajo a realizar -->
+<div style="width:420px; margin:10px auto; border:1px solid #ccc; padding:8px;">
+  <strong>Trabajo a realizar:</strong>
+  <div style="margin-top:6px; display:grid; grid-template-columns:1fr 1fr; gap:4px 20px;">
+    <label><input type="checkbox" id="cb_rotacion" /> Rotación</label>
+    <label><input type="checkbox" id="cb_arreglo" /> Arreglo</label>
+    <label><input type="checkbox" id="cb_cambio" /> Cambio</label>
+    <label><input type="checkbox" id="cb_alinear" /> Alinear</label>
+    <label><input type="checkbox" id="cb_balanceo" /> Balanceo</label>
+    <label><input type="checkbox" id="cb_armar" /> Armar</label>
+  </div>
+</div>
+
+<!-- Observaciones -->
+<div style="width:420px; margin:10px auto; border:1px solid #ccc; padding:8px;">
+  <strong>Observaciones:</strong><br style="margin:4px 0;" />
+  <textarea id="observaciones" style="width:100%; height:60px; margin-top:4px; resize:vertical;"></textarea>
+</div>
+
+<!-- Diagrama de cubiertas -->
+<div style="width:420px; margin:10px auto; border:1px solid #ccc; padding:8px;">
+  <strong>Cambio de cubiertas:</strong>
+  <p style="font-size:11px; color:#666; margin:2px 0 6px 0;">Clic en una posición para seleccionar cubierta</p>
+  <div id="diagrama-wrap" style="text-align:center;">
+    <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
+  </div>
+</div>
+
+<!-- Botones finales -->
+<div style="width:420px; margin:10px auto; text-align:center;">
+  <input type="button" value="Generar" onclick="guardar_ot();" style="width:100px;" />
+  <input type="button" value="Cancelar" onclick="location.href='/OTs/list';" style="width:100px; margin-left:20px;" />
 </div>
 `;
 %>

@@ -12,11 +12,12 @@ const body = `
 </form>
 <div class="clr" style="margin-bottom:10px;"></div>
 <table>
-  <thead><th>Unidad</th><th>Descripción</th><th>Km Actual</th><th style="width:180px;">Editar</th></thead>
+  <thead><th>Unidad</th><th>Descripción</th><th>Km Actual</th><th>Tipo</th><th style="width:180px;">Editar</th></thead>
   ${micros.map((m,i)=>`<tr class="${i%2===0?'light':'dark'}">
     <td>${m.unidad}</td>
     <td>${m.descripcion||''}</td>
     <td align="center">${m.km_actual||0}</td>
+    <td align="center">Tipo ${m.tipo_unidad||1}</td>
     <td align="center">
       <a href="/admin/ruedas_micro/modelo?v=${m.id}">VER</a> |
       <a href="/admin/micros/editar?rueda=${m.id}">EDITAR</a> |

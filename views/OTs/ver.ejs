@@ -1,27 +1,41 @@
 <%
 const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
 const currentPage = 'inicio';
+const trabajos = [];
+if (ot.rotacion) trabajos.push('Rotación');
+if (ot.arreglo) trabajos.push('Arreglo');
+if (ot.cambio) trabajos.push('Cambio');
+if (ot.alinear) trabajos.push('Alinear');
+if (ot.balanceo) trabajos.push('Balanceo');
+if (ot.armar) trabajos.push('Armar');
 const body = `
-<h3>OT N° ${ot.numero || ot.id}</h3>
-<p><strong>Recapadora:</strong> ${ot.recapadora_nombre||'-'}</p>
-<p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
+<div style="text-align:right; margin-bottom:10px;">
+  <input type="button" value="Imprimir" onclick="window.print();" style="width:90px;" />
+</div>
+
+<h3>OT N° ${ot.id}</h3>
 <p><strong>Unidad:</strong> ${ot.unidad||'-'}</p>
+<p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
 <p><strong>Fecha:</strong> ${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</p>
 <p><strong>Estado:</strong> ${ot.estado==0?'Abierta':'Cerrada'}</p>
+${trabajos.length ? '<p><strong>Trabajos:</strong> ' + trabajos.join(', ') + '</p>' : ''}
+${ot.observaciones ? '<p><strong>Observaciones:</strong> ' + ot.observaciones + '</p>' : ''}
 ${ot.factura ? '<p><strong>Factura:</strong> '+ot.factura+'</p>' : ''}
 ${ot.costo ? '<p><strong>Costo:</strong> $'+ot.costo+'</p>' : ''}
 
 <h3>Cubiertas en esta OT</h3>
 <table>
   <thead>
+    <th>Posición</th>
     <th>Fuego</th>
     <th>Modelo</th>
     <th>Medida</th>
     <th>Estado</th>
     <th>Km</th>
   </thead>
-  ${cubiertas.length === 0 ? '<tr><td colspan="5" align="center">Sin cubiertas</td></tr>' :
+  ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin cubiertas registradas</td></tr>' :
     cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center">${c.posicion||'-'}</td>
       <td align="center">${c.fuego||'-'}</td>
       <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
       <td align="center">${c.medida||'-'}</td>

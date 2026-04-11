@@ -1,18 +1,17 @@
 <%
 const currentPage = 'inicio';
+const trabajosList = (o) => {
+  const t = [];
+  if (o.rotacion) t.push('Rotación');
+  if (o.arreglo) t.push('Arreglo');
+  if (o.cambio) t.push('Cambio');
+  if (o.alinear) t.push('Alinear');
+  if (o.balanceo) t.push('Balanceo');
+  if (o.armar) t.push('Armar');
+  return t.join(', ') || '-';
+};
 const body = `
 <script>
-function showdiv(event, id) {
-  document.getElementById('posicion').innerHTML = document.getElementById('trab_list_' + id).innerHTML;
-  var x = event.clientX + window.scrollX;
-  var y = event.clientY + window.scrollY;
-  document.getElementById('flotante').style.left = (15 + x) + 'px';
-  document.getElementById('flotante').style.top = (15 + y) + 'px';
-  document.getElementById('flotante').style.display = 'block';
-}
-function closediv() {
-  document.getElementById('flotante').style.display = 'none';
-}
 function open_carga(id) {
   $.ajax({ type:'POST', url:'/ajax/mb_cerrar_ot', data:{ ot_id: id },
     success: function(data) {
@@ -28,16 +27,37 @@ function close_carga() {
   document.getElementById('back').style.display = 'none';
   document.getElementById('cerrar_ot').style.display = 'none';
 }
+function confirmar_cerrar(ot_id) {
+  var km = document.getElementById('km_cierre').value;
+  if (!km) { alert('Ingrese los km actuales'); return; }
+  $.ajax({ type:'POST', url:'/ajax/confirmar_cerrar_ot',
+    data: {
+      ot_id: ot_id,
+      km_actual: km,
+      factura: document.getElementById('factura_cierre').value,
+      costo: document.getElementById('costo_cierre').value
+    },
+    success: function(data) {
+      if (data === 'ok') location.reload();
+      else alert('Error al cerrar la OT');
+    }
+  });
+}
 </script>
 
-<div id="back" style="display:none;" onclick="close_carga();"></div>
+<div id="back" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:98;" onclick="close_carga();"></div>
 <div id="cerrar_ot" style="width:700px; height:530px; position:fixed; background:#FFF; z-index:99; display:none; top:80px; left:50%; transform:translateX(-50%);"></div>
 
 <form method="get" action="/OTs/list" style="float:left">
-  <strong>Recapadora:</strong>
-  <select name="recapadora">
+  <strong>Unidad:</strong>
+  <select name="unidad">
     <option value="0">Todas</option>
-    ${recapadoras.map(r => `<option value="${r.id}" ${r.id==filtros.recapadora?'selected':''}>${r.nombre}</option>`).join('')}
+    ${unidades.map(u => `<option value="${u.id}" ${u.id==filtros.unidad?'selected':''}>${u.unidad}</option>`).join('')}
+  </select>
+  <strong style="margin-left:10px;">Gomería:</strong>
+  <select name="gomeria">
+    <option value="0">Todas</option>
+    ${gomerias.map(g => `<option value="${g.id}" ${g.id==filtros.gomeria?'selected':''}>${g.nombre}</option>`).join('')}
   </select>
   <strong style="margin-left:10px;">Estado:</strong>
   <select name="estado">
@@ -52,24 +72,29 @@ function close_carga() {
 
 <table>
   <thead>
-    <th>OT Número</th>
-    <th>Recapadora</th>
+    <th>N° OT</th>
+    <th>Unidad</th>
+    <th>Gomería</th>
     <th>Fecha</th>
+    <th>Trabajos</th>
     <th>Estado</th>
-    <th style="width:100px;">Editar</th>
+    <th style="width:120px;">Acciones</th>
   </thead>
-  ${ots.length === 0 ? '<tr><td colspan="5" align="center">Sin órdenes de trabajo</td></tr>' :
+  ${ots.length === 0 ? '<tr><td colspan="7" align="center">Sin órdenes de trabajo</td></tr>' :
     ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
-      <td align="center">${o.numero||o.id}</td>
-      <td align="center">${o.recapadora_nombre||'-'}</td>
+      <td align="center">${o.id}</td>
+      <td align="center">${o.unidad||'-'}</td>
+      <td align="center">${o.gomeria_nombre||'-'}</td>
       <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td>${trabajosList(o)}</td>
       <td align="center"><strong>${o.estado==0?'Abierta':'Cerrada'}</strong></td>
-      <td align="center"><a href="/OTs/ver?ot=${o.id}">${o.estado==1?'CERRADA':'VER'}</a>${o.estado==0?' | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>':''}</td>
+      <td align="center">
+        <a href="/OTs/ver?ot=${o.id}">VER</a>
+        ${o.estado==0?' | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>':''}
+      </td>
     </tr>`).join('')
   }
 </table>
-
-<div id="flotante"><span id="posicion"></span></div>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>
