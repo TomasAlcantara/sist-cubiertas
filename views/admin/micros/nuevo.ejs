@@ -2,13 +2,6 @@
 const currentPage = 'admin';
 const body = `
 <script>
-function select_tipo(id) {
-  document.getElementById(id).checked = true;
-  for (var i = 1; i <= 4; i++) {
-    var img = document.getElementById('mod_' + i);
-    if (img) img.style.opacity = (i == id) ? '1' : '0.4';
-  }
-}
 function check_form() {
   var unidad = document.getElementById('unidad').value;
   var desc = document.getElementById('descripcion').value;
@@ -19,19 +12,16 @@ function check_form() {
   });
 }
 </script>
-<div style="width:280px; margin:0 auto;">
+<div style="width:320px; margin:0 auto;">
   <h3>Nueva Unidad</h3>
   <p><strong>Unidad:</strong> <input type="text" id="unidad" style="float:right;" /></p>
   <p><strong>Descripción:</strong> <input type="text" id="descripcion" style="float:right;" /></p>
-  <p><strong>Tipo de unidad:</strong><br/>
-    <input type="radio" id="1" name="tipo_unidad" value="1" checked style="display:none;" />
-    <input type="radio" id="2" name="tipo_unidad" value="2" style="display:none;" />
-    <input type="radio" id="3" name="tipo_unidad" value="3" style="display:none;" />
-    <input type="radio" id="4" name="tipo_unidad" value="4" style="display:none;" />
-    <span onclick="select_tipo(1)" style="cursor:pointer; margin-right:8px; font-size:24px;" id="mod_1">🚌</span>
-    <span onclick="select_tipo(2)" style="cursor:pointer; margin-right:8px; font-size:24px; opacity:0.4;" id="mod_2">🚐</span>
-    <span onclick="select_tipo(3)" style="cursor:pointer; margin-right:8px; font-size:24px; opacity:0.4;" id="mod_3">🚚</span>
-    <span onclick="select_tipo(4)" style="cursor:pointer; margin-right:8px; font-size:24px; opacity:0.4;" id="mod_4">🚗</span>
+  <p><strong>Tipo:</strong></p>
+  <p style="font-size:12px; line-height:2;">
+    <label><input type="radio" name="tipo_unidad" value="1" checked /> Tipo 1 — Colectivo eje trasero doble</label><br>
+    <label><input type="radio" name="tipo_unidad" value="2" /> Tipo 2 — Colectivo 3 ejes</label><br>
+    <label><input type="radio" name="tipo_unidad" value="3" /> Tipo 3 — Minibus (sin ruedas interiores)</label><br>
+    <label><input type="radio" name="tipo_unidad" value="4" /> Tipo 4 — Colectivo eje trasero doble (alt.)</label>
   </p>
   <input type="button" value="Guardar" style="float:left;" onclick="check_form();" />
   <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/micros';" />

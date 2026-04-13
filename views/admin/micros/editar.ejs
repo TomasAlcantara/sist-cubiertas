@@ -15,8 +15,12 @@ function guardar() {
   <h3>Editar Unidad</h3>
   <p><strong>Unidad:</strong> <input type="text" id="unidad" value="${micro.unidad}" style="float:right;" /></p>
   <p><strong>Descripción:</strong> <input type="text" id="descripcion" value="${micro.descripcion||''}" style="float:right;" /></p>
-  <p><strong>Tipo:</strong>
-    ${[1,2,3,4].map(t=>`<input type="radio" name="tipo_unidad" value="${t}" ${micro.tipo_unidad==t?'checked':''}/> Tipo ${t}  `).join('')}
+  <p><strong>Tipo:</strong></p>
+  <p style="font-size:12px; line-height:2;">
+    <label><input type="radio" name="tipo_unidad" value="1" ${micro.tipo_unidad==1?'checked':''}/> Tipo 1 — Colectivo eje trasero doble</label><br>
+    <label><input type="radio" name="tipo_unidad" value="2" ${micro.tipo_unidad==2?'checked':''}/> Tipo 2 — Colectivo 3 ejes</label><br>
+    <label><input type="radio" name="tipo_unidad" value="3" ${micro.tipo_unidad==3?'checked':''}/> Tipo 3 — Minibus (sin ruedas interiores)</label><br>
+    <label><input type="radio" name="tipo_unidad" value="4" ${micro.tipo_unidad==4?'checked':''}/> Tipo 4 — Colectivo eje trasero doble (alt.)</label>
   </p>
   <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
   <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/micros';" />
