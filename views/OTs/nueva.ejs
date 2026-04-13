@@ -11,8 +11,9 @@ const body = `
 .rueda { width:52px; height:68px; background:#111; border:2px solid #444; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; margin:2px; flex-direction:column; }
 .rueda:hover { background:#222; border-color:#666; }
 .rueda.seleccionada { border-color:#c00; background:#3a0000; }
-.rueda .fn { color:#cc0000; font-size:10px; font-weight:bold; text-align:center; word-break:break-all; line-height:1.2; padding:2px; }
+.rueda .fn { color:#fff; font-size:10px; font-weight:bold; text-align:center; word-break:break-all; line-height:1.2; padding:2px; }
 .rueda .fn.vacia { color:#555; font-size:18px; }
+.rueda.seleccionada .fn { color:#cc0000; }
 .bus-top-bot { background:#fff; border:2px solid #333; width:200px; height:16px; }
 .bus-side { background:#fff; border-left:2px solid #333; border-right:2px solid #333; width:200px; }
 .bus-axle { background:#ddd; border-left:2px solid #333; border-right:2px solid #333; width:200px; height:24px; }
