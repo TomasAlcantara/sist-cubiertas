@@ -1,27 +1,28 @@
 <%
 const currentPage = 'inicio';
-const trabajosList = (o) => {
-  const t = [];
-  if (o.rotacion) t.push('Rotación');
-  if (o.arreglo) t.push('Arreglo');
-  if (o.cambio) t.push('Cambio');
-  if (o.alinear) t.push('Alinear');
-  if (o.balanceo) t.push('Balanceo');
-  if (o.armar) t.push('Armar');
-  return t;
-};
-const trabajosCell = (o, i) => {
-  const t = trabajosList(o);
-  if (!t.length) return '-';
-  return '<a style="cursor:pointer; color:#621b1d;" onclick="toggleTrabajos(' + i + ')">Ver Trabajos</a>'
-    + '<div id="trab-' + i + '" style="display:none; margin-top:4px; font-size:11px; color:#555;">' + t.join('<br>') + '</div>';
+const trabajosTooltip = (o) => {
+  const items = [
+    ['Rotación', o.rotacion],
+    ['Arreglo',  o.arreglo],
+    ['Cambio',   o.cambio],
+    ['Alinear',  o.alinear],
+    ['Balanceo', o.balanceo],
+    ['Armar',    o.armar],
+  ];
+  const filas = items.map(([n, v]) =>
+    '<tr><td>' + n + ':</td><td style="padding-left:6px; color:' + (v ? '#090' : '#c00') + '; font-weight:bold;">' + (v ? 'SI' : 'NO') + '</td></tr>'
+  ).join('');
+  return '<span class="trab-wrap">Ver Trabajos'
+    + '<span class="trab-tip"><table style="border-collapse:collapse; font-size:12px;">' + filas + '</table></span>'
+    + '</span>';
 };
 const body = `
+<style>
+.trab-wrap { position:relative; cursor:default; color:#621b1d; font-weight:bold; white-space:nowrap; }
+.trab-tip { display:none; position:absolute; left:0; top:100%; background:#fff; border:1px solid #aaa; padding:6px 10px; z-index:50; box-shadow:2px 2px 6px rgba(0,0,0,0.2); white-space:nowrap; }
+.trab-wrap:hover .trab-tip { display:block; }
+</style>
 <script>
-function toggleTrabajos(i) {
-  var d = document.getElementById('trab-'+i);
-  if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
-}
 function open_carga(id) {
   $.ajax({ type:'POST', url:'/ajax/mb_cerrar_ot', data:{ ot_id: id },
     success: function(data) {
@@ -98,7 +99,7 @@ function confirmar_cerrar(ot_id) {
       <td align="center">${o.gomeria_nombre||'-'}</td>
       <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
-      <td>${trabajosCell(o, i)}</td>
+      <td>${trabajosTooltip(o)}</td>
       <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>
       <td align="center">
         ${o.estado==0
