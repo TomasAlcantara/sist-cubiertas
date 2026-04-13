@@ -8,10 +8,20 @@ const trabajosList = (o) => {
   if (o.alinear) t.push('Alinear');
   if (o.balanceo) t.push('Balanceo');
   if (o.armar) t.push('Armar');
-  return t.join(', ') || '-';
+  return t;
+};
+const trabajosCell = (o, i) => {
+  const t = trabajosList(o);
+  if (!t.length) return '-';
+  return \`<a style="cursor:pointer; color:#621b1d;" onclick="toggleTrabajos(\${i})">Ver Trabajos</a>
+    <div id="trab-\${i}" style="display:none; margin-top:4px; font-size:11px; color:#555;">\${t.join('<br>')}</div>\`;
 };
 const body = `
 <script>
+function toggleTrabajos(i) {
+  var d = document.getElementById('trab-'+i);
+  if (d) d.style.display = d.style.display === 'none' ? 'block' : 'none';
+}
 function open_carga(id) {
   $.ajax({ type:'POST', url:'/ajax/mb_cerrar_ot', data:{ ot_id: id },
     success: function(data) {
@@ -88,7 +98,7 @@ function confirmar_cerrar(ot_id) {
       <td align="center">${o.gomeria_nombre||'-'}</td>
       <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
-      <td>${trabajosList(o)}</td>
+      <td>${trabajosCell(o, i)}</td>
       <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>
       <td align="center">
         ${o.estado==0
