@@ -18,7 +18,7 @@ const body = `
 <p><strong>Unidad:</strong> ${ot.unidad||'-'}</p>
 <p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
 <p><strong>Fecha:</strong> ${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</p>
-<p><strong>Estado:</strong> ${ot.estado==0?'Abierta':'Cerrada'}</p>
+<p><strong>Estado:</strong> ${ot.estado==0?'Pendiente':'Cerrada'}</p>
 ${trabajos.length ? '<p><strong>Trabajos:</strong> ' + trabajos.join(', ') + '</p>' : ''}
 ${ot.observaciones ? '<p><strong>Observaciones:</strong> ' + ot.observaciones + '</p>' : ''}
 ${ot.factura ? '<p><strong>Factura:</strong> '+ot.factura+'</p>' : ''}

@@ -250,6 +250,7 @@ router.post('/almacenar_ruedas', requireAuth, async (req, res) => {
 });
 
 // POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
+const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio' })[p] || p;
 router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
   const { ot_id } = req.body;
   const rows = await sql`
@@ -291,7 +292,7 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
         <table style="width:100%; border-collapse:collapse; font-size:12px;">
           <thead><tr><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th></tr></thead>
           ${cubiertas.map(c => `<tr>
-            <td align="center">${c.posicion||'-'}</td>
+            <td align="center">${c.posicion ? posNombre(c.posicion) : '-'}</td>
             <td align="center">${c.fuego||'-'}</td>
             <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
             <td align="center">${c.medida||'-'}</td>
