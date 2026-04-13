@@ -99,4 +99,52 @@ router.post('/nuevo', requireAuth, async (req, res) => {
   res.redirect('/cubiertas');
 });
 
+// GET /cubiertas/editar?id=X
+router.get('/editar', requireAuth, async (req, res) => {
+  const { id } = req.query;
+  if (!id) return res.redirect('/cubiertas');
+
+  const rows = await sql`SELECT * FROM cubiertas WHERE id = ${parseInt(id)} AND activo = 1`;
+  if (!rows.length) return res.redirect('/cubiertas');
+
+  const [modelos, medidas, almacenes, proveedores] = await Promise.all([
+    sql`SELECT * FROM marcas_ruedas WHERE activo = 1 ORDER BY marca, modelo`,
+    sql`SELECT * FROM medidas ORDER BY medida`,
+    sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
+    sql`SELECT * FROM proveedor ORDER BY proveedor`,
+  ]);
+
+  res.render('cubiertas/editar', { user: req.user, cubierta: rows[0], modelos, medidas, almacenes, proveedores, currentPage: 'inicio' });
+});
+
+// POST /cubiertas/editar
+router.post('/editar', requireAuth, async (req, res) => {
+  const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, fecha_remito } = req.body;
+  if (!id || !fuego) return res.redirect('/cubiertas');
+
+  const parseFecha = (f) => {
+    if (!f) return null;
+    const p = f.split('/');
+    if (p.length !== 3) return f || null;
+    const year = p[2].length === 2 ? '20' + p[2] : p[2];
+    return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  };
+
+  await sql`
+    UPDATE cubiertas SET
+      fuego = ${fuego.trim()},
+      modelo_id = ${parseInt(modelo_id) || null},
+      medida_id = ${parseInt(medida_id) || null},
+      estado = ${parseInt(estado) || 1},
+      almacen_id = ${parseInt(almacen_id) || null},
+      km = ${parseInt(km) || 0},
+      proveedor_id = ${parseInt(proveedor_id) || null},
+      id_interno = ${id_interno?.trim() || null},
+      remito = ${remito?.trim() || null},
+      fecha_remito = ${parseFecha(fecha_remito)}
+    WHERE id = ${parseInt(id)}
+  `;
+  res.redirect('/cubiertas');
+});
+
 module.exports = router;

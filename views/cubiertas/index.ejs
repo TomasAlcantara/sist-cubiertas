@@ -42,8 +42,9 @@ function orderby(id) {
     <th onclick="orderby(4)" style="cursor:pointer;">Estado</th>
     <th onclick="orderby(5)" style="cursor:pointer;">Km</th>
     <th>Ubicación</th>
+    <th></th>
   </thead>
-  ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin resultados</td></tr>' :
+  ${cubiertas.length === 0 ? '<tr><td colspan="7" align="center">Sin resultados</td></tr>' :
     cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
       <td align="center">${c.fuego||'-'}</td>
       <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
@@ -51,6 +52,7 @@ function orderby(id) {
       <td align="center">${estadoNombre(c.estado)}</td>
       <td align="center">${c.km||0}</td>
       <td align="center">${c.almacen_nombre||c.gomeria_nombre||c.unidad||'-'}</td>
+      <td align="center"><a href="/cubiertas/editar?id=${c.id}">EDITAR</a></td>
     </tr>`).join('')
   }
 </table>

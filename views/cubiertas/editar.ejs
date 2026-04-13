@@ -1,0 +1,99 @@
+<%
+const currentPage = 'inicio';
+const fmtFecha = (d) => {
+  if (!d) return '';
+  const dt = new Date(d);
+  if (isNaN(dt)) return '';
+  const dd = String(dt.getUTCDate()).padStart(2,'0');
+  const mm = String(dt.getUTCMonth()+1).padStart(2,'0');
+  const yyyy = dt.getUTCFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+};
+const body = `
+<p style="text-align:center; font-size:15px; font-weight:bold; margin-bottom:12px;">Editar Cubierta</p>
+
+<form method="post" action="/cubiertas/editar" style="width:420px; margin:0 auto;">
+  <input type="hidden" name="id" value="${cubierta.id}" />
+
+  <table style="width:100%; border-collapse:collapse;">
+    <tr>
+      <td style="padding:5px 0; width:140px;"><strong>Fuego: *</strong></td>
+      <td><input type="text" name="fuego" maxlength="20" value="${cubierta.fuego||''}" style="width:200px;" required /></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Modelo:</strong></td>
+      <td>
+        <select name="modelo_id" style="width:206px;">
+          <option value="0">-- Sin modelo --</option>
+          ${modelos.map(m => '<option value="' + m.id + '"' + (m.id==cubierta.modelo_id?' selected':'') + '>' + m.marca + ' ' + m.modelo + '</option>').join('')}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Medida:</strong></td>
+      <td>
+        <select name="medida_id" style="width:206px;">
+          <option value="0">-- Sin medida --</option>
+          ${medidas.map(m => '<option value="' + m.id + '"' + (m.id==cubierta.medida_id?' selected':'') + '>' + m.medida + '</option>').join('')}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Estado:</strong></td>
+      <td>
+        <select name="estado" style="width:206px;">
+          <option value="1"` + (cubierta.estado==1?' selected':'') + `>Nueva</option>
+          <option value="2"` + (cubierta.estado==2?' selected':'') + `>Usada</option>
+          <option value="3"` + (cubierta.estado==3?' selected':'') + `>Recapada</option>
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Almacén:</strong></td>
+      <td>
+        <select name="almacen_id" style="width:206px;">
+          <option value="0">-- Sin almacén --</option>
+          ${almacenes.map(a => '<option value="' + a.id + '"' + (a.id==cubierta.almacen_id?' selected':'') + '>' + a.nombre + '</option>').join('')}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Km actuales:</strong></td>
+      <td><input type="number" name="km" value="${cubierta.km||0}" min="0" style="width:100px;" /></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Proveedor:</strong></td>
+      <td>
+        <select name="proveedor_id" style="width:206px;">
+          <option value="0">-- Sin proveedor --</option>
+          ${proveedores.map(p => '<option value="' + p.id + '"' + (p.id==cubierta.proveedor_id?' selected':'') + '>' + p.proveedor + '</option>').join('')}
+        </select>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>ID Interno:</strong></td>
+      <td><input type="text" name="id_interno" maxlength="50" value="${cubierta.id_interno||''}" style="width:200px;" /></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Remito:</strong></td>
+      <td><input type="text" name="remito" maxlength="50" value="${cubierta.remito||''}" style="width:200px;" /></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Fecha remito:</strong></td>
+      <td><input type="text" name="fecha_remito" id="fecha_remito" placeholder="DD/MM/AAAA" value="${fmtFecha(cubierta.fecha_remito)}" style="width:130px;" /></td>
+    </tr>
+  </table>
+
+  <div style="margin-top:16px; text-align:center;">
+    <input type="submit" value="Guardar" style="width:100px;" />
+    <input type="button" value="Cancelar" onclick="location.href='/cubiertas'" style="width:100px; margin-left:20px;" />
+  </div>
+
+</form>
+
+<script>
+$(function() { $('#fecha_remito').datepicker({ dateFormat: 'dd/mm/yy' }); });
+</script>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>
