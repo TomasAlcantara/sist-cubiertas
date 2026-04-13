@@ -56,4 +56,47 @@ router.get('/', requireAuth, async (req, res) => {
   });
 });
 
+// GET /cubiertas/nuevo
+router.get('/nuevo', requireAuth, async (req, res) => {
+  const [modelos, medidas, almacenes, proveedores] = await Promise.all([
+    sql`SELECT * FROM marcas_ruedas WHERE activo = 1 ORDER BY marca, modelo`,
+    sql`SELECT * FROM medidas ORDER BY medida`,
+    sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
+    sql`SELECT * FROM proveedor ORDER BY proveedor`,
+  ]);
+  res.render('cubiertas/nuevo', { user: req.user, modelos, medidas, almacenes, proveedores, currentPage: 'inicio' });
+});
+
+// POST /cubiertas/nuevo
+router.post('/nuevo', requireAuth, async (req, res) => {
+  const { fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, fecha_remito } = req.body;
+  if (!fuego) return res.redirect('/cubiertas/nuevo');
+
+  const parseFecha = (f) => {
+    if (!f) return null;
+    const p = f.split('/');
+    if (p.length !== 3) return f || null;
+    const year = p[2].length === 2 ? '20' + p[2] : p[2];
+    return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  };
+
+  await sql`
+    INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, fecha_remito, activo)
+    VALUES (
+      ${fuego.trim()},
+      ${parseInt(modelo_id) || null},
+      ${parseInt(medida_id) || null},
+      ${parseInt(estado) || 1},
+      ${parseInt(almacen_id) || null},
+      ${parseInt(km) || 0},
+      ${parseInt(proveedor_id) || null},
+      ${id_interno?.trim() || null},
+      ${remito?.trim() || null},
+      ${parseFecha(fecha_remito)},
+      1
+    )
+  `;
+  res.redirect('/cubiertas');
+});
+
 module.exports = router;
