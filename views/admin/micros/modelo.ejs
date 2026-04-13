@@ -1,8 +1,11 @@
 <%
 const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
-const posiciones = ['dd','tie','tii','tdi','tde','ra','di'];
+const posiciones = ['ddi','ddd','tie','tii','tdi','tde','ra'];
 const currentPage = 'admin';
 const body = `
+<style>
+#back, #back2 { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:90; }
+</style>
 <script src="/js/almacen.js"></script>
 <script>
 function showdiv(event, id) {

@@ -9,7 +9,7 @@ body {
 html, .main {
 	padding:0;
 	margin:0;
-	background:#fff url(../images/header_bg.gif) repeat-x top;
+	background:#fff linear-gradient(to bottom, #8b2226 0%, #fff 120px) repeat-x top;
 }
 textarea {
 	font:normal 12px/1.8em Arial, Helvetica, sans-serif;
@@ -89,8 +89,7 @@ a:hover {
 }
 .header {
 	height:182px;
-	background:url(../images/image.jpg) no-repeat center top;
-	height:182px;
+	background: #621b1d;
 }
 .header_resize {
 	margin:0 auto;
@@ -121,17 +120,16 @@ a:hover {
 	background-color:#621b1d;
 }
 .menu_nav ul li.active a, .menu_nav ul li a:hover {
-	background:#f00 url(../images/menu_a.gif) repeat-x center;
+	background-color: #c0392b;
 }
 
 .content {
-	background:url(../images/content_bg.gif) repeat-x top;
+	background: #f9f9f9;
 }
 .content_resize {
 	margin:0 auto;
 	padding:28px 0 0;
 	width:970px;
-	background:url(../images/content_rbg.jpg) no-repeat left top;
 }
 .content .mainbar {
 	margin:0;
@@ -180,7 +178,7 @@ ul.sb_menu li a, ul.ex_menu li a {
 	text-decoration:none;
 	margin-left:-12px;
 	padding-left:12px;
-	background:url(../images/li.gif) no-repeat left center;
+	background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='6'%3E%3Ccircle cx='3' cy='3' r='2.5' fill='%23de484d'/%3E%3C/svg%3E") no-repeat left center;
 }
 ul.sb_menu li a:hover, ul.ex_menu li a:hover {
 	color:#de484d;
@@ -264,7 +262,7 @@ ul.ex_menu li a:hover {
 	float:right;
 }
 ul.fmenu li a:hover, ul.fmenu li.active a {
-	background:url(../images/menu_a.gif) repeat-x top;
+	background-color: #c0392b;
 	color:#fff;
 }
 ul.fmenu li a:hover {
@@ -327,19 +325,6 @@ ol li .send {
 
 input, select {
 	padding: 2px;	
-}
-
-#back, #back2 {
-	position: fixed; 
-	top: 0px; 
-	left: 0px; 
-	width: 100%; 
-	height: 100%; 
-	background-color: #000; 
-	filter:alpha(opacity=60); 
-	-moz-opacity: 0.6; 
-	opacity: 0.6; 
-	z-index:90
 }
 
 #flotante {

@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS cubiertas (
   almacen_id INTEGER REFERENCES almacen(id),
   gomeria_id INTEGER REFERENCES gomeria(id),
   micro_id INTEGER REFERENCES micro(id),
-  posicion VARCHAR(10),            -- dd, tie, tii, tdi, tde, ra, di
+  posicion VARCHAR(10),            -- ddi, ddd, tie, tii, tdi, tde, cie, cii, cdi, cde, ra
   km INTEGER DEFAULT 0,
   proveedor_id INTEGER REFERENCES proveedor(id),
   id_interno VARCHAR(50),
@@ -87,12 +87,21 @@ CREATE TABLE IF NOT EXISTS ots (
   gomeria_id INTEGER REFERENCES gomeria(id),
   unidad_id INTEGER REFERENCES micro(id),
   factura VARCHAR(50),
-  costo DECIMAL(10,2)
+  costo DECIMAL(10,2),
+  rotacion BOOLEAN DEFAULT FALSE,
+  arreglo BOOLEAN DEFAULT FALSE,
+  cambio BOOLEAN DEFAULT FALSE,
+  alinear BOOLEAN DEFAULT FALSE,
+  balanceo BOOLEAN DEFAULT FALSE,
+  armar BOOLEAN DEFAULT FALSE,
+  observaciones TEXT
 );
 
 CREATE TABLE IF NOT EXISTS ot_cubiertas (
   ot_id INTEGER REFERENCES ots(id) ON DELETE CASCADE,
   cubierta_id INTEGER REFERENCES cubiertas(id),
+  posicion VARCHAR(10),            -- ddi, ddd, tie, tii, tdi, tde, cie, cii, cdi, cde, ra
+  cubierta_anterior_id INTEGER REFERENCES cubiertas(id),
   PRIMARY KEY (ot_id, cubierta_id)
 );
 

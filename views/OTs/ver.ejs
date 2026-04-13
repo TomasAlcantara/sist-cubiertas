@@ -1,5 +1,6 @@
 <%
 const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
+const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio' })[p] || p;
 const currentPage = 'inicio';
 const trabajos = [];
 if (ot.rotacion) trabajos.push('Rotación');
@@ -13,7 +14,7 @@ const body = `
   <input type="button" value="Imprimir" onclick="window.print();" style="width:90px;" />
 </div>
 
-<h3>OT N° ${ot.id}</h3>
+<h3>OT N° ${ot.numero || ot.id}</h3>
 <p><strong>Unidad:</strong> ${ot.unidad||'-'}</p>
 <p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
 <p><strong>Fecha:</strong> ${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</p>
@@ -35,7 +36,7 @@ ${ot.costo ? '<p><strong>Costo:</strong> $'+ot.costo+'</p>' : ''}
   </thead>
   ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin cubiertas registradas</td></tr>' :
     cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
-      <td align="center">${c.posicion||'-'}</td>
+      <td align="center">${c.posicion ? posNombre(c.posicion) : '-'}</td>
       <td align="center">${c.fuego||'-'}</td>
       <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
       <td align="center">${c.medida||'-'}</td>
