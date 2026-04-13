@@ -13,8 +13,8 @@ const trabajosList = (o) => {
 const trabajosCell = (o, i) => {
   const t = trabajosList(o);
   if (!t.length) return '-';
-  return \`<a style="cursor:pointer; color:#621b1d;" onclick="toggleTrabajos(\${i})">Ver Trabajos</a>
-    <div id="trab-\${i}" style="display:none; margin-top:4px; font-size:11px; color:#555;">\${t.join('<br>')}</div>\`;
+  return '<a style="cursor:pointer; color:#621b1d;" onclick="toggleTrabajos(' + i + ')">Ver Trabajos</a>'
+    + '<div id="trab-' + i + '" style="display:none; margin-top:4px; font-size:11px; color:#555;">' + t.join('<br>') + '</div>';
 };
 const body = `
 <script>
