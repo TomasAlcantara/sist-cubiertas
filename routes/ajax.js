@@ -358,10 +358,19 @@ router.post('/nueva_ot', requireAuth, async (req, res) => {
   const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
   if (!fecha) return res.send('');
 
+  // Convertir DD/MM/YYYY o DD/MM/YY → YYYY-MM-DD para PostgreSQL
+  const parseFecha = (f) => {
+    const p = f.split('/');
+    if (p.length !== 3) return f;
+    const year = p[2].length === 2 ? '20' + p[2] : p[2];
+    return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  };
+  const fechaISO = parseFecha(fecha);
+
   const result = await sql`
     INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar)
     VALUES (
-      ${fecha}, ${gomeria_id||null}, ${unidad_id||null}, ${observaciones||null},
+      ${fechaISO}, ${gomeria_id||null}, ${unidad_id||null}, ${observaciones||null},
       ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
       ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}
     )
