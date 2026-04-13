@@ -62,7 +62,7 @@ function confirmar_cerrar(ot_id) {
   <strong style="margin-left:10px;">Estado:</strong>
   <select name="estado">
     <option value="-1" ${filtros.estado==-1?'selected':''}>Todos</option>
-    <option value="0" ${filtros.estado==0?'selected':''}>Abierta</option>
+    <option value="0" ${filtros.estado==0?'selected':''}>Pendiente</option>
     <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
   </select>
   <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:20px; width:75px;" />
@@ -72,25 +72,28 @@ function confirmar_cerrar(ot_id) {
 
 <table>
   <thead>
-    <th>N° OT</th>
-    <th>Unidad</th>
+    <th>OT N°</th>
+    <th>Micro</th>
     <th>Gomería</th>
     <th>Fecha</th>
+    <th>Solicitó</th>
     <th>Trabajos</th>
     <th>Estado</th>
-    <th style="width:120px;">Acciones</th>
+    <th style="width:160px;">Editar</th>
   </thead>
-  ${ots.length === 0 ? '<tr><td colspan="7" align="center">Sin órdenes de trabajo</td></tr>' :
+  ${ots.length === 0 ? '<tr><td colspan="8" align="center">Sin órdenes de trabajo</td></tr>' :
     ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
       <td align="center">${o.numero || o.id}</td>
       <td align="center">${o.unidad||'-'}</td>
       <td align="center">${o.gomeria_nombre||'-'}</td>
       <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center">${o.solicitado_por||'-'}</td>
       <td>${trabajosList(o)}</td>
-      <td align="center"><strong>${o.estado==0?'Abierta':'Cerrada'}</strong></td>
+      <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>
       <td align="center">
-        <a href="/OTs/ver?ot=${o.id}">VER</a>
-        ${o.estado==0?' | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>':''}
+        ${o.estado==0
+          ? '<a href="/OTs/editar?ot='+o.id+'">EDITAR</a> | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>'
+          : '<a href="/OTs/ver?ot='+o.id+'">VER</a>'}
       </td>
     </tr>`).join('')
   }

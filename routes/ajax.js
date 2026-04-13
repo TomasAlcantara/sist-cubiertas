@@ -368,11 +368,11 @@ router.post('/nueva_ot', requireAuth, async (req, res) => {
   const fechaISO = parseFecha(fecha);
 
   const result = await sql`
-    INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar)
+    INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, solicitado_por)
     VALUES (
       ${fechaISO}, ${gomeria_id||null}, ${unidad_id||null}, ${observaciones||null},
       ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
-      ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}
+      ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${req.user?.usuario || null}
     )
     RETURNING id
   `;
@@ -396,6 +396,53 @@ router.post('/nueva_ot', requireAuth, async (req, res) => {
         await sql`
           INSERT INTO ot_cubiertas (ot_id, cubierta_id, posicion, cubierta_anterior_id)
           VALUES (${ot_id}, ${parseInt(cubierta_id)}, ${posicion}, ${anterior_id})
+          ON CONFLICT (ot_id, cubierta_id) DO UPDATE SET posicion = EXCLUDED.posicion, cubierta_anterior_id = EXCLUDED.cubierta_anterior_id
+        `;
+      }
+    } catch(e) { /* JSON inválido, ignorar */ }
+  }
+
+  res.send(ot_id.toString());
+});
+
+// POST /ajax/actualizar_ot - Editar OT existente (solo si está abierta)
+router.post('/actualizar_ot', requireAuth, async (req, res) => {
+  const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
+  if (!ot_id || !fecha) return res.send('');
+
+  const parseFecha = (f) => {
+    const p = f.split('/');
+    if (p.length !== 3) return f;
+    const year = p[2].length === 2 ? '20' + p[2] : p[2];
+    return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
+  };
+  const fechaISO = parseFecha(fecha);
+
+  await sql`
+    UPDATE ots SET
+      fecha = ${fechaISO}, gomeria_id = ${gomeria_id||null}, unidad_id = ${unidad_id||null},
+      observaciones = ${observaciones||null},
+      rotacion = ${rotacion === '1'}, arreglo = ${arreglo === '1'}, cambio = ${cambio === '1'},
+      alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'}
+    WHERE id = ${parseInt(ot_id)} AND estado = 0
+  `;
+
+  // Reemplazar cubiertas seleccionadas
+  const cambiosJson = req.body.cambios_ot_json;
+  if (cambiosJson) {
+    try {
+      const cambios = JSON.parse(cambiosJson);
+      for (const [posicion, cubierta_id] of Object.entries(cambios)) {
+        if (!cubierta_id) continue;
+        const anterior = await sql`
+          SELECT id FROM cubiertas
+          WHERE micro_id = ${unidad_id||null} AND posicion = ${posicion} AND activo = 1
+          LIMIT 1
+        `;
+        const anterior_id = anterior[0]?.id || null;
+        await sql`
+          INSERT INTO ot_cubiertas (ot_id, cubierta_id, posicion, cubierta_anterior_id)
+          VALUES (${parseInt(ot_id)}, ${parseInt(cubierta_id)}, ${posicion}, ${anterior_id})
           ON CONFLICT (ot_id, cubierta_id) DO UPDATE SET posicion = EXCLUDED.posicion, cubierta_anterior_id = EXCLUDED.cubierta_anterior_id
         `;
       }
