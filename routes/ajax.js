@@ -75,12 +75,13 @@ router.post('/save_usuario', requireMaster, async (req, res) => {
 
 // POST /ajax/save_micro
 router.post('/save_micro', requireMaster, async (req, res) => {
-  const { id, unidad, descripcion, tipo_unidad } = req.body;
+  const { id, unidad, descripcion, tipo_unidad, km_actual } = req.body;
+  const km = parseInt(km_actual) || 0;
   if (id) {
-    await sql`UPDATE micro SET unidad=${unidad}, descripcion=${descripcion||null}, tipo_unidad=${parseInt(tipo_unidad)||1} WHERE id=${id}`;
+    await sql`UPDATE micro SET unidad=${unidad}, descripcion=${descripcion||null}, tipo_unidad=${parseInt(tipo_unidad)||1}, km_actual=${km} WHERE id=${id}`;
     res.send('Unidad actualizada correctamente');
   } else {
-    await sql`INSERT INTO micro (unidad, descripcion, tipo_unidad) VALUES (${unidad},${descripcion||null},${parseInt(tipo_unidad)||1})`;
+    await sql`INSERT INTO micro (unidad, descripcion, tipo_unidad, km_actual) VALUES (${unidad},${descripcion||null},${parseInt(tipo_unidad)||1},${km})`;
     res.send('Unidad creada correctamente');
   }
 });

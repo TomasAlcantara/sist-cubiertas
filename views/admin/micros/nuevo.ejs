@@ -7,7 +7,8 @@ function check_form() {
   var desc = document.getElementById('descripcion').value;
   if (!unidad || !desc) { alert('Complete unidad y descripción'); return; }
   var tipo = document.querySelector('input[name=tipo_unidad]:checked').value;
-  $.ajax({ type:'POST', url:'/ajax/save_micro', data:{ unidad, descripcion: desc, tipo_unidad: tipo },
+  var km = document.getElementById('km_actual').value;
+  $.ajax({ type:'POST', url:'/ajax/save_micro', data:{ unidad, descripcion: desc, tipo_unidad: tipo, km_actual: km },
     success: function(data) { if(data) { alert(data); location.href='/admin/micros'; } else alert('Error'); }
   });
 }
@@ -16,6 +17,7 @@ function check_form() {
   <h3>Nueva Unidad</h3>
   <p><strong>Unidad:</strong> <input type="text" id="unidad" style="float:right;" /></p>
   <p><strong>Descripción:</strong> <input type="text" id="descripcion" style="float:right;" /></p>
+  <p><strong>Km Actual:</strong> <input type="text" id="km_actual" style="float:right;" /></p>
   <p><strong>Tipo:</strong></p>
   <p style="font-size:12px; line-height:2;">
     <label><input type="radio" name="tipo_unidad" value="1" checked /> Tipo 1 — Colectivo eje trasero doble</label><br>
