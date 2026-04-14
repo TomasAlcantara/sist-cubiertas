@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS cubiertas (
   id_interno VARCHAR(50),
   remito VARCHAR(50),
   fecha_remito DATE,
+  precio DECIMAL(10,2),
   activo SMALLINT DEFAULT 1
 );
 

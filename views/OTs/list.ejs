@@ -103,7 +103,7 @@ function confirmar_cerrar(ot_id) {
       <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>
       <td align="center">
         ${o.estado==0
-          ? '<a href="/OTs/editar?ot='+o.id+'">EDITAR</a> | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>'
+          ? '<a href="/OTs/editar?ot='+o.id+'">EDITAR</a> | <a href="/OTs/cargar?ot='+o.id+'">CARGAR</a> | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>'
           : '<a href="/OTs/ver?ot='+o.id+'">VER</a>'}
       </td>
     </tr>`).join('')

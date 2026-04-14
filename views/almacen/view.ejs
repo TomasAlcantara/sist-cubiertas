@@ -73,15 +73,19 @@ function cambiar_estado(id, estadoActual) {
     <th onclick="orderby(3)" style="cursor:pointer;">Medida</th>
     <th onclick="orderby(4)" style="cursor:pointer;">Estado</th>
     <th onclick="orderby(5)" style="cursor:pointer;">Km</th>
+    <th>Factura</th>
+    <th>Precio</th>
     <th style="width:160px;">Editar</th>
   </thead>
-  ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin cubiertas en este almacén</td></tr>' :
+  ${cubiertas.length === 0 ? '<tr><td colspan="8" align="center">Sin cubiertas en este almacén</td></tr>' :
     cubiertas.map((c, i) => '<tr class="' + (i%2===0?'light':'dark') + '">'
       + '<td align="center">' + (c.fuego||'-') + '</td>'
       + '<td align="center">' + (c.marca||'') + ' ' + (c.modelo_nombre||'') + '</td>'
       + '<td align="center">' + (c.medida||'-') + '</td>'
       + '<td align="center">' + estadoNombre(c.estado) + '</td>'
       + '<td align="center">' + (c.km||0) + '</td>'
+      + '<td align="center">' + (c.remito||'-') + '</td>'
+      + '<td align="center">' + (c.precio != null ? '$' + parseFloat(c.precio).toFixed(2) : '-') + '</td>'
       + '<td align="center">'
         + '<a href="/cubiertas/editar?id=' + c.id + '">ALTA</a>'
         + ' | <a style="cursor:pointer;" onclick="show_almacenes(' + c.id + ')">MOVER</a>'

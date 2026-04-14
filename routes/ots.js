@@ -66,6 +66,31 @@ router.get('/ver', requireAuth, async (req, res) => {
   res.render('OTs/ver', { user: req.user, ot: rows[0], cubiertas, currentPage: 'inicio' });
 });
 
+// GET /OTs/cargar?ot=X — Vista dedicada para asignar cubiertas al diagrama
+router.get('/cargar', requireAuth, async (req, res) => {
+  const { ot } = req.query;
+  const rows = await sql`
+    SELECT o.*, g.nombre AS gomeria_nombre, m.unidad, m.tipo_unidad
+    FROM ots o
+    LEFT JOIN gomeria g ON o.gomeria_id = g.id
+    LEFT JOIN micro m ON o.unidad_id = m.id
+    WHERE o.id = ${ot}
+  `;
+  if (!rows.length) return res.redirect('/OTs/list');
+  if (rows[0].estado == 1) return res.redirect('/OTs/ver?ot=' + ot);
+
+  const [almacenes, modelos, medidas, ot_cubiertas] = await Promise.all([
+    sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
+    sql`SELECT * FROM marcas_ruedas ORDER BY marca, modelo`,
+    sql`SELECT * FROM medidas ORDER BY medida`,
+    sql`SELECT oc.posicion, oc.cubierta_id, c.fuego FROM ot_cubiertas oc JOIN cubiertas c ON oc.cubierta_id = c.id WHERE oc.ot_id = ${ot} AND oc.posicion IS NOT NULL`,
+  ]);
+
+  res.render('OTs/cargar', {
+    user: req.user, ot: rows[0], almacenes, modelos, medidas, ot_cubiertas, currentPage: 'inicio'
+  });
+});
+
 // GET /OTs/editar?ot=X
 router.get('/editar', requireAuth, async (req, res) => {
   const { ot } = req.query;

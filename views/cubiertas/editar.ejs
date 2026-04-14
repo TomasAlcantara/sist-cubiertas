@@ -79,6 +79,10 @@ const body = `
       <td><input type="text" name="remito" maxlength="50" value="${cubierta.remito||''}" style="width:200px;" /></td>
     </tr>
     <tr>
+      <td style="padding:5px 0;"><strong>Precio $:</strong></td>
+      <td><input type="number" name="precio" step="0.01" min="0" value="${cubierta.precio||''}" style="width:120px;" /></td>
+    </tr>
+    <tr>
       <td style="padding:5px 0;"><strong>Fecha remito:</strong></td>
       <td><input type="text" name="fecha_remito" id="fecha_remito" placeholder="DD/MM/AAAA" value="${fmtFecha(cubierta.fecha_remito)}" style="width:130px;" /></td>
     </tr>

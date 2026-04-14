@@ -69,7 +69,7 @@ router.get('/nuevo', requireAuth, async (req, res) => {
 
 // POST /cubiertas/nuevo
 router.post('/nuevo', requireAuth, async (req, res) => {
-  const { fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, fecha_remito } = req.body;
+  const { fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
   if (!fuego) return res.redirect('/cubiertas/nuevo');
 
   const parseFecha = (f) => {
@@ -81,7 +81,7 @@ router.post('/nuevo', requireAuth, async (req, res) => {
   };
 
   await sql`
-    INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, fecha_remito, activo)
+    INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
     VALUES (
       ${fuego.trim()},
       ${parseInt(modelo_id) || null},
@@ -92,6 +92,7 @@ router.post('/nuevo', requireAuth, async (req, res) => {
       ${parseInt(proveedor_id) || null},
       ${id_interno?.trim() || null},
       ${remito?.trim() || null},
+      ${parseFloat(precio) || null},
       ${parseFecha(fecha_remito)},
       1
     )
@@ -119,7 +120,7 @@ router.get('/editar', requireAuth, async (req, res) => {
 
 // POST /cubiertas/editar
 router.post('/editar', requireAuth, async (req, res) => {
-  const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, fecha_remito } = req.body;
+  const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
   if (!id || !fuego) return res.redirect('/cubiertas');
 
   const parseFecha = (f) => {
@@ -141,6 +142,7 @@ router.post('/editar', requireAuth, async (req, res) => {
       proveedor_id = ${parseInt(proveedor_id) || null},
       id_interno = ${id_interno?.trim() || null},
       remito = ${remito?.trim() || null},
+      precio = ${parseFloat(precio) || null},
       fecha_remito = ${parseFecha(fecha_remito)}
     WHERE id = ${parseInt(id)}
   `;
