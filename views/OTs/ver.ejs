@@ -1,6 +1,6 @@
 <%
 const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
-const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio' })[p] || p;
+const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2' })[p] || p;
 const currentPage = 'inicio';
 const trabajos = [];
 if (ot.rotacion) trabajos.push('Rotación');
