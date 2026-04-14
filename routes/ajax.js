@@ -250,11 +250,44 @@ router.post('/almacenar_ruedas', requireAuth, async (req, res) => {
 });
 
 // POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
-const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio' })[p] || p;
+const buildDiagramaCierre = (tipo, cubiertasMap) => {
+  const LAYOUTS = {
+    1: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:80 },
+    2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], bodyH:50 },
+    3: { del:['ddi','ddd'], tr1:['tie','tde'],              tr2:[], bodyH:80 },
+    4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:80 },
+  };
+  const L = LAYOUTS[tipo] || LAYOUTS[1];
+  const box = (pos) => {
+    const f = cubiertasMap[pos] || '';
+    return `<div style="width:44px;height:54px;border:1px solid #555;background:#f5f5f5;display:inline-flex;align-items:center;justify-content:center;margin:2px;font-size:9px;font-weight:bold;text-align:center;word-break:break-all;padding:2px;">${f}</div>`;
+  };
+  const axle = `<div style="width:120px;height:18px;background:#ccc;border:1px solid #555;margin:0 2px;display:inline-block;vertical-align:middle;"></div>`;
+  const space = `<div style="width:120px;display:inline-block;"></div>`;
+  const row = (positions, withAxle) => {
+    const mid = Math.ceil(positions.length / 2);
+    return `<div style="display:flex;align-items:center;justify-content:center;margin:2px 0;">
+      ${positions.slice(0,mid).map(box).join('')}
+      ${withAxle ? axle : space}
+      ${positions.slice(mid).map(box).join('')}
+    </div>`;
+  };
+  let h = row(L.del, false);
+  h += `<div style="display:flex;justify-content:center;"><div style="width:120px;height:${L.bodyH}px;border-left:1px solid #555;border-right:1px solid #555;background:#fff;"></div></div>`;
+  h += row(L.tr1, true);
+  if (L.tr2.length) h += row(L.tr2, true);
+  const auxF = cubiertasMap['ra'] || '';
+  h += `<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;">
+    <span style="font-size:11px;font-weight:bold;">Auxilio</span>
+    <div style="width:44px;height:54px;border:1px solid #555;background:#f5f5f5;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;">${auxF}</div>
+  </div>`;
+  return h;
+};
+
 router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
   const { ot_id } = req.body;
   const rows = await sql`
-    SELECT o.*, m.unidad, m.km_actual, g.nombre AS gomeria_nombre
+    SELECT o.*, m.unidad, m.km_actual, m.tipo_unidad, g.nombre AS gomeria_nombre
     FROM ots o
     LEFT JOIN micro m ON o.unidad_id = m.id
     LEFT JOIN gomeria g ON o.gomeria_id = g.id
@@ -264,68 +297,98 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
   const ot = rows[0];
 
   const cubiertas = await sql`
-    SELECT oc.posicion, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida
+    SELECT oc.posicion, c.fuego
     FROM ot_cubiertas oc
     JOIN cubiertas c ON oc.cubierta_id = c.id
-    LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-    LEFT JOIN medidas med ON c.medida_id = med.id
     WHERE oc.ot_id = ${ot_id} AND oc.posicion IS NOT NULL
     ORDER BY oc.posicion
   `;
 
-  const trabajos = [];
-  if (ot.rotacion) trabajos.push('Rotación');
-  if (ot.arreglo) trabajos.push('Arreglo');
-  if (ot.cambio) trabajos.push('Cambio');
-  if (ot.alinear) trabajos.push('Alinear');
-  if (ot.balanceo) trabajos.push('Balanceo');
-  if (ot.armar) trabajos.push('Armar');
+  const cubiertasMap = {};
+  cubiertas.forEach(c => { cubiertasMap[c.posicion] = c.fuego || ''; });
 
-  let html = `
-    <div style="padding:16px; font-size:13px;">
-      <img src="/images/rojo.png" style="float:right; border:0; margin:2px; height:15px; cursor:pointer;" onclick="close_carga();" />
-      <h3 style="margin:0 0 10px 0;">Cerrar OT N° ${ot_id}</h3>
-      <p><strong>Unidad:</strong> ${ot.unidad||'-'} &nbsp;&nbsp; <strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
-      ${trabajos.length ? `<p><strong>Trabajos:</strong> ${trabajos.join(', ')}</p>` : ''}
-      ${cubiertas.length ? `
-        <p><strong>Cubiertas a cambiar:</strong></p>
-        <table style="width:100%; border-collapse:collapse; font-size:12px;">
-          <thead><tr><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th></tr></thead>
-          ${cubiertas.map(c => `<tr>
-            <td align="center">${c.posicion ? posNombre(c.posicion) : '-'}</td>
-            <td align="center">${c.fuego||'-'}</td>
-            <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
-            <td align="center">${c.medida||'-'}</td>
-          </tr>`).join('')}
-        </table>
-      ` : ''}
-      <hr style="margin:12px 0;" />
-      <p>
-        <strong>Km actuales de la unidad:</strong>
-        <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:120px; margin-left:10px;" placeholder="km" />
-      </p>
-      <p>
-        <strong>N° Factura:</strong>
-        <input type="text" id="factura_cierre" style="width:180px; margin-left:10px;" placeholder="Opcional" />
-      </p>
-      <p>
-        <strong>Costo $:</strong>
-        <input type="number" id="costo_cierre" style="width:120px; margin-left:10px;" placeholder="Opcional" />
-      </p>
-      <div style="margin-top:14px; text-align:center;">
-        <input type="button" value="Confirmar cierre" onclick="confirmar_cerrar(${ot_id})" style="width:160px;" />
-        <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px; margin-left:12px;" />
+  const siNo = (v) => v
+    ? '<strong style="color:#090">SI</strong>'
+    : '<strong style="color:#c00">NO</strong>';
+  const chk = (id, val, label) =>
+    `<label style="display:block;margin:3px 0;"><input type="checkbox" id="${id}" ${val?'checked':''} /> ${label}</label>`;
+
+  const diagrama = buildDiagramaCierre(ot.tipo_unidad || 1, cubiertasMap);
+
+  const html = `
+  <div style="font-size:13px; padding:14px; position:relative;">
+    <img src="/images/rojo.png" style="position:absolute;top:10px;right:10px;height:15px;cursor:pointer;border:0;" onclick="close_carga();" />
+    <h3 style="text-align:center; margin:0 0 14px 0;">Cerrar OT N°&nbsp;${ot_id}</h3>
+
+    <div style="display:flex; gap:20px; align-items:flex-start;">
+
+      <!-- Columna izquierda -->
+      <div style="flex:1; min-width:240px;">
+        <p style="margin:0 0 6px 0;"><strong>Tareas a Realizar:</strong></p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; margin-bottom:10px;">
+          <span>Rotación: ${siNo(ot.rotacion)}</span>
+          <span>Arreglo: ${siNo(ot.arreglo)}</span>
+          <span>Cambio: ${siNo(ot.cambio)}</span>
+          <span>Alinear: ${siNo(ot.alinear)}</span>
+          <span>Balanceo: ${siNo(ot.balanceo)}</span>
+          <span>Armar: ${siNo(ot.armar)}</span>
+        </div>
+
+        <p style="margin:8px 0 4px 0;"><strong>Km Actuales:</strong></p>
+        <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:140px;" placeholder="km" />
+
+        <p style="margin:10px 0 4px 0;"><strong>Tareas Realizadas:</strong></p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 10px;">
+          ${chk('cb_rot_cierre', ot.rotacion, 'Rotación')}
+          ${chk('cb_arr_cierre', ot.arreglo,  'Arreglo')}
+          ${chk('cb_cam_cierre', ot.cambio,   'Cambio')}
+          ${chk('cb_ali_cierre', ot.alinear,  'Alinear')}
+          ${chk('cb_bal_cierre', ot.balanceo, 'Balanceo')}
+          ${chk('cb_arm_cierre', ot.armar,    'Armar')}
+        </div>
+
+        <p style="margin:10px 0 3px 0;"><strong>Número de Factura:</strong></p>
+        <input type="text" id="factura_cierre" style="width:180px;" placeholder="Opcional" />
+
+        <p style="margin:8px 0 3px 0;"><strong>Fecha:</strong></p>
+        <input type="text" id="fecha_cierre" style="width:130px;" placeholder="DD/MM/AAAA" />
+
+        <p style="margin:8px 0 3px 0;"><strong>Costo $:</strong></p>
+        <input type="number" id="costo_cierre" style="width:140px;" placeholder="Opcional" />
+
+        <div style="margin-top:16px;">
+          <input type="button" value="Cerrar OT" onclick="confirmar_cerrar(${ot_id})" style="width:110px;" />
+          <input type="button" value="Cancelar" onclick="close_carga();" style="width:90px; margin-left:10px;" />
+        </div>
       </div>
-    </div>`;
+
+      <!-- Columna derecha: diagrama -->
+      <div style="flex:1; min-width:200px;">
+        <p style="margin:0 0 8px 0; font-weight:bold;">Cambio de cubiertas:</p>
+        ${diagrama}
+      </div>
+
+    </div>
+  </div>`;
   res.send(html);
 });
 
 // POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
 router.post('/confirmar_cerrar_ot', requireAuth, async (req, res) => {
-  const { ot_id, km_actual, factura, costo } = req.body;
+  const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
   if (!km_actual) return res.status(400).send('km requerido');
 
-  await sql`UPDATE ots SET estado = 1, factura = ${factura||null}, costo = ${costo||null} WHERE id = ${ot_id}`;
+  await sql`UPDATE ots SET
+    estado = 1,
+    factura = ${factura||null},
+    costo = ${costo||null},
+    rotacion = ${rotacion === '1'},
+    arreglo  = ${arreglo  === '1'},
+    cambio   = ${cambio   === '1'},
+    alinear  = ${alinear  === '1'},
+    balanceo = ${balanceo === '1'},
+    armar    = ${armar    === '1'}
+  WHERE id = ${ot_id}`;
 
   const ot = await sql`SELECT unidad_id FROM ots WHERE id = ${ot_id}`;
   const unidad_id = ot[0]?.unidad_id;

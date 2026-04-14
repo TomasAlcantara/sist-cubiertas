@@ -46,7 +46,13 @@ function confirmar_cerrar(ot_id) {
       ot_id: ot_id,
       km_actual: km,
       factura: document.getElementById('factura_cierre').value,
-      costo: document.getElementById('costo_cierre').value
+      costo:   document.getElementById('costo_cierre').value,
+      rotacion: document.getElementById('cb_rot_cierre').checked ? '1':'0',
+      arreglo:  document.getElementById('cb_arr_cierre').checked ? '1':'0',
+      cambio:   document.getElementById('cb_cam_cierre').checked ? '1':'0',
+      alinear:  document.getElementById('cb_ali_cierre').checked ? '1':'0',
+      balanceo: document.getElementById('cb_bal_cierre').checked ? '1':'0',
+      armar:    document.getElementById('cb_arm_cierre').checked ? '1':'0'
     },
     success: function(data) {
       if (data === 'ok') location.reload();
@@ -57,7 +63,7 @@ function confirmar_cerrar(ot_id) {
 </script>
 
 <div id="back" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:98;" onclick="close_carga();"></div>
-<div id="cerrar_ot" style="width:700px; height:530px; position:fixed; background:#FFF; z-index:99; display:none; top:80px; left:50%; transform:translateX(-50%);"></div>
+<div id="cerrar_ot" style="width:720px; max-height:90vh; overflow-y:auto; position:fixed; background:#FFF; z-index:99; display:none; top:60px; left:50%; transform:translateX(-50%); border:1px solid #aaa; box-shadow:2px 2px 12px rgba(0,0,0,0.3);"></div>
 
 <form method="get" action="/OTs/list" style="float:left">
   <strong>Unidad:</strong>
