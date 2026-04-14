@@ -44,7 +44,7 @@ const extraHead = `
   }
   .type-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 10px;
   }
   .type-card {
@@ -142,17 +142,12 @@ function check_form() {
   <div class="type-section">
     <div class="type-section-label">Tipo de unidad</div>
 
-    <input type="radio" id="radio_1" name="tipo_unidad" value="1" checked style="display:none;" />
-    <input type="radio" id="radio_2" name="tipo_unidad" value="2" style="display:none;" />
+    <input type="radio" id="radio_2" name="tipo_unidad" value="2" checked style="display:none;" />
     <input type="radio" id="radio_3" name="tipo_unidad" value="3" style="display:none;" />
     <input type="radio" id="radio_4" name="tipo_unidad" value="4" style="display:none;" />
 
     <div class="type-grid">
-      <div class="type-card selected" id="card_1" onclick="select_tipo(1)">
-        <img id="mod_1" src="/images/modelo1.png" alt="Tipo 1" />
-        <span class="type-card-label">Colectivo<br>eje doble</span>
-      </div>
-      <div class="type-card" id="card_2" onclick="select_tipo(2)">
+      <div class="type-card selected" id="card_2" onclick="select_tipo(2)">
         <img id="mod_2" src="/images/modelo2.png" alt="Tipo 2" />
         <span class="type-card-label">Colectivo<br>3 ejes</span>
       </div>
@@ -162,7 +157,7 @@ function check_form() {
       </div>
       <div class="type-card" id="card_4" onclick="select_tipo(4)">
         <img id="mod_4" src="/images/modelo4.png" alt="Tipo 4" />
-        <span class="type-card-label">Colectivo<br>doble alt.</span>
+        <span class="type-card-label">Colectivo<br>eje doble</span>
       </div>
     </div>
   </div>
