@@ -1,55 +1,73 @@
-table{
-	width:100%;
-	border-collapse:collapse;
-	table-layout:auto;
-	vertical-align:top;
-	margin-bottom:15px;
-	border:1px solid #CCCCCC;
-	color: #333;
+/* ─── Tables — dark industrial theme ─────────────────────────── */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  color: var(--text-primary);
+  table-layout: auto;
 }
 
-table thead th{
-	color:#FFFFFF;
-	background-color:#666666;
-	border:1px solid #CCCCCC;
-	border-collapse:collapse;
-	text-align:center;
-	table-layout:auto;
-	vertical-align:middle;
+table thead th {
+  background: #f0f1f3;
+  color: #6b6f78;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--red-dim);
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 
-table tbody td{
-	vertical-align:middle;
-	border-collapse:collapse;
-	border:1px solid #CCCCCC;
-}
-	
-table thead th, table tbody td{
-	padding:5px;
-	border-collapse:collapse;
+table tbody td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+  color: var(--text-primary);
 }
 
-table tbody tr.light{
-	color:#333;
-	background-color:#F7F7F7;
+table tbody tr:last-child td {
+  border-bottom: none;
 }
 
-table tbody tr.dark{
-	color:#333;
-	background-color:#E8E8E8;
-}
-table tbody tr.sdark{
-	color:#FFF;
-	background-color: #AAA;
+table tbody tr.light {
+  background: var(--bg-card);
 }
 
+table tbody tr.dark {
+  background: var(--bg-surface);
+}
 
+table tbody tr.sdark {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+table tbody tr:hover td {
+  background: var(--bg-hover) !important;
+}
+
+table tbody tr td a,
 #container table tr td a {
-	color: #333;
-	font-weight:bold;
+  color: var(--red-bright);
+  font-weight: 600;
+  text-decoration: none;
+  transition: color 0.12s;
+}
+
+table tbody tr td a:hover {
+  color: var(--text-primary);
 }
 
 #container table tr.red td a {
-	color: #000;
-	font-weight:bold;
+  color: var(--red-bright);
 }

@@ -1,12 +1,146 @@
 <%
-const body = `
-<input type="button" class="adm_button" value="Almacenes" onclick="location.href='/almacen';" />
-<input type="button" class="adm_button" value="Gomerias" onclick="location.href='/gomerias';" style="margin-left:10px" />
-<input type="button" class="adm_button" value="Listado de OTs" onclick="location.href='/OTs/list';" style="margin-left:10px" />
-<input type="button" class="adm_button" value="Carga de km" onclick="location.href='/CargaKm';" style="margin-left:10px" />
-<input type="button" class="adm_button" value="Cubiertas" onclick="location.href='/cubiertas';" style="margin-left:10px" />
-<input type="button" class="adm_button" value="Recapadoras" onclick="location.href='/recapadoras';" style="margin-left:10px" />
-`;
 const currentPage = 'inicio';
+
+const modules = [
+  {
+    href: '/almacen',
+    label: 'Almacenes',
+    desc: 'Gestión de stock e inventario de neumáticos',
+    tag: 'STOCK'
+  },
+  {
+    href: '/gomerias',
+    label: 'Gomerías',
+    desc: 'Talleres habilitados y datos de servicio',
+    tag: 'SERVICIO'
+  },
+  {
+    href: '/OTs/list',
+    label: 'Órdenes de Trabajo',
+    desc: 'Listado y seguimiento de OTs activas',
+    tag: 'OT'
+  },
+  {
+    href: '/CargaKm',
+    label: 'Carga de Km',
+    desc: 'Registro de kilómetros recorridos por unidad',
+    tag: 'KM'
+  },
+  {
+    href: '/cubiertas',
+    label: 'Cubiertas',
+    desc: 'Inventario y vida útil de neumáticos',
+    tag: 'INV'
+  },
+  {
+    href: '/recapadoras',
+    label: 'Recapadoras',
+    desc: 'Empresas recapadoras habilitadas',
+    tag: 'RECAP'
+  }
+];
+
+let cards = '';
+for (const m of modules) {
+  cards += '<a href="' + m.href + '" class="mod-card">' +
+    '<span class="mod-tag">' + m.tag + '</span>' +
+    '<div class="mod-name">' + m.label + '</div>' +
+    '<div class="mod-desc">' + m.desc + '</div>' +
+    '</a>';
+}
+
+const body = `
+<style>
+  .dash-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1.25rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .dash-title {
+    font-family: var(--font-display);
+    font-size: 2.2rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+    color: var(--text-primary);
+    margin: 0;
+  }
+  .dash-sub {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 0;
+  }
+  .mod-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+  @media (max-width: 900px) {
+    .mod-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .mod-grid { grid-template-columns: 1fr; }
+  }
+  .mod-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 1.4rem 1.5rem;
+    text-decoration: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    transition: border-left-color 0.12s, background 0.12s, transform 0.1s;
+    cursor: pointer;
+  }
+  .mod-card:hover {
+    border-left-color: var(--red);
+    background: var(--bg-hover);
+    transform: translateY(-2px);
+  }
+  .mod-tag {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: var(--red);
+    background: rgba(192, 57, 43, 0.12);
+    padding: 2px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    display: inline-block;
+    align-self: flex-start;
+    margin-bottom: 0.3rem;
+  }
+  .mod-name {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+  }
+  .mod-desc {
+    font-family: var(--font-body);
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+</style>
+
+<div class="dash-head">
+  <h2 class="dash-title">Panel Principal</h2>
+  <p class="dash-sub">Seleccione un módulo</p>
+</div>
+<div class="mod-grid">
+  ${cards}
+</div>
+`;
 %>
 <%- include('layout', { body, user, currentPage }) %>
