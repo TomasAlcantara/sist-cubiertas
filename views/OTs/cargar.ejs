@@ -1,9 +1,15 @@
 <%
 const currentPage = 'inicio';
+const fechaFormateada = ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '';
 const cubCargadas = {};
 ot_cubiertas.forEach(c => { cubCargadas[c.posicion] = { id: c.cubierta_id, fuego: c.fuego }; });
 const cambiosIniciales = {};
 ot_cubiertas.forEach(c => { cambiosIniciales[c.posicion] = c.cubierta_id; });
+// Fuegos enviados separados por |
+const fuegosEnviados = ot_cubiertas.length
+  ? ot_cubiertas.map(c => c.fuego || 'S/N').join(' | ')
+  : 'S/N';
+const siNo = (v) => v ? '<strong style="color:#090">SI</strong>' : '<strong style="color:#c00">NO</strong>';
 const body = `
 <style>
 #back { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:98; }
@@ -23,6 +29,8 @@ const body = `
 .bus-spacer { width:56px; }
 .aux-row { margin-top:8px; display:flex; align-items:center; justify-content:center; gap:8px; }
 .aux-row span { font-size:12px; font-weight:bold; }
+.sep { border:none; border-top:1px dashed #999; margin:18px 0; }
+.ot-section { width:460px; margin:0 auto; font-size:13px; }
 </style>
 
 <script>
@@ -68,7 +76,7 @@ function renderDiagrama(tipo) {
   }
   h += '<div class="aux-row"><span>Auxilio</span>'+mkRueda('ra')+'</div>';
   document.getElementById('diagrama-wrap').innerHTML = h;
-  // Pre-marcar cubiertas ya asignadas en esta OT
+  // Pre-marcar cubiertas ya asignadas
   var cargadas = ${JSON.stringify(cubCargadas)};
   Object.keys(cargadas).forEach(function(pos) {
     var el = document.getElementById('fn-'+pos);
@@ -107,17 +115,40 @@ function seleccionar_ot(id, fuego) {
   var p = document.getElementById('pos-'+current_pos);
   if (p) p.classList.add('seleccionada');
   cerrar_modal();
+  actualizar_tabla_resumen();
 }
 
-function guardar_cargar() {
+function actualizar_tabla_resumen() {
+  // Refresca el resumen en tiempo real
+  var filas = '';
+  var posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
+    tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
+    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio'};
+  for (var pos in cambios_ot) {
+    var fn = document.getElementById('fn-'+pos);
+    filas += '<tr><td style="padding:2px 6px;">' + (posNombres[pos]||pos) + '</td>'
+           + '<td style="padding:2px 6px;">' + (fn ? fn.innerHTML : '-') + '</td></tr>';
+  }
+  var tbody = document.getElementById('resumen-body');
+  if (tbody) tbody.innerHTML = filas || '<tr><td colspan="2" style="color:#999; padding:4px 6px;">Sin cambios registrados</td></tr>';
+}
+
+function finalizar() {
   $.ajax({ type:'POST', url:'/ajax/actualizar_ot',
-    data: { ot_id: ${ot.id}, unidad_id: ${ot.unidad_id||'null'}, gomeria_id: ${ot.gomeria_id||'null'},
-            fecha: '${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : ''}',
-            observaciones: '',
-            rotacion: '${ot.rotacion?'1':'0'}', arreglo: '${ot.arreglo?'1':'0'}',
-            cambio: '${ot.cambio?'1':'0'}', alinear: '${ot.alinear?'1':'0'}',
-            balanceo: '${ot.balanceo?'1':'0'}', armar: '${ot.armar?'1':'0'}',
-            cambios_ot_json: JSON.stringify(cambios_ot) },
+    data: {
+      ot_id: ${ot.id},
+      unidad_id: '${ot.unidad_id||''}',
+      gomeria_id: '${ot.gomeria_id||''}',
+      fecha: '${fechaFormateada}',
+      observaciones: document.getElementById('observaciones').value,
+      rotacion:  document.getElementById('cb_rotacion').checked  ? '1':'0',
+      arreglo:   document.getElementById('cb_arreglo').checked   ? '1':'0',
+      cambio:    document.getElementById('cb_cambio').checked    ? '1':'0',
+      alinear:   document.getElementById('cb_alinear').checked   ? '1':'0',
+      balanceo:  document.getElementById('cb_balanceo').checked  ? '1':'0',
+      armar:     document.getElementById('cb_armar').checked     ? '1':'0',
+      cambios_ot_json: JSON.stringify(cambios_ot)
+    },
     success: function(id) {
       if (id) location.href = '/OTs/list';
       else alert('Error al guardar');
@@ -169,21 +200,89 @@ $(function() {
   <div id="rueda_list"></div>
 </div>
 
-<p style="text-align:center; font-size:15px; font-weight:bold; margin-bottom:4px;">Cargar Cubiertas — OT N° ${ot.numero || ot.id}</p>
-<p style="text-align:center; font-size:12px; color:#666; margin-bottom:12px;">
-  <strong>Unidad:</strong> ${ot.unidad||'-'} &nbsp;&nbsp; <strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}
-</p>
+<!-- ===== ORDEN DE TRABAJO ===== -->
+<div class="ot-section">
+  <h2 style="text-align:center; font-size:18px; font-weight:bold; margin-bottom:14px;">ORDEN DE TRABAJO</h2>
 
-<div style="width:420px; margin:0 auto; border:1px solid #ccc; padding:8px;">
-  <p style="font-size:11px; color:#666; margin:0 0 6px 0;">Clic en una posición para asignar cubierta</p>
-  <div id="diagrama-wrap" style="text-align:center;">
+  <div style="display:flex; justify-content:space-between; margin-bottom:10px; font-size:13px;">
+    <span><strong>Fecha de solicitud:</strong> ${fechaFormateada}</span>
+    <span><strong>Interno:</strong> ${ot.unidad||'-'}</span>
+  </div>
+
+  <p style="text-align:center; font-size:13px; margin-bottom:6px;"><strong>Trabajos a realizar:</strong></p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 30px; width:280px; margin:0 auto 10px auto; font-size:13px;">
+    <span>Rotación: ${siNo(ot.rotacion)}</span>
+    <span>Arreglo: ${siNo(ot.arreglo)}</span>
+    <span>Cambio: ${siNo(ot.cambio)}</span>
+    <span>Alinear: ${siNo(ot.alinear)}</span>
+    <span>Balanceo: ${siNo(ot.balanceo)}</span>
+    <span>Armar: ${siNo(ot.armar)}</span>
+  </div>
+
+  <p style="text-align:center; font-size:12px; margin-bottom:4px;">
+    <strong>Número de cubiertas enviadas:</strong><br>
+    <span style="color:#444;">${fuegosEnviados}</span>
+  </p>
+
+  <p style="text-align:center; font-size:13px; font-weight:bold; margin:12px 0 6px 0;">Cambio de cubiertas:</p>
+  <div id="diagrama-wrap" style="text-align:center; margin-bottom:10px;">
     <p style="color:#999; font-size:12px;">Cargando...</p>
   </div>
 </div>
 
-<div style="width:420px; margin:12px auto; text-align:center;">
-  <input type="button" value="Guardar" onclick="guardar_cargar();" style="width:100px;" />
-  <input type="button" value="Cancelar" onclick="location.href='/OTs/list';" style="width:100px; margin-left:20px;" />
+<hr class="sep">
+
+<!-- ===== TRABAJOS REALIZADOS ===== -->
+<div class="ot-section">
+  <p style="text-align:center; font-size:13px; font-weight:bold; margin-bottom:8px;">Trabajos realizados:</p>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px 30px; width:280px; margin:0 auto 10px auto; font-size:13px;">
+    <label><input type="checkbox" id="cb_rotacion" ${ot.rotacion?'checked':''} /> Rotación</label>
+    <label><input type="checkbox" id="cb_arreglo"  ${ot.arreglo ?'checked':''} /> Arreglo</label>
+    <label><input type="checkbox" id="cb_cambio"   ${ot.cambio  ?'checked':''} /> Cambio</label>
+    <label><input type="checkbox" id="cb_alinear"  ${ot.alinear ?'checked':''} /> Alinear</label>
+    <label><input type="checkbox" id="cb_balanceo" ${ot.balanceo?'checked':''} /> Balanceo</label>
+    <label><input type="checkbox" id="cb_armar"    ${ot.armar   ?'checked':''} /> Armar</label>
+  </div>
+
+  <p style="font-size:13px; margin:10px 0 4px 0;"><strong>Observaciones:</strong></p>
+  <textarea id="observaciones" style="width:100%; height:70px; resize:vertical; font-size:13px;">${ot.observaciones||''}</textarea>
+
+  <div style="text-align:center; margin-top:12px;">
+    <input type="button" value="Guardar" onclick="finalizar();" style="width:100px;" />
+    <input type="button" value="Cancelar" onclick="location.href='/OTs/list';" style="width:100px; margin-left:20px;" />
+  </div>
+</div>
+
+<hr class="sep">
+
+<!-- ===== RESUMEN CAMBIO DE CUBIERTAS ===== -->
+<div class="ot-section">
+  <p style="text-align:center; font-size:13px; font-weight:bold; margin-bottom:8px;">Cambio de cubiertas</p>
+  <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <thead>
+      <tr>
+        <th style="border:1px solid #ccc; padding:4px 8px;">Posición</th>
+        <th style="border:1px solid #ccc; padding:4px 8px;">Fuego</th>
+      </tr>
+    </thead>
+    <tbody id="resumen-body">
+      ${ot_cubiertas.length === 0
+        ? '<tr><td colspan="2" style="color:#999; padding:4px 6px; border:1px solid #ccc;">Sin cambios registrados</td></tr>'
+        : ot_cubiertas.map(c => {
+            const posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
+              tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
+              cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio'};
+            return '<tr><td style="border:1px solid #ccc; padding:4px 8px;">' + (posNombres[c.posicion]||c.posicion||'-') + '</td>'
+                 + '<td style="border:1px solid #ccc; padding:4px 8px;">' + (c.fuego||'S/N') + '</td></tr>';
+          }).join('')
+      }
+    </tbody>
+  </table>
+
+  <div style="text-align:center; margin-top:14px;">
+    <input type="button" value="Finalizar" onclick="finalizar();" style="width:100px;" />
+    <input type="button" value="Cancelar" onclick="location.href='/OTs/list';" style="width:100px; margin-left:20px;" />
+  </div>
 </div>
 `;
 %>
