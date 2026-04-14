@@ -250,39 +250,11 @@ router.post('/almacenar_ruedas', requireAuth, async (req, res) => {
 });
 
 // POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
-const buildDiagramaCierre = (tipo, cubiertasMap) => {
-  const LAYOUTS = {
-    1: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:80 },
-    2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], bodyH:50 },
-    3: { del:['ddi','ddd'], tr1:['tie','tde'],              tr2:[], bodyH:80 },
-    4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:80 },
-  };
-  const L = LAYOUTS[tipo] || LAYOUTS[1];
-  const box = (pos) => {
-    const f = cubiertasMap[pos] || '';
-    return `<div style="width:44px;height:54px;border:1px solid #555;background:#f5f5f5;display:inline-flex;align-items:center;justify-content:center;margin:2px;font-size:9px;font-weight:bold;text-align:center;word-break:break-all;padding:2px;">${f}</div>`;
-  };
-  const axle = `<div style="width:120px;height:18px;background:#ccc;border:1px solid #555;margin:0 2px;display:inline-block;vertical-align:middle;"></div>`;
-  const space = `<div style="width:120px;display:inline-block;"></div>`;
-  const row = (positions, withAxle) => {
-    const mid = Math.ceil(positions.length / 2);
-    return `<div style="display:flex;align-items:center;justify-content:center;margin:2px 0;">
-      ${positions.slice(0,mid).map(box).join('')}
-      ${withAxle ? axle : space}
-      ${positions.slice(mid).map(box).join('')}
-    </div>`;
-  };
-  let h = row(L.del, false);
-  h += `<div style="display:flex;justify-content:center;"><div style="width:120px;height:${L.bodyH}px;border-left:1px solid #555;border-right:1px solid #555;background:#fff;"></div></div>`;
-  h += row(L.tr1, true);
-  if (L.tr2.length) h += row(L.tr2, true);
-  const auxF = cubiertasMap['ra'] || '';
-  h += `<div style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;">
-    <span style="font-size:11px;font-weight:bold;">Auxilio</span>
-    <div style="width:44px;height:54px;border:1px solid #555;background:#f5f5f5;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:bold;">${auxF}</div>
-  </div>`;
-  return h;
-};
+const posNombreCierre = (p) => ({
+  ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
+  tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
+  cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio'
+})[p] || p;
 
 router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
   const { ot_id } = req.body;
@@ -304,28 +276,30 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
     ORDER BY oc.posicion
   `;
 
-  const cubiertasMap = {};
-  cubiertas.forEach(c => { cubiertasMap[c.posicion] = c.fuego || ''; });
-
   const siNo = (v) => v
     ? '<strong style="color:#090">SI</strong>'
     : '<strong style="color:#c00">NO</strong>';
   const chk = (id, val, label) =>
     `<label style="display:block;margin:3px 0;"><input type="checkbox" id="${id}" ${val?'checked':''} /> ${label}</label>`;
 
-  const diagrama = buildDiagramaCierre(ot.tipo_unidad || 1, cubiertasMap);
+  const filasTabla = cubiertas.length
+    ? cubiertas.map(c => `<tr>
+        <td style="border:1px solid #ddd;padding:4px 8px;">${posNombreCierre(c.posicion)}</td>
+        <td style="border:1px solid #ddd;padding:4px 8px;font-weight:bold;">${c.fuego||'S/N'}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="2" style="border:1px solid #ddd;padding:6px;color:#999;">Sin cubiertas registradas</td></tr>';
 
   const html = `
   <div style="font-size:13px; padding:14px; position:relative;">
     <img src="/images/rojo.png" style="position:absolute;top:10px;right:10px;height:15px;cursor:pointer;border:0;" onclick="close_carga();" />
     <h3 style="text-align:center; margin:0 0 14px 0;">Cerrar OT N°&nbsp;${ot_id}</h3>
 
-    <div style="display:flex; gap:20px; align-items:flex-start;">
+    <div style="display:flex; gap:24px; align-items:flex-start;">
 
-      <!-- Columna izquierda -->
+      <!-- Columna izquierda: formulario -->
       <div style="flex:1; min-width:240px;">
-        <p style="margin:0 0 6px 0;"><strong>Tareas a Realizar:</strong></p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; margin-bottom:10px;">
+        <p style="margin:0 0 5px 0;"><strong>Tareas a Realizar:</strong></p>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; margin-bottom:12px; font-size:12px;">
           <span>Rotación: ${siNo(ot.rotacion)}</span>
           <span>Arreglo: ${siNo(ot.arreglo)}</span>
           <span>Cambio: ${siNo(ot.cambio)}</span>
@@ -334,11 +308,11 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
           <span>Armar: ${siNo(ot.armar)}</span>
         </div>
 
-        <p style="margin:8px 0 4px 0;"><strong>Km Actuales:</strong></p>
+        <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
         <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:140px;" placeholder="km" />
 
         <p style="margin:10px 0 4px 0;"><strong>Tareas Realizadas:</strong></p>
-        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 10px;">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 10px; font-size:12px;">
           ${chk('cb_rot_cierre', ot.rotacion, 'Rotación')}
           ${chk('cb_arr_cierre', ot.arreglo,  'Arreglo')}
           ${chk('cb_cam_cierre', ot.cambio,   'Cambio')}
@@ -362,10 +336,18 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
         </div>
       </div>
 
-      <!-- Columna derecha: diagrama -->
-      <div style="flex:1; min-width:200px;">
-        <p style="margin:0 0 8px 0; font-weight:bold;">Cambio de cubiertas:</p>
-        ${diagrama}
+      <!-- Columna derecha: tabla de cubiertas -->
+      <div style="min-width:200px;">
+        <p style="margin:0 0 8px 0;"><strong>Cambio de cubiertas:</strong></p>
+        <table style="border-collapse:collapse; font-size:12px; width:100%;">
+          <thead>
+            <tr style="background:#f0f0f0;">
+              <th style="border:1px solid #ddd;padding:4px 8px;text-align:left;">Posición</th>
+              <th style="border:1px solid #ddd;padding:4px 8px;text-align:left;">Fuego</th>
+            </tr>
+          </thead>
+          <tbody>${filasTabla}</tbody>
+        </table>
       </div>
 
     </div>

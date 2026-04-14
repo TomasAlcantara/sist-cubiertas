@@ -140,6 +140,13 @@ function guardar_ot() {
   var fecha      = document.getElementById('fecha').value;
   if (!unidad_id) { alert('Seleccione una unidad'); return; }
   if (!fecha)     { alert('Ingrese la fecha de solicitud'); return; }
+  var tieneTarea = document.getElementById('cb_rotacion').checked ||
+                   document.getElementById('cb_arreglo').checked  ||
+                   document.getElementById('cb_cambio').checked   ||
+                   document.getElementById('cb_alinear').checked  ||
+                   document.getElementById('cb_balanceo').checked ||
+                   document.getElementById('cb_armar').checked;
+  if (!tieneTarea) { alert('Seleccione al menos un trabajo a realizar'); return; }
   $.ajax({ type:'POST', url:'/ajax/nueva_ot',
     data: { unidad_id, gomeria_id, fecha,
             observaciones: document.getElementById('observaciones').value,
