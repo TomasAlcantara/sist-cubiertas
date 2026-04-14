@@ -58,18 +58,19 @@ router.get('/', requireAuth, async (req, res) => {
 
 // GET /cubiertas/nuevo
 router.get('/nuevo', requireAuth, async (req, res) => {
+  const { error = '' } = req.query;
   const [modelos, medidas, almacenes, proveedores] = await Promise.all([
     sql`SELECT * FROM marcas_ruedas WHERE activo = 1 ORDER BY marca, modelo`,
     sql`SELECT * FROM medidas ORDER BY medida`,
     sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
     sql`SELECT * FROM proveedor ORDER BY proveedor`,
   ]);
-  res.render('cubiertas/nuevo', { user: req.user, modelos, medidas, almacenes, proveedores, currentPage: 'inicio' });
+  res.render('cubiertas/nuevo', { user: req.user, modelos, medidas, almacenes, proveedores, currentPage: 'inicio', error });
 });
 
 // POST /cubiertas/nuevo
 router.post('/nuevo', requireAuth, async (req, res) => {
-  const { fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
+  const { fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, cantidad } = req.body;
   if (!fuego) return res.redirect('/cubiertas/nuevo');
 
   const parseFecha = (f) => {
@@ -80,23 +81,41 @@ router.post('/nuevo', requireAuth, async (req, res) => {
     return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
   };
 
-  await sql`
-    INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
-    VALUES (
-      ${fuego.trim()},
-      ${parseInt(modelo_id) || null},
-      ${parseInt(medida_id) || null},
-      ${parseInt(estado) || 1},
-      ${parseInt(almacen_id) || null},
-      ${parseInt(km) || 0},
-      ${parseInt(proveedor_id) || null},
-      ${id_interno?.trim() || null},
-      ${remito?.trim() || null},
-      ${parseFloat(precio) || null},
-      ${parseFecha(fecha_remito)},
-      1
-    )
-  `;
+  // Genera el fuego N° i a partir del fuego base incrementando el sufijo numérico
+  const nextFuego = (base, i) => {
+    if (i === 0) return base;
+    const m = base.match(/^(.*?)(\d+)$/);
+    if (m) return m[1] + String(parseInt(m[2]) + i).padStart(m[2].length, '0');
+    return base + i;
+  };
+
+  const qty = Math.max(1, Math.min(parseInt(cantidad) || 1, 200));
+  const fechaParsed = parseFecha(fecha_remito);
+  const mId = parseInt(modelo_id) || null;
+  const medId = parseInt(medida_id) || null;
+  const est = parseInt(estado) || 1;
+  const almId = parseInt(almacen_id) || null;
+  const kmVal = parseInt(km) || 0;
+  const provId = parseInt(proveedor_id) || null;
+  const precioVal = parseFloat(precio) || null;
+  const fuegoBase = fuego.trim();
+
+  // Verificar duplicados antes de insertar
+  const fuegosNuevos = Array.from({ length: qty }, (_, i) => nextFuego(fuegoBase, i));
+  const existentes = await sql`SELECT fuego FROM cubiertas WHERE fuego = ANY(${fuegosNuevos}) AND activo = 1`;
+  if (existentes.length) {
+    const dup = existentes.map(r => r.fuego).join(', ');
+    return res.redirect('/cubiertas/nuevo?error=' + encodeURIComponent('Fuego ya existe: ' + dup));
+  }
+
+  for (let i = 0; i < qty; i++) {
+    const f = nextFuego(fuegoBase, i);
+    await sql`
+      INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
+      VALUES (${f}, ${mId}, ${medId}, ${est}, ${almId}, ${kmVal}, ${provId},
+              ${id_interno?.trim() || null}, ${remito?.trim() || null}, ${precioVal}, ${fechaParsed}, 1)
+    `;
+  }
   res.redirect('/cubiertas');
 });
 

@@ -74,7 +74,7 @@ function renderDiagrama(tipo) {
     tr2.slice(midT2).forEach(function(p){ h += mkRueda(p); });
     h += '</div>';
   }
-  h += '<div class="aux-row"><span>Auxilio</span>'+mkRueda('ra')+'</div>';
+  h += '<div class="aux-row"><span>Auxilio</span>'+mkRueda('ra')+mkRueda('ra2')+'</div>';
   document.getElementById('diagrama-wrap').innerHTML = h;
   // Pre-marcar cubiertas ya asignadas
   var cargadas = ${JSON.stringify(cubCargadas)};
@@ -123,7 +123,7 @@ function actualizar_tabla_resumen() {
   var filas = '';
   var posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
     tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
-    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio'};
+    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
   for (var pos in cambios_ot) {
     var fn = document.getElementById('fn-'+pos);
     filas += '<tr><td style="padding:2px 6px;">' + (posNombres[pos]||pos) + '</td>'
@@ -271,7 +271,7 @@ $(function() {
         : ot_cubiertas.map(c => {
             const posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
               tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
-              cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio'};
+              cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
             return '<tr><td style="border:1px solid #ccc; padding:4px 8px;">' + (posNombres[c.posicion]||c.posicion||'-') + '</td>'
                  + '<td style="border:1px solid #ccc; padding:4px 8px;">' + (c.fuego||'S/N') + '</td></tr>';
           }).join('')

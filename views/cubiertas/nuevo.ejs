@@ -1,14 +1,21 @@
 <%
 const currentPage = 'inicio';
+const errorMsg = typeof error !== 'undefined' && error ? error : '';
 const body = `
 <p style="text-align:center; font-size:15px; font-weight:bold; margin-bottom:12px;">Nueva Cubierta</p>
+
+${errorMsg ? `<p style="text-align:center; color:#c00; font-weight:bold; margin-bottom:10px;">${errorMsg}</p>` : ''}
 
 <form method="post" action="/cubiertas/nuevo" style="width:420px; margin:0 auto;">
 
   <table style="width:100%; border-collapse:collapse;">
     <tr>
-      <td style="padding:5px 0; width:140px;"><strong>Fuego: *</strong></td>
+      <td style="padding:5px 0; width:140px;"><strong>Fuego inicial: *</strong></td>
       <td><input type="text" name="fuego" maxlength="20" style="width:200px;" required /></td>
+    </tr>
+    <tr>
+      <td style="padding:5px 0;"><strong>Cantidad:</strong></td>
+      <td><input type="number" name="cantidad" value="1" min="1" max="200" style="width:80px;" /></td>
     </tr>
     <tr>
       <td style="padding:5px 0;"><strong>Modelo:</strong></td>

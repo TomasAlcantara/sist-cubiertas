@@ -254,7 +254,7 @@ router.post('/almacenar_ruedas', requireAuth, async (req, res) => {
 const posNombreCierre = (p) => ({
   ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
   tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
-  cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio'
+  cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2'
 })[p] || p;
 
 router.post('/mb_cerrar_ot', requireAuth, async (req, res) => {
