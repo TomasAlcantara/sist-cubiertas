@@ -4,10 +4,6 @@ const body = `
 <script>
 function select_tipo(id) {
   document.getElementById('radio_' + id).checked = true;
-  for (var i = 1; i <= 4; i++) {
-    var img = document.getElementById('mod_' + i);
-    if (img) img.src = '/images/modelo' + i + (i == id ? '_check' : '') + '.svg';
-  }
 }
 function guardar() {
   $.ajax({ type:'POST', url:'/ajax/save_micro',
@@ -31,10 +27,10 @@ $(function() { select_tipo(${micro.tipo_unidad || 1}); });
     <input type="radio" id="radio_2" name="tipo_unidad" value="2" ${micro.tipo_unidad==2?'checked':''} style="display:none;" />
     <input type="radio" id="radio_3" name="tipo_unidad" value="3" ${micro.tipo_unidad==3?'checked':''} style="display:none;" />
     <input type="radio" id="radio_4" name="tipo_unidad" value="4" ${micro.tipo_unidad==4?'checked':''} style="display:none;" />
-    <img id="mod_1" src="/images/modelo1.svg" style="height:75px; cursor:pointer; margin-right:6px;" onclick="select_tipo(1)" title="Tipo 1 — Colectivo eje trasero doble" />
-    <img id="mod_2" src="/images/modelo2.svg" style="height:75px; cursor:pointer; margin-right:6px;" onclick="select_tipo(2)" title="Tipo 2 — Colectivo 3 ejes" />
-    <img id="mod_3" src="/images/modelo3.svg" style="height:75px; cursor:pointer; margin-right:6px;" onclick="select_tipo(3)" title="Tipo 3 — Minibus" />
-    <img id="mod_4" src="/images/modelo4.svg" style="height:75px; cursor:pointer;" onclick="select_tipo(4)" title="Tipo 4 — Colectivo eje trasero doble (alt.)" />
+    <img id="mod_1" src="/images/modelo1.png" style="height:75px; cursor:pointer; margin-right:6px;" onclick="select_tipo(1)" title="Tipo 1 — Colectivo eje trasero doble" />
+    <img id="mod_2" src="/images/modelo2.png" style="height:75px; cursor:pointer; margin-right:6px;" onclick="select_tipo(2)" title="Tipo 2 — Colectivo 3 ejes" />
+    <img id="mod_3" src="/images/modelo3.png" style="height:75px; cursor:pointer; margin-right:6px;" onclick="select_tipo(3)" title="Tipo 3 — Minibus" />
+    <img id="mod_4" src="/images/modelo4.png" style="height:75px; cursor:pointer;" onclick="select_tipo(4)" title="Tipo 4 — Colectivo eje trasero doble (alt.)" />
   </p>
   <input type="button" value="Guardar" style="float:left; width:80px;" onclick="guardar();" />
   <input type="button" value="Cancelar" style="float:right; width:80px;" onclick="location.href='/admin/micros';" />

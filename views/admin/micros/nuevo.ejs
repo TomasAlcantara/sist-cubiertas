@@ -102,10 +102,6 @@ function select_tipo(id) {
   document.getElementById('radio_' + id).checked = true;
   document.querySelectorAll('.type-card').forEach(function(c) { c.classList.remove('selected'); });
   document.getElementById('card_' + id).classList.add('selected');
-  for (var i = 1; i <= 4; i++) {
-    var img = document.getElementById('mod_' + i);
-    if (img) img.src = '/images/modelo' + i + (i == id ? '_check' : '') + '.svg';
-  }
 }
 function check_form() {
   var unidad = document.getElementById('unidad').value.trim();
@@ -151,19 +147,19 @@ function check_form() {
 
     <div class="type-grid">
       <div class="type-card selected" id="card_1" onclick="select_tipo(1)">
-        <img id="mod_1" src="/images/modelo1_check.svg" alt="Tipo 1" />
+        <img id="mod_1" src="/images/modelo1.png" alt="Tipo 1" />
         <span class="type-card-label">Colectivo<br>eje doble</span>
       </div>
       <div class="type-card" id="card_2" onclick="select_tipo(2)">
-        <img id="mod_2" src="/images/modelo2.svg" alt="Tipo 2" />
+        <img id="mod_2" src="/images/modelo2.png" alt="Tipo 2" />
         <span class="type-card-label">Colectivo<br>3 ejes</span>
       </div>
       <div class="type-card" id="card_3" onclick="select_tipo(3)">
-        <img id="mod_3" src="/images/modelo3.svg" alt="Tipo 3" />
+        <img id="mod_3" src="/images/modelo3.png" alt="Tipo 3" />
         <span class="type-card-label">Minibus</span>
       </div>
       <div class="type-card" id="card_4" onclick="select_tipo(4)">
-        <img id="mod_4" src="/images/modelo4.svg" alt="Tipo 4" />
+        <img id="mod_4" src="/images/modelo4.png" alt="Tipo 4" />
         <span class="type-card-label">Colectivo<br>doble alt.</span>
       </div>
     </div>
