@@ -1,11 +1,10 @@
 <%
 const currentPage = 'inicio';
 const body = `
-<h3>Kilómetros actualizados</h3>
+<h2>Kilómetros actualizados</h2>
 <p><strong>Unidad:</strong> ${micro.unidad}</p>
 <p><strong>Km actual:</strong> ${micro.km_actual}</p>
-<br>
-<input type="button" value="Volver" onclick="location.href='/CargaKm'" class="adm_button" />
+<a href="/CargaKm" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>

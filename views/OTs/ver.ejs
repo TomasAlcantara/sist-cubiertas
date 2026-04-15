@@ -4,35 +4,30 @@ const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ex
 const currentPage = 'inicio';
 const trabajos = [];
 if (ot.rotacion) trabajos.push('Rotación');
-if (ot.arreglo) trabajos.push('Arreglo');
-if (ot.cambio) trabajos.push('Cambio');
-if (ot.alinear) trabajos.push('Alinear');
+if (ot.arreglo)  trabajos.push('Arreglo');
+if (ot.cambio)   trabajos.push('Cambio');
+if (ot.alinear)  trabajos.push('Alinear');
 if (ot.balanceo) trabajos.push('Balanceo');
-if (ot.armar) trabajos.push('Armar');
+if (ot.armar)    trabajos.push('Armar');
 const body = `
-<div style="text-align:right; margin-bottom:10px;">
-  <input type="button" value="Imprimir" onclick="window.print();" style="width:90px;" />
+<div class="list-head">
+  <h2>OT N° ${ot.numero || ot.id}</h2>
+  <button class="btn-ghost" onclick="window.print()">Imprimir</button>
 </div>
 
-<h3>OT N° ${ot.numero || ot.id}</h3>
 <p><strong>Unidad:</strong> ${ot.unidad||'-'}</p>
 <p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
 <p><strong>Fecha:</strong> ${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</p>
 <p><strong>Estado:</strong> ${ot.estado==0?'Pendiente':'Cerrada'}</p>
 ${trabajos.length ? '<p><strong>Trabajos:</strong> ' + trabajos.join(', ') + '</p>' : ''}
 ${ot.observaciones ? '<p><strong>Observaciones:</strong> ' + ot.observaciones + '</p>' : ''}
-${ot.factura ? '<p><strong>Factura:</strong> '+ot.factura+'</p>' : ''}
-${ot.costo ? '<p><strong>Costo:</strong> $'+ot.costo+'</p>' : ''}
+${ot.factura ? '<p><strong>Factura:</strong> ' + ot.factura + '</p>' : ''}
+${ot.costo   ? '<p><strong>Costo:</strong> $' + ot.costo + '</p>' : ''}
 
 <h3>Cubiertas en esta OT</h3>
 <table>
   <thead>
-    <th>Posición</th>
-    <th>Fuego</th>
-    <th>Modelo</th>
-    <th>Medida</th>
-    <th>Estado</th>
-    <th>Km</th>
+    <th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th>
   </thead>
   ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin cubiertas registradas</td></tr>' :
     cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
@@ -45,8 +40,8 @@ ${ot.costo ? '<p><strong>Costo:</strong> $'+ot.costo+'</p>' : ''}
     </tr>`).join('')
   }
 </table>
-<br>
-<a href="/OTs/list">&laquo; Volver al listado</a>
+
+<a href="/OTs/list" class="list-back">&laquo; Volver al listado</a>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>

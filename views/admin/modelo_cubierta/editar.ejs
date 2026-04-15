@@ -9,13 +9,20 @@ function guardar() {
   });
 }
 </script>
-<div style="width:280px; margin:0 auto;">
-  <h3>Editar Modelo</h3>
-  <p><strong>Marca:</strong> <input type="text" id="marca" value="${modelo.marca}" style="float:right;" /></p>
-  <p><strong>Modelo:</strong> <input type="text" id="modelo" value="${modelo.modelo}" style="float:right;" /></p>
-  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
-  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/modelo_cubierta';" />
-  <div class="clr"></div>
+<div class="form-card">
+  <div class="form-header"><h2>Editar Modelo</h2></div>
+  <div class="field">
+    <label for="marca">Marca</label>
+    <input type="text" id="marca" class="text" value="${modelo.marca}" />
+  </div>
+  <div class="field">
+    <label for="modelo">Modelo</label>
+    <input type="text" id="modelo" class="text" value="${modelo.modelo}" />
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary" onclick="guardar()">Guardar</button>
+    <button class="btn-ghost"   onclick="location.href='/admin/modelo_cubierta'">Cancelar</button>
+  </div>
 </div>
 `;
 %>

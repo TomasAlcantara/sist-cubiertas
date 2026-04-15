@@ -440,6 +440,165 @@ p.error-msg {
   color: var(--text-secondary);
 }
 
+/* ─── Form card pattern ──────────────────────────────────────── */
+.form-card { max-width: 480px; margin: 0 auto; }
+
+.form-header {
+  margin-bottom: 1.75rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.form-header h2 { margin: 0; font-size: 1.6rem; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 1rem;
+}
+.field label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.field input[type="text"],
+.field input[type="password"],
+.field input[type="number"],
+.field input[type="email"],
+.field select,
+.field textarea { display: block; width: 100%; }
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+.form-check input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--red);
+  cursor: pointer;
+}
+.form-check label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.form-check-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 1rem;
+}
+.form-check-grid label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.form-check-grid input[type="checkbox"] {
+  width: auto;
+  accent-color: var(--red);
+  cursor: pointer;
+}
+
+.form-section {
+  margin-bottom: 1.25rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+.form-section-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 10px;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  margin-top: 0.5rem;
+}
+
+.btn-primary {
+  background: var(--red); color: #fff; border: none;
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 32px; border-radius: var(--radius);
+  cursor: pointer; transition: background 0.12s;
+}
+.btn-primary:hover { background: var(--red-bright); }
+
+.btn-ghost {
+  background: transparent; color: var(--text-secondary);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-display); font-size: 13px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 10px 28px; border-radius: var(--radius);
+  cursor: pointer; transition: all 0.12s;
+}
+.btn-ghost:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ─── Modal pattern ───────────────────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  z-index: 98;
+}
+.modal-panel {
+  display: none;
+  position: fixed;
+  background: var(--bg-card);
+  z-index: 99;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  overflow: auto;
+}
+.modal-close {
+  position: absolute;
+  top: 10px; right: 12px;
+  background: none; border: none;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  line-height: 1;
+  transition: color 0.12s;
+}
+.modal-close:hover { color: var(--text-primary); }
+
+/* ─── OT section layout ───────────────────────────────────────── */
+.ot-section { max-width: 480px; margin: 0 auto; font-size: 13px; }
+.ot-sep { border: none; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+.text-si { color: #2e7d32; font-weight: bold; }
+.text-no { color: var(--red-bright); font-weight: bold; }
+
 /* ─── Admin / List page patterns ─────────────────────────────── */
 .list-head {
   display: flex;

@@ -16,40 +16,54 @@ function guardar_datos() {
 }
 function diplay_me(obj) {
   var isGomeria = obj.value == 0;
-  document.getElementById('pnombre').style.display = isGomeria ? 'none' : '';
-  document.getElementById('pavisa').style.display = isGomeria ? 'none' : '';
+  document.getElementById('pnombre').style.display  = isGomeria ? 'none' : '';
+  document.getElementById('pavisa').style.display   = isGomeria ? 'none' : '';
   document.getElementById('pgomeria').style.display = isGomeria ? '' : 'none';
 }
 </script>
-<div style="width:320px; margin:0 auto;">
-  <h3>Editar Usuario</h3>
-  <form id="formulario">
-    <p><strong>Usuario:</strong> <input type="text" id="usuario" value="${usuario.usuario}" style="float:right;" /></p>
-    <p><strong>Nueva contraseña:</strong> <input type="password" id="password" placeholder="Dejar vacío para no cambiar" style="float:right;" /></p>
-    <p><strong>Tipo:</strong>
-      <select id="tipo" style="float:right;" onchange="diplay_me(this)">
-        <option value="0" ${usuario.tipo==0?'selected':''}>Gomeria</option>
-        <option value="1" ${usuario.tipo==1?'selected':''}>Master Bus</option>
-      </select>
-    </p>
-    <p id="pnombre" style="${usuario.tipo==1?'':'display:none;'}"><strong>Nombre:</strong> <input type="text" id="nombre" value="${usuario.nombre||''}" style="float:right;" /></p>
-    <p id="pmail"><strong>Mail:</strong> <input type="text" id="mail" value="${usuario.mail||''}" style="float:right;" /></p>
-    <p id="pavisa" style="${usuario.tipo==1?'':'display:none;'}"><strong>Avisar por mail:</strong>
-      <select id="avisa" style="float:right;">
-        <option value="0" ${usuario.avisa==0?'selected':''}>NO</option>
-        <option value="1" ${usuario.avisa==1?'selected':''}>SI</option>
-      </select>
-    </p>
-    <p id="pgomeria" style="${usuario.tipo==0?'':'display:none;'}"><strong>Gomería:</strong>
-      <select id="gomeria" style="float:right; width:177px;">
-        <option value="0">Seleccione...</option>
-        ${gomerias.map(g=>`<option value="${g.id}" ${g.id==usuario.gomeria_id?'selected':''}>${g.nombre}</option>`).join('')}
-      </select>
-    </p>
-    <input type="button" value="Guardar" style="float:left; width:80px;" onclick="guardar_datos();" />
-    <input type="button" value="Cancelar" style="float:right; width:80px;" onclick="location.href='/admin/usuarios';" />
-    <div class="clr"></div>
-  </form>
+<div class="form-card">
+  <div class="form-header"><h2>Editar Usuario</h2></div>
+  <div class="field">
+    <label for="usuario">Usuario</label>
+    <input type="text" id="usuario" class="text" value="${usuario.usuario}" />
+  </div>
+  <div class="field">
+    <label for="password">Nueva contraseña</label>
+    <input type="password" id="password" class="text" placeholder="Dejar vacío para no cambiar" />
+  </div>
+  <div class="field">
+    <label for="tipo">Tipo</label>
+    <select id="tipo" onchange="diplay_me(this)">
+      <option value="0" ${usuario.tipo==0?'selected':''}>Gomeria</option>
+      <option value="1" ${usuario.tipo==1?'selected':''}>Master Bus</option>
+    </select>
+  </div>
+  <div id="pnombre" class="field" style="${usuario.tipo==1?'':'display:none;'}">
+    <label for="nombre">Nombre</label>
+    <input type="text" id="nombre" class="text" value="${usuario.nombre||''}" />
+  </div>
+  <div class="field" id="pmail">
+    <label for="mail">Mail</label>
+    <input type="text" id="mail" class="text" value="${usuario.mail||''}" />
+  </div>
+  <div id="pavisa" class="field" style="${usuario.tipo==1?'':'display:none;'}">
+    <label for="avisa">Avisar por mail</label>
+    <select id="avisa">
+      <option value="0" ${usuario.avisa==0?'selected':''}>NO</option>
+      <option value="1" ${usuario.avisa==1?'selected':''}>SI</option>
+    </select>
+  </div>
+  <div id="pgomeria" class="field" style="${usuario.tipo==0?'':'display:none;'}">
+    <label for="gomeria">Gomería</label>
+    <select id="gomeria">
+      <option value="0">Seleccione...</option>
+      ${gomerias.map(g=>`<option value="${g.id}" ${g.id==usuario.gomeria_id?'selected':''}>${g.nombre}</option>`).join('')}
+    </select>
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary" onclick="guardar_datos()">Guardar</button>
+    <button class="btn-ghost"   onclick="location.href='/admin/usuarios'">Cancelar</button>
+  </div>
 </div>
 `;
 %>

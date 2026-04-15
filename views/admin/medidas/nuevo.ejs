@@ -10,12 +10,16 @@ function guardar() {
   });
 }
 </script>
-<div style="width:280px; margin:0 auto;">
-  <h3>Nueva Medida</h3>
-  <p><strong>Medida:</strong> <input type="text" id="medida" placeholder="ej: 295/80R22.5" style="float:right;" /></p>
-  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
-  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/medidas';" />
-  <div class="clr"></div>
+<div class="form-card">
+  <div class="form-header"><h2>Nueva Medida</h2></div>
+  <div class="field">
+    <label for="medida">Medida</label>
+    <input type="text" id="medida" class="text" placeholder="ej: 295/80R22.5" />
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary" onclick="guardar()">Guardar</button>
+    <button class="btn-ghost"   onclick="location.href='/admin/medidas'">Cancelar</button>
+  </div>
 </div>
 `;
 %>

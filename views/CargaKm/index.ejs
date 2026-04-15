@@ -16,21 +16,19 @@ function carga_masiva() {
   });
 }
 </script>
-
-<h3>Carga de Kilómetros</h3>
-<input type="button" class="adm_button" value="Carga Masiva" onclick="carga_masiva();" style="margin-bottom:15px;" />
+<div class="list-head">
+  <h2>Carga de Kilómetros</h2>
+  <button class="btn-nuevo" onclick="carga_masiva()">Carga Masiva</button>
+</div>
 <table>
   <thead>
-    <th>Unidad</th>
-    <th>Km Actual</th>
-    <th>Nuevo Km</th>
-    <th></th>
+    <th>Unidad</th><th>Km Actual</th><th>Nuevo Km</th><th></th>
   </thead>
   ${unidades.map((u, i) => `<tr class="${i%2===0?'light':'dark'}">
     <td>${u.unidad}</td>
     <td align="center">${u.km_actual||0}</td>
     <td align="center"><input type="text" id="km_${u.id}" style="width:100px;" placeholder="Nuevo km" /></td>
-    <td align="center"><input type="button" value="Cargar" onclick="cargar(${u.id})" style="width:70px;" /></td>
+    <td align="center"><button class="btn-filter" onclick="cargar(${u.id})">Cargar</button></td>
   </tr>`).join('')}
 </table>
 `;

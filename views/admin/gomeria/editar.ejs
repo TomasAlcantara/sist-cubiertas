@@ -15,16 +15,27 @@ function guardar() {
   });
 }
 </script>
-<div style="width:340px; margin:0 auto;">
-  <h3>Editar Gomería</h3>
-  <p><strong>Nombre:</strong>    <input type="text" id="nombre"    value="${gomeria.nombre||''}"    style="float:right; width:190px;" /></p>
-  <p><strong>Dirección:</strong> <input type="text" id="direccion" value="${gomeria.direccion||''}" style="float:right; width:190px;" /></p>
-  <p><strong>Localidad:</strong> <input type="text" id="localidad" value="${gomeria.localidad||''}" style="float:right; width:190px;" /></p>
-  <p><strong>Teléfono:</strong>  <input type="text" id="telefono"  value="${gomeria.telefono||''}"  style="float:right; width:190px;" /></p>
-  <div style="clear:both; margin-top:10px;">
-    <input type="button" value="Guardar"  style="float:left;"  onclick="guardar();" />
-    <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/gomeria';" />
-    <div class="clr"></div>
+<div class="form-card">
+  <div class="form-header"><h2>Editar Gomería</h2></div>
+  <div class="field">
+    <label for="nombre">Nombre</label>
+    <input type="text" id="nombre" class="text" value="${gomeria.nombre||''}" />
+  </div>
+  <div class="field">
+    <label for="direccion">Dirección</label>
+    <input type="text" id="direccion" class="text" value="${gomeria.direccion||''}" />
+  </div>
+  <div class="field">
+    <label for="localidad">Localidad</label>
+    <input type="text" id="localidad" class="text" value="${gomeria.localidad||''}" />
+  </div>
+  <div class="field">
+    <label for="telefono">Teléfono</label>
+    <input type="text" id="telefono" class="text" value="${gomeria.telefono||''}" />
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary" onclick="guardar()">Guardar</button>
+    <button class="btn-ghost"   onclick="location.href='/admin/gomeria'">Cancelar</button>
   </div>
 </div>
 `;

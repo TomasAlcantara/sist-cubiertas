@@ -24,11 +24,10 @@ function almacenar() {
 }
 </script>
 
-<div id="back" style="display:none;" onclick="close_rlist();"></div>
-<div id="filter_list" style="width:900px; padding:10px; position:fixed; background:#FFF; z-index:99; display:none; top:80px; left:50%; transform:translateX(-50%); overflow:auto; max-height:500px;">
-  <img src="/images/rojo.png" style="float:right; border:0; margin:2px; height:15px; cursor:pointer;" onclick="close_rlist();" />
-  <div class="clr"></div>
-  <form id="formulario" style="margin:10px;">
+<div class="modal-overlay" id="back" onclick="close_rlist();"></div>
+<div class="modal-panel" id="filter_list" style="width:900px; max-height:500px; padding:0;">
+  <button class="modal-close" onclick="close_rlist();">&times;</button>
+  <form id="formulario" class="list-filters" style="padding:12px 14px 8px;">
     <input type="hidden" id="pos" name="pos" value="" />
     <input type="hidden" id="micro_id" name="micro_id" value="${micro.id}" />
     <input type="hidden" id="km" name="km" value="${micro.km_actual||0}" />
@@ -38,41 +37,48 @@ function almacenar() {
       <option value="0">Todos</option>
       ${almacenes.map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('')}
     </select>
-    <strong style="margin-left:10px;">Fuego:</strong> <input type="text" id="fuego" name="fuego" style="width:100px;" />
-    <strong style="margin-left:10px;">Modelo:</strong>
+    <strong>Fuego:</strong>
+    <input type="text" id="fuego" name="fuego" style="width:100px;" />
+    <strong>Modelo:</strong>
     <select id="modelo" name="modelo">
       <option value="0">Todos</option>
       ${modelos.map(m=>`<option value="${m.id}">${m.marca} ${m.modelo}</option>`).join('')}
     </select>
-    <strong style="margin-left:10px;">Estado:</strong>
+    <strong>Estado:</strong>
     <select id="estado" name="estado">
       <option value="0">Todos</option>
       <option value="1">Nueva</option>
       <option value="2">Usada</option>
       <option value="3">Recapada</option>
     </select>
-    <input type="button" value="Buscar" onclick="filtrar()" style="margin-left:10px; width:75px;" />
+    <button type="button" class="btn-filter" onclick="filtrar()">Buscar</button>
   </form>
-  <div id="rueda_list"></div>
+  <div id="rueda_list" style="padding:0 14px 14px;"></div>
 </div>
 
-<div id="back2" style="display:none;" onclick=""></div>
-<div id="rueda_removida" style="width:300px; padding:20px; position:fixed; background:#FFF; z-index:99; display:none; top:150px; left:50%; transform:translateX(-50%);">
-  <p>La posición estaba ocupada. ¿Almacenar la cubierta removida?</p>
+<div class="modal-overlay" id="back2"></div>
+<div class="modal-panel" id="rueda_removida" style="width:340px; padding:20px;">
+  <p style="margin-bottom:12px;">La posición estaba ocupada. ¿Almacenar la cubierta removida?</p>
   <input type="hidden" id="r_id_selected" value="" />
-  <select id="almacen_id">
-    <option value="">Seleccione almacén...</option>
-    ${almacenes.map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('')}
-  </select>
-  <br/><br/>
-  <input type="button" value="Almacenar" onclick="almacenar()" />
-  <input type="button" value="Ignorar" onclick="document.getElementById('back2').style.display='none'; document.getElementById('rueda_removida').style.display='none'; location.reload();" />
+  <div class="field">
+    <label for="almacen_id">Almacén destino</label>
+    <select id="almacen_id">
+      <option value="">Seleccione almacén...</option>
+      ${almacenes.map(a=>`<option value="${a.id}">${a.nombre}</option>`).join('')}
+    </select>
+  </div>
+  <div class="form-actions">
+    <button class="btn-primary" onclick="almacenar()">Almacenar</button>
+    <button class="btn-ghost" onclick="document.getElementById('back2').style.display='none'; document.getElementById('rueda_removida').style.display='none'; location.reload();">Ignorar</button>
+  </div>
 </div>
 
-<h3>Unidad: ${micro.unidad}</h3>
+<div class="list-head">
+  <h2>Unidad: ${micro.unidad}</h2>
+</div>
 <p><strong>Km actual:</strong> ${micro.km_actual||0}</p>
 
-<h4>Cubiertas montadas:</h4>
+<h3>Cubiertas montadas</h3>
 <table>
   <thead><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th><th></th></thead>
   ${posiciones.map(pos => {
@@ -87,18 +93,16 @@ function almacenar() {
         <td align="center">${r.km||0}</td>
         <td align="center"><a style="cursor:pointer;" onclick="show_rlist('/', '${pos}')">CAMBIAR</a></td>
       ` : `
-        <td colspan="5" align="center" style="color:#999;">Vacío</td>
+        <td colspan="5" align="center" style="color:var(--text-muted);">Vacío</td>
         <td align="center"><a style="cursor:pointer;" onclick="show_rlist('/', '${pos}')">COLOCAR</a></td>
       `}
     </tr>`;
   }).join('')}
 </table>
 
-<div id="flotante" style="display:none; position:absolute; z-index:99; padding:10px; border:1px solid #808080; background:#f1f1f1;">
-  <span id="posicion"></span>
-</div>
+<div id="flotante"></div>
 
-<br><a href="/admin/micros">&laquo; Volver</a>
+<a href="/admin/micros" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../../layout', { body, user, currentPage }) %>
