@@ -1,10 +1,10 @@
 <%
 const currentPage = 'admin';
 const body = `
-<div style="float:right;">
-  <input type="button" value="Nueva Recapadora" onclick="location.href='/admin/recapadora/nuevo';" style="width:160px;"/>
+<div class="list-head">
+  <h2>Recapadoras</h2>
+  <a href="/admin/recapadora/nuevo" class="btn-nuevo">Nueva Recapadora</a>
 </div>
-<div class="clr" style="margin-bottom:10px;"></div>
 <table>
   <thead><th>Nombre</th><th style="width:200px;">Editar</th></thead>
   ${recapadoras.map((r,i)=>`<tr class="${i%2===0?'light':'dark'}">
@@ -15,7 +15,7 @@ const body = `
     </td>
   </tr>`).join('')}
 </table>
-<br><a href="/admin">&laquo; Volver</a>
+<a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../../layout', { body, user, currentPage }) %>

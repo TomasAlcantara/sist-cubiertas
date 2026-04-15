@@ -1,16 +1,18 @@
 <%
 const currentPage = 'admin';
 const body = `
-<form method="get" action="/admin/micros" style="margin-bottom:10px;">
+<div class="list-head">
+  <h2>Unidades</h2>
+  <a href="/admin/micros/nuevo" class="btn-nuevo">Nueva Unidad</a>
+</div>
+<form method="get" action="/admin/micros" class="list-filters">
   <strong>Unidad:</strong>
   <select name="id">
     <option value="">Todos</option>
     ${allMicros.map(m=>`<option value="${m.id}">${m.unidad}</option>`).join('')}
   </select>
-  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:10px; width:60px;">
-  <input type="button" value="Nueva Unidad" onclick="location.href='/admin/micros/nuevo';" style="width:140px; float:right;"/>
+  <button type="submit" class="btn-filter">Filtrar</button>
 </form>
-<div class="clr" style="margin-bottom:10px;"></div>
 <table>
   <thead><th>Unidad</th><th>Descripción</th><th>Km Actual</th><th>Tipo</th><th style="width:180px;">Editar</th></thead>
   ${micros.map((m,i)=>`<tr class="${i%2===0?'light':'dark'}">
@@ -25,12 +27,12 @@ const body = `
     </td>
   </tr>`).join('')}
 </table>
-${totalPages > 1 ? `<div style="text-align:center; margin-top:10px;">
+${totalPages > 1 ? `<div class="list-pagination">
   ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
-    p==pagina ? `<strong style='color:#00F;'>${p}</strong>` : `<a href='?pagina=${p}'>${p}</a>`
+    p==pagina ? `<strong class="pg-current">${p}</strong>` : `<a href='?pagina=${p}'>${p}</a>`
   ).join(' | ')}
 </div>` : ''}
-<br><a href="/admin">&laquo; Volver</a>
+<a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../../layout', { body, user, currentPage }) %>

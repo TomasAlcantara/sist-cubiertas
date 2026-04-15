@@ -1,14 +1,14 @@
 <%
 const currentPage = 'admin';
 const body = `
-<div style="float:left;">
-  <input type="checkbox" id="active_only" checked style="cursor:pointer;" onclick="solo_activos(this);"/>
-  <label for="active_only" style="cursor:pointer">Mostrar solo los activos</label>
+<div class="list-head">
+  <h2>Usuarios</h2>
+  <label class="list-active-filter">
+    <input type="checkbox" id="active_only" checked onclick="solo_activos(this);" />
+    Solo activos
+  </label>
+  <a href="/admin/usuarios/nuevo" class="btn-nuevo">Nuevo Usuario</a>
 </div>
-<div style="float:right;">
-  <input type="button" value="Nuevo Usuario" onclick="location.href='/admin/usuarios/nuevo';" style="width:150px;"/>
-</div>
-<div class="clr" style="margin-bottom:10px;"></div>
 <table>
   <thead>
     <th>ID</th><th>Usuario</th><th>Tipo</th><th style="width:150px;">Editar</th>
@@ -23,7 +23,7 @@ const body = `
     </td>
   </tr>`).join('')}
 </table>
-<br><a href="/admin">&laquo; Volver</a>
+<a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../../layout', { body, user, currentPage }) %>

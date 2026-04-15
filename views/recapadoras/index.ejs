@@ -1,22 +1,24 @@
 <%
 const currentPage = 'inicio';
 const body = `
-<form method="get" action="/recapadoras" style="float:left">
+<div class="list-head">
+  <h2>Recapadoras</h2>
+  <a href="/OTs/nueva" class="btn-nuevo">Nueva OT</a>
+</div>
+<form method="get" action="/recapadoras" class="list-filters">
   <strong>Recapadora:</strong>
   <select name="recapadora">
     <option value="0">Todas</option>
     ${recapadoras.map(r => `<option value="${r.id}" ${r.id==filtros.recapadora?'selected':''}>${r.nombre}</option>`).join('')}
   </select>
-  <strong style="margin-left:10px;">Estado:</strong>
+  <strong>Estado:</strong>
   <select name="estado">
     <option value="-1" ${filtros.estado==-1?'selected':''}>Todos</option>
-    <option value="0" ${filtros.estado==0?'selected':''}>Abierta</option>
-    <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
+    <option value="0"  ${filtros.estado==0?'selected':''}>Abierta</option>
+    <option value="1"  ${filtros.estado==1?'selected':''}>Cerrada</option>
   </select>
-  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:20px; width:75px;" />
+  <button type="submit" class="btn-filter">Filtrar</button>
 </form>
-<input type="button" value="Nueva OT" style="float:right; width:100px;" onclick="location.href='/OTs/nueva'">
-<div style="clear:both; margin-bottom:20px;"></div>
 
 <table>
   <thead>

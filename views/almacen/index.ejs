@@ -1,7 +1,39 @@
 <%
 const body = `
-<h3>Seleccione el almacén:</h3>
-${almacenes.map(a => `<input type="button" class="adm_button" value="${a.nombre}" onclick="location.href='/almacen/view?id=${a.id}';" style="margin-right:10px; margin-bottom:20px;"/>`).join('')}
+<style>
+  .selector-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 8px;
+    margin-top: 1.25rem;
+  }
+  .selector-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    text-decoration: none;
+    display: block;
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    transition: border-left-color 0.12s, background 0.12s;
+    cursor: pointer;
+  }
+  .selector-card:hover {
+    border-left-color: var(--red);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+</style>
+<h2>Almacenes</h2>
+<div class="selector-grid">
+  ${almacenes.map(a => `<a href="/almacen/view?id=${a.id}" class="selector-card">${a.nombre}</a>`).join('')}
+</div>
 `;
 const currentPage = 'inicio';
 %>

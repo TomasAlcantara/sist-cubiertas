@@ -10,29 +10,33 @@ function orderby(id) {
 }
 </script>
 
-<input type="button" value="Nueva Cubierta" onclick="location.href='/cubiertas/nuevo'" style="float:right; width:130px;" />
-<form id="formulario" method="get" action="/cubiertas">
-  <strong>Fuego:</strong> <input type="text" id="fuego" name="fuego" value="${filtros.fuego}" maxlength="8">
-  <strong style="margin-left:10px;">Modelo:</strong>
+<div class="list-head">
+  <h2>Cubiertas</h2>
+  <a href="/cubiertas/nuevo" class="btn-nuevo">Nueva Cubierta</a>
+</div>
+
+<form id="formulario" method="get" action="/cubiertas" class="list-filters">
+  <strong>Fuego:</strong>
+  <input type="text" id="fuego" name="fuego" value="${filtros.fuego}" maxlength="8" />
+  <strong>Modelo:</strong>
   <select id="modelo" name="modelo">
     <option value="0">Todos</option>
-    ${modelos.map(m => `<option value="${m.id}" ${m.id==filtros.modelo?'selected':''}>${m.marca} ${m.modelo}</option>`).join('')}
+    ${modelos.map(m => `<option value="${m.id}" ${m.id==filtros.modelo?'selected':''}>${m.marca} ${m.modelo_nombre||m.modelo}</option>`).join('')}
   </select>
-  <strong style="margin-left:10px;">Estado:</strong>
+  <strong>Estado:</strong>
   <select id="estado" name="estado">
     <option value="0">Todos</option>
     <option value="1" ${filtros.estado==1?'selected':''}>Nueva</option>
     <option value="2" ${filtros.estado==2?'selected':''}>Usada</option>
     <option value="3" ${filtros.estado==3?'selected':''}>Recapada</option>
   </select>
-  <strong style="margin-left:10px;">Proveedor:</strong>
+  <strong>Proveedor:</strong>
   <select id="proveedor" name="proveedor">
     <option value="0">Todos</option>
     ${proveedores.map(p => `<option value="${p.id}" ${p.id==filtros.proveedor?'selected':''}>${p.proveedor}</option>`).join('')}
   </select>
-  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:10px; width:75px;">
+  <button type="submit" class="btn-filter">Filtrar</button>
 </form>
-<div class="clr" style="margin-bottom:10px;"></div>
 
 <table>
   <thead>
@@ -57,9 +61,9 @@ function orderby(id) {
   }
 </table>
 
-${totalPages > 1 ? `<div style="text-align:center; margin-top:10px;">
+${totalPages > 1 ? `<div class="list-pagination">
   ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
-    p==pagina ? `<strong style='color:#00F;'>${p}</strong>` : `<a href='?fuego=${filtros.fuego}&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=${filtros.orderby}&pagina=${p}'>${p}</a>`
+    p==pagina ? `<strong class="pg-current">${p}</strong>` : `<a href='?fuego=${filtros.fuego}&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=${filtros.orderby}&pagina=${p}'>${p}</a>`
   ).join(' | ')}
 </div>` : ''}
 `;

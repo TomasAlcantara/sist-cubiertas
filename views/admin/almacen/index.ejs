@@ -1,10 +1,10 @@
 <%
 const currentPage = 'admin';
 const body = `
-<div style="float:right;">
-  <input type="button" value="Nuevo Almacén" onclick="location.href='/admin/almacen/nuevo';" style="width:150px;"/>
+<div class="list-head">
+  <h2>Almacenes</h2>
+  <a href="/admin/almacen/nuevo" class="btn-nuevo">Nuevo Almacén</a>
 </div>
-<div class="clr" style="margin-bottom:10px;"></div>
 <table>
   <thead><th>Nombre</th><th style="width:200px;">Editar</th></thead>
   ${almacenes.map((a,i)=>`<tr class="${i%2===0?'light':'dark'}">
@@ -15,7 +15,7 @@ const body = `
     </td>
   </tr>`).join('')}
 </table>
-<br><a href="/admin">&laquo; Volver</a>
+<a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../../layout', { body, user, currentPage }) %>
