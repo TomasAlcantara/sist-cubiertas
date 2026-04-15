@@ -3,17 +3,40 @@ const currentPage = 'admin';
 const body = `
 <script>
 function guardar() {
-  $.ajax({ type:'POST', url:'/ajax/save_recapadora', data:{ id: ${recapadora.id}, nombre: document.getElementById('nombre').value },
+  $.ajax({ type:'POST', url:'/ajax/save_recapadora',
+    data:{
+      id:           ${recapadora.id},
+      nombre:       document.getElementById('nombre').value,
+      direccion:    document.getElementById('direccion').value,
+      localidad:    document.getElementById('localidad').value,
+      telefono:     document.getElementById('telefono').value,
+      tipo_trabajo: document.getElementById('tipo_trabajo').value
+    },
     success: function(data) { if(data) { alert(data); location.href='/admin/recapadora'; } else alert('Error'); }
   });
 }
 </script>
-<div style="width:280px; margin:0 auto;">
+<div style="width:340px; margin:0 auto;">
   <h3>Editar Recapadora</h3>
-  <p><strong>Nombre:</strong> <input type="text" id="nombre" value="${recapadora.nombre}" style="float:right;" /></p>
-  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
-  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/recapadora';" />
-  <div class="clr"></div>
+  <p><strong>Nombre:</strong>    <input type="text" id="nombre"    value="${recapadora.nombre||''}"    style="float:right; width:190px;" /></p>
+  <p><strong>Dirección:</strong> <input type="text" id="direccion" value="${recapadora.direccion||''}" style="float:right; width:190px;" /></p>
+  <p><strong>Localidad:</strong> <input type="text" id="localidad" value="${recapadora.localidad||''}" style="float:right; width:190px;" /></p>
+  <p><strong>Teléfono:</strong>  <input type="text" id="telefono"  value="${recapadora.telefono||''}"  style="float:right; width:190px;" /></p>
+  <p><strong>Tipo de trabajo:</strong>
+    <select id="tipo_trabajo" style="float:right; width:196px;">
+      <option value="">Seleccione...</option>
+      <option value="Recapado en frío"     ${recapadora.tipo_trabajo==='Recapado en frío'     ?'selected':''}>Recapado en frío</option>
+      <option value="Recapado en caliente" ${recapadora.tipo_trabajo==='Recapado en caliente' ?'selected':''}>Recapado en caliente</option>
+      <option value="Reparación"           ${recapadora.tipo_trabajo==='Reparación'           ?'selected':''}>Reparación</option>
+      <option value="Vulcanizado"          ${recapadora.tipo_trabajo==='Vulcanizado'          ?'selected':''}>Vulcanizado</option>
+      <option value="Varios"               ${recapadora.tipo_trabajo==='Varios'               ?'selected':''}>Varios</option>
+    </select>
+  </p>
+  <div style="clear:both; margin-top:10px;">
+    <input type="button" value="Guardar"  style="float:left;"  onclick="guardar();" />
+    <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/recapadora';" />
+    <div class="clr"></div>
+  </div>
 </div>
 `;
 %>

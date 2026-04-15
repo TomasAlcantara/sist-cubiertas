@@ -3,19 +3,41 @@ const currentPage = 'admin';
 const body = `
 <script>
 function guardar() {
-  var nombre = document.getElementById('nombre').value;
+  var nombre = document.getElementById('nombre').value.trim();
   if (!nombre) { alert('Ingrese el nombre'); return; }
-  $.ajax({ type:'POST', url:'/ajax/save_recapadora', data:{ nombre },
+  $.ajax({ type:'POST', url:'/ajax/save_recapadora',
+    data:{
+      nombre,
+      direccion:    document.getElementById('direccion').value,
+      localidad:    document.getElementById('localidad').value,
+      telefono:     document.getElementById('telefono').value,
+      tipo_trabajo: document.getElementById('tipo_trabajo').value
+    },
     success: function(data) { if(data) { alert(data); location.href='/admin/recapadora'; } else alert('Error'); }
   });
 }
 </script>
-<div style="width:280px; margin:0 auto;">
+<div style="width:340px; margin:0 auto;">
   <h3>Nueva Recapadora</h3>
-  <p><strong>Nombre:</strong> <input type="text" id="nombre" style="float:right;" /></p>
-  <input type="button" value="Guardar" style="float:left;" onclick="guardar();" />
-  <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/recapadora';" />
-  <div class="clr"></div>
+  <p><strong>Nombre:</strong>    <input type="text" id="nombre"    style="float:right; width:190px;" /></p>
+  <p><strong>Dirección:</strong> <input type="text" id="direccion" style="float:right; width:190px;" /></p>
+  <p><strong>Localidad:</strong> <input type="text" id="localidad" style="float:right; width:190px;" /></p>
+  <p><strong>Teléfono:</strong>  <input type="text" id="telefono"  style="float:right; width:190px;" /></p>
+  <p><strong>Tipo de trabajo:</strong>
+    <select id="tipo_trabajo" style="float:right; width:196px;">
+      <option value="">Seleccione...</option>
+      <option value="Recapado en frío">Recapado en frío</option>
+      <option value="Recapado en caliente">Recapado en caliente</option>
+      <option value="Reparación">Reparación</option>
+      <option value="Vulcanizado">Vulcanizado</option>
+      <option value="Varios">Varios</option>
+    </select>
+  </p>
+  <div style="clear:both; margin-top:10px;">
+    <input type="button" value="Guardar"  style="float:left;"  onclick="guardar();" />
+    <input type="button" value="Cancelar" style="float:right;" onclick="location.href='/admin/recapadora';" />
+    <div class="clr"></div>
+  </div>
 </div>
 `;
 %>

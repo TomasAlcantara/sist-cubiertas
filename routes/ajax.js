@@ -112,36 +112,48 @@ router.post('/save_proveedor', requireMaster, async (req, res) => {
 
 // POST /ajax/save_almacen
 router.post('/save_almacen', requireMaster, async (req, res) => {
-  const { id, nombre } = req.body;
+  const { id, nombre, direccion, localidad, telefono, cargar_id, cargar_remito } = req.body;
+  const dir = direccion?.trim() || null;
+  const loc = localidad?.trim() || null;
+  const tel = telefono?.trim() || null;
+  const cId  = cargar_id     === '1';
+  const cRem = cargar_remito === '1';
   if (id) {
-    await sql`UPDATE almacen SET nombre=${nombre} WHERE id=${id}`;
+    await sql`UPDATE almacen SET nombre=${nombre}, direccion=${dir}, localidad=${loc}, telefono=${tel}, cargar_id=${cId}, cargar_remito=${cRem} WHERE id=${id}`;
     res.send('Almacén actualizado correctamente');
   } else {
-    await sql`INSERT INTO almacen (nombre) VALUES (${nombre})`;
+    await sql`INSERT INTO almacen (nombre, direccion, localidad, telefono, cargar_id, cargar_remito) VALUES (${nombre}, ${dir}, ${loc}, ${tel}, ${cId}, ${cRem})`;
     res.send('Almacén creado correctamente');
   }
 });
 
 // POST /ajax/save_gomeria
 router.post('/save_gomeria', requireMaster, async (req, res) => {
-  const { id, nombre } = req.body;
+  const { id, nombre, direccion, localidad, telefono } = req.body;
+  const dir = direccion?.trim() || null;
+  const loc = localidad?.trim() || null;
+  const tel = telefono?.trim() || null;
   if (id) {
-    await sql`UPDATE gomeria SET nombre=${nombre} WHERE id=${id}`;
+    await sql`UPDATE gomeria SET nombre=${nombre}, direccion=${dir}, localidad=${loc}, telefono=${tel} WHERE id=${id}`;
     res.send('Gomería actualizada correctamente');
   } else {
-    await sql`INSERT INTO gomeria (nombre) VALUES (${nombre})`;
+    await sql`INSERT INTO gomeria (nombre, direccion, localidad, telefono) VALUES (${nombre}, ${dir}, ${loc}, ${tel})`;
     res.send('Gomería creada correctamente');
   }
 });
 
 // POST /ajax/save_recapadora
 router.post('/save_recapadora', requireMaster, async (req, res) => {
-  const { id, nombre } = req.body;
+  const { id, nombre, direccion, localidad, telefono, tipo_trabajo } = req.body;
+  const dir = direccion?.trim() || null;
+  const loc = localidad?.trim() || null;
+  const tel = telefono?.trim() || null;
+  const tip = tipo_trabajo?.trim() || null;
   if (id) {
-    await sql`UPDATE recapadora SET nombre=${nombre} WHERE id=${id}`;
+    await sql`UPDATE recapadora SET nombre=${nombre}, direccion=${dir}, localidad=${loc}, telefono=${tel}, tipo_trabajo=${tip} WHERE id=${id}`;
     res.send('Recapadora actualizada correctamente');
   } else {
-    await sql`INSERT INTO recapadora (nombre) VALUES (${nombre})`;
+    await sql`INSERT INTO recapadora (nombre, direccion, localidad, telefono, tipo_trabajo) VALUES (${nombre}, ${dir}, ${loc}, ${tel}, ${tip})`;
     res.send('Recapadora creada correctamente');
   }
 });
