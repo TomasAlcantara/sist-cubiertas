@@ -101,6 +101,16 @@ function filtrar_ot() {
 }
 
 function seleccionar_ot(id, fuego) {
+  var posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
+    tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
+    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
+  for (var pos in cambios_ot) {
+    if (cambios_ot[pos] == id && pos !== current_pos) {
+      alert('Esta cubierta ya está asignada en: ' + (posNombres[pos] || pos));
+      cerrar_modal();
+      return;
+    }
+  }
   cambios_ot[current_pos] = id;
   var el = document.getElementById('fn-'+current_pos);
   if (el) { el.innerHTML = fuego || id; el.classList.remove('vacia'); }
