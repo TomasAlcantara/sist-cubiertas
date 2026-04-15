@@ -10,7 +10,7 @@ const trabajosTooltip = (o) => {
     ['Armar',    o.armar],
   ];
   const filas = items.map(([n, v]) =>
-    '<tr><td>' + n + ':</td><td style="padding-left:6px; color:' + (v ? '#090' : '#c00') + '; font-weight:bold;">' + (v ? 'SI' : 'NO') + '</td></tr>'
+    '<tr><td style="color:var(--text-secondary)">' + n + ':</td><td style="padding-left:6px; color:' + (v ? '#2e7d32' : 'var(--red-bright)') + '; font-weight:bold;">' + (v ? 'SI' : 'NO') + '</td></tr>'
   ).join('');
   return '<span class="trab-wrap">Ver Trabajos'
     + '<span class="trab-tip"><table style="border-collapse:collapse; font-size:12px;">' + filas + '</table></span>'
@@ -18,9 +18,82 @@ const trabajosTooltip = (o) => {
 };
 const body = `
 <style>
-.trab-wrap { position:relative; cursor:default; color:#621b1d; font-weight:bold; white-space:nowrap; }
-.trab-tip { display:none; position:absolute; left:0; top:100%; background:#fff; border:1px solid #aaa; padding:6px 10px; z-index:50; box-shadow:2px 2px 6px rgba(0,0,0,0.2); white-space:nowrap; }
+.trab-wrap { position:relative; cursor:default; color:var(--red); font-weight:bold; white-space:nowrap; }
+.trab-tip { display:none; position:absolute; left:0; top:100%; background:var(--bg-card); border:1px solid var(--border-strong); padding:6px 10px; z-index:50; box-shadow:var(--shadow-sm); white-space:nowrap; border-radius:var(--radius); }
 .trab-wrap:hover .trab-tip { display:block; }
+
+.ot-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+.ot-filters strong {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ot-filters select { width: auto; }
+.ot-filters-submit {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.ot-filters-submit:hover { background: var(--bg-hover); }
+.ot-nueva {
+  margin-left: auto;
+  background: var(--red);
+  color: #fff;
+  border: none;
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 8px 20px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.12s;
+  white-space: nowrap;
+}
+.ot-nueva:hover { background: var(--red-bright); }
+
+.ot-modal {
+  width: 720px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: fixed;
+  background: var(--bg-card);
+  z-index: 99;
+  display: none;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.ot-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.4);
+  z-index: 98;
+}
 </style>
 <script>
 function open_carga(id) {
@@ -62,30 +135,29 @@ function confirmar_cerrar(ot_id) {
 }
 </script>
 
-<div id="back" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.4); z-index:98;" onclick="close_carga();"></div>
-<div id="cerrar_ot" style="width:720px; max-height:90vh; overflow-y:auto; position:fixed; background:#FFF; z-index:99; display:none; top:60px; left:50%; transform:translateX(-50%); border:1px solid #aaa; box-shadow:2px 2px 12px rgba(0,0,0,0.3);"></div>
+<div class="ot-overlay" id="back" onclick="close_carga();"></div>
+<div class="ot-modal" id="cerrar_ot"></div>
 
-<form method="get" action="/OTs/list" style="float:left">
+<form method="get" action="/OTs/list" class="ot-filters">
   <strong>Unidad:</strong>
   <select name="unidad">
     <option value="0">Todas</option>
     ${unidades.map(u => `<option value="${u.id}" ${u.id==filtros.unidad?'selected':''}>${u.unidad}</option>`).join('')}
   </select>
-  <strong style="margin-left:10px;">Gomería:</strong>
+  <strong>Gomería:</strong>
   <select name="gomeria">
     <option value="0">Todas</option>
     ${gomerias.map(g => `<option value="${g.id}" ${g.id==filtros.gomeria?'selected':''}>${g.nombre}</option>`).join('')}
   </select>
-  <strong style="margin-left:10px;">Estado:</strong>
+  <strong>Estado:</strong>
   <select name="estado">
     <option value="-1" ${filtros.estado==-1?'selected':''}>Todos</option>
     <option value="0" ${filtros.estado==0?'selected':''}>Pendiente</option>
     <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
   </select>
-  <input type="button" value="Filtrar" onclick="this.form.submit()" style="margin-left:20px; width:75px;" />
+  <button type="submit" class="ot-filters-submit">Filtrar</button>
+  <button type="button" class="ot-nueva" onclick="location.href='/OTs/nueva'">Nueva OT</button>
 </form>
-<input type="button" value="Nueva OT" style="float:right; width:100px;" onclick="location.href='/OTs/nueva'">
-<div style="clear:both; margin-bottom:20px;"></div>
 
 <table>
   <thead>

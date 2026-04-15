@@ -18,7 +18,8 @@ const modules = [
     href: '/OTs/list',
     label: 'Órdenes de Trabajo',
     desc: 'Listado y seguimiento de OTs activas',
-    tag: 'OT'
+    tag: 'OT',
+    featured: true
   },
   {
     href: '/CargaKm',
@@ -42,7 +43,8 @@ const modules = [
 
 let cards = '';
 for (const m of modules) {
-  cards += '<a href="' + m.href + '" class="mod-card">' +
+  const cls = 'mod-card' + (m.featured ? ' mod-card--featured' : '');
+  cards += '<a href="' + m.href + '" class="' + cls + '">' +
     '<span class="mod-tag">' + m.tag + '</span>' +
     '<div class="mod-name">' + m.label + '</div>' +
     '<div class="mod-desc">' + m.desc + '</div>' +
@@ -104,6 +106,19 @@ const body = `
     border-left-color: var(--red);
     background: var(--bg-hover);
     transform: translateY(-2px);
+  }
+  .mod-card--featured {
+    border-left-color: var(--red);
+    background: rgba(192, 57, 43, 0.04);
+  }
+  .mod-card--featured .mod-tag {
+    background: rgba(192, 57, 43, 0.18);
+  }
+  .mod-card--featured .mod-name {
+    color: var(--red);
+  }
+  .mod-card--featured:hover {
+    background: rgba(192, 57, 43, 0.08);
   }
   .mod-tag {
     font-family: var(--font-mono);

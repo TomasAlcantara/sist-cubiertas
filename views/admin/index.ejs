@@ -1,19 +1,75 @@
 <%
 const body = `
-<div>
-  <h3>Administración General</h3>
-  <input type="button" class="adm_button" value="Usuarios" onclick="location.href='/admin/usuarios';" />
-  <input type="button" class="adm_button" value="Almacenes" onclick="location.href='/admin/almacen';" />
-  <input type="button" class="adm_button" value="Gomerias" onclick="location.href='/admin/gomeria';" />
-  <input type="button" class="adm_button" value="Recapadoras" onclick="location.href='/admin/recapadora';" />
-  <input type="button" class="adm_button" value="Anular OT" onclick="location.href='/admin/anulaOT';" />
+<style>
+  .admin-head {
+    margin-bottom: 2rem;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .admin-section { margin-bottom: 2rem; }
+  .admin-section-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .admin-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 8px;
+  }
+  .admin-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border-strong);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    text-decoration: none;
+    display: block;
+    transition: border-left-color 0.12s, background 0.12s;
+    cursor: pointer;
+  }
+  .admin-card:hover {
+    border-left-color: var(--red);
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+  .admin-card-name {
+    font-family: var(--font-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-primary);
+    display: block;
+  }
+</style>
+
+<div class="admin-head">
+  <h2>Administración</h2>
 </div>
-<div style="margin-top:20px;">
-  <h3>Administración de unidades</h3>
-  <input type="button" class="adm_button" value="Modelos de Cubiertas" onclick="location.href='/admin/modelo_cubierta';" />
-  <input type="button" class="adm_button" value="Unidades" onclick="location.href='/admin/micros';" />
-  <input type="button" class="adm_button" value="Medidas" onclick="location.href='/admin/medidas';" />
-  <input type="button" class="adm_button" value="Proveedores" onclick="location.href='/admin/proveedor';" />
+
+<div class="admin-section">
+  <div class="admin-section-title">General</div>
+  <div class="admin-grid">
+    <a href="/admin/usuarios"   class="admin-card"><span class="admin-card-name">Usuarios</span></a>
+    <a href="/admin/almacen"    class="admin-card"><span class="admin-card-name">Almacenes</span></a>
+    <a href="/admin/gomeria"    class="admin-card"><span class="admin-card-name">Gomerías</span></a>
+    <a href="/admin/recapadora" class="admin-card"><span class="admin-card-name">Recapadoras</span></a>
+    <a href="/admin/anulaOT"    class="admin-card"><span class="admin-card-name">Anular OT</span></a>
+  </div>
+</div>
+
+<div class="admin-section">
+  <div class="admin-section-title">Unidades</div>
+  <div class="admin-grid">
+    <a href="/admin/modelo_cubierta" class="admin-card"><span class="admin-card-name">Modelos de Cubiertas</span></a>
+    <a href="/admin/micros"          class="admin-card"><span class="admin-card-name">Unidades</span></a>
+    <a href="/admin/medidas"         class="admin-card"><span class="admin-card-name">Medidas</span></a>
+    <a href="/admin/proveedor"       class="admin-card"><span class="admin-card-name">Proveedores</span></a>
+  </div>
 </div>
 `;
 const currentPage = 'admin';
