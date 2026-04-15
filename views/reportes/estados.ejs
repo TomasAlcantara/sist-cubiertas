@@ -1,7 +1,10 @@
 <%
 const currentPage = 'reportes';
 const body = `
-<h3>Reporte de Estados</h3>
+<div class="list-head">
+  <h2>Reporte de Estados</h2>
+</div>
+
 <table style="max-width:400px;">
   <thead><th>Estado</th><th>Cantidad</th></thead>
   <tr class="light"><td>Nuevas</td><td align="center">${resumen.nuevas||0}</td></tr>
@@ -9,8 +12,8 @@ const body = `
   <tr class="light"><td>Recapadas</td><td align="center">${resumen.recapadas||0}</td></tr>
   <tr class="sdark"><td><strong>Total</strong></td><td align="center"><strong>${resumen.total||0}</strong></td></tr>
 </table>
-<br>
-<h3>Por Modelo</h3>
+
+<h3 style="margin:20px 0 10px 0;">Por Modelo</h3>
 <table>
   <thead><th>Marca</th><th>Modelo</th><th>Estado</th><th>Cantidad</th></thead>
   ${porModelo.map((r,i) => `<tr class="${i%2===0?'light':'dark'}">
@@ -19,7 +22,8 @@ const body = `
     <td align="center">${r.cantidad}</td>
   </tr>`).join('')}
 </table>
-<br><a href="/reportes">&laquo; Volver</a>
+
+<a href="/reportes" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>

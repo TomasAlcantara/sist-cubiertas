@@ -2,16 +2,19 @@
 const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
 const currentPage = 'reportes';
 const body = `
-<h3>Reporte por Proveedor</h3>
-<form method="get" action="/reportes/cubierta_proveedor">
+<div class="list-head">
+  <h2>Reporte por Proveedor</h2>
+</div>
+
+<form method="get" action="/reportes/cubierta_proveedor" class="list-filters">
   <strong>Proveedor:</strong>
   <select name="proveedor">
     <option value="0">Seleccione...</option>
     ${proveedores.map(p=>`<option value="${p.id}" ${p.id==proveedor?'selected':''}>${p.proveedor}</option>`).join('')}
   </select>
-  <input type="button" value="Ver" onclick="this.form.submit()" style="margin-left:10px; width:75px;" />
+  <button type="submit" class="btn-filter">Ver</button>
 </form>
-<div class="clr" style="margin-bottom:10px;"></div>
+
 ${cubiertas.length > 0 ? `
 <table>
   <thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Ubicación</th></thead>
@@ -22,8 +25,9 @@ ${cubiertas.length > 0 ? `
     <td align="center">${estadoNombre(c.estado)}</td>
     <td align="center">${c.almacen_nombre||c.gomeria_nombre||'-'}</td>
   </tr>`).join('')}
-</table>` : proveedor > 0 ? '<p>Sin cubiertas para este proveedor.</p>' : ''}
-<br><a href="/reportes">&laquo; Volver</a>
+</table>` : proveedor > 0 ? '<p style="color:var(--text-muted); margin-top:10px;">Sin cubiertas para este proveedor.</p>' : ''}
+
+<a href="/reportes" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>

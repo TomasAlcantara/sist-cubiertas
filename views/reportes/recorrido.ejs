@@ -2,12 +2,16 @@
 const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
 const currentPage = 'reportes';
 const body = `
-<h3>Reporte por Cubierta</h3>
-<form method="get" action="/reportes/recorrido">
-  <strong>Fuego:</strong> <input type="text" name="fuego" value="${fuego}" />
-  <input type="button" value="Buscar" onclick="this.form.submit()" style="margin-left:10px; width:75px;" />
+<div class="list-head">
+  <h2>Reporte por Cubierta</h2>
+</div>
+
+<form method="get" action="/reportes/recorrido" class="list-filters">
+  <strong>Fuego:</strong>
+  <input type="text" name="fuego" value="${fuego}" />
+  <button type="submit" class="btn-filter">Buscar</button>
 </form>
-<div class="clr" style="margin-bottom:10px;"></div>
+
 ${cubiertas.length > 0 ? `
 <table>
   <thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th><th>Ubicación</th></thead>
@@ -19,8 +23,9 @@ ${cubiertas.length > 0 ? `
     <td align="center">${c.km||0}</td>
     <td align="center">${c.almacen_nombre||c.gomeria_nombre||c.unidad||'-'}</td>
   </tr>`).join('')}
-</table>` : fuego ? '<p>Sin resultados para ese fuego.</p>' : ''}
-<br><a href="/reportes">&laquo; Volver</a>
+</table>` : fuego ? '<p style="color:var(--text-muted); margin-top:10px;">Sin resultados para ese fuego.</p>' : ''}
+
+<a href="/reportes" class="list-back">&laquo; Volver</a>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>
