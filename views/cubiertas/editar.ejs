@@ -15,7 +15,7 @@ const body = `
   <input type="hidden" name="id" value="${cubierta.id}" />
   <div class="field">
     <label for="fuego">Fuego *</label>
-    <input type="text" name="fuego" id="fuego" class="text" maxlength="20" value="${cubierta.fuego||''}" required />
+    <input type="text" name="fuego" id="fuego" class="text" maxlength="20" value="${e(cubierta.fuego||'')}" required />
   </div>
   <div class="field">
     <label for="modelo_id">Modelo</label>
@@ -66,11 +66,11 @@ const body = `
   <div class="field-row">
     <div class="field">
       <label for="id_interno">ID Interno</label>
-      <input type="text" name="id_interno" id="id_interno" class="text" maxlength="50" value="${cubierta.id_interno||''}" />
+      <input type="text" name="id_interno" id="id_interno" class="text" maxlength="50" value="${e(cubierta.id_interno||'')}" />
     </div>
     <div class="field">
       <label for="remito">Remito</label>
-      <input type="text" name="remito" id="remito" class="text" maxlength="50" value="${cubierta.remito||''}" />
+      <input type="text" name="remito" id="remito" class="text" maxlength="50" value="${e(cubierta.remito||'')}" />
     </div>
   </div>
   <div class="field">

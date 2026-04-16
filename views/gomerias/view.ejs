@@ -1,12 +1,13 @@
 <%
-const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
+const estadoNombre = (est) => est == 1 ? 'Nueva' : est == 2 ? 'Usada' : 'Recapada';
 const currentPage = 'inicio';
 const body = `
 <script>
 function orderby(id) {
   var ob = ${filtros.orderby};
   if (id == ob) id += 10;
-  location.href = '?id=${gomeria.id}&fuego=${filtros.fuego}&modelo=${filtros.modelo}&medida=${filtros.medida}&estado=${filtros.estado}&orderby=' + id;
+  var fuego = ${ej(filtros.fuego)};
+  location.href = '?id=${gomeria.id}&fuego=' + encodeURIComponent(fuego) + '&modelo=${filtros.modelo}&medida=${filtros.medida}&estado=${filtros.estado}&orderby=' + id;
 }
 function show_almacenes(cubierta_id) {
   document.getElementById('back').style.display = 'block';
@@ -49,7 +50,7 @@ function cambiar_estado(id, estadoActual) {
 <form method="get" action="/gomerias/view" class="list-filters">
   <input type="hidden" name="id" value="${gomeria.id}" />
   <strong>Fuego:</strong>
-  <input type="text" name="fuego" value="${filtros.fuego}" maxlength="8" />
+  <input type="text" name="fuego" value="${e(filtros.fuego)}" maxlength="8" />
   <strong>Modelo:</strong>
   <select name="modelo">
     <option value="0">Todos</option>

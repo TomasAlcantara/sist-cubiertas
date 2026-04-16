@@ -19,19 +19,19 @@ function guardar() {
   <div class="form-header"><h2>Editar Gomería</h2></div>
   <div class="field">
     <label for="nombre">Nombre</label>
-    <input type="text" id="nombre" class="text" value="${gomeria.nombre||''}" />
+    <input type="text" id="nombre" class="text" value="${e(gomeria.nombre||'')}" />
   </div>
   <div class="field">
     <label for="direccion">Dirección</label>
-    <input type="text" id="direccion" class="text" value="${gomeria.direccion||''}" />
+    <input type="text" id="direccion" class="text" value="${e(gomeria.direccion||'')}" />
   </div>
   <div class="field">
     <label for="localidad">Localidad</label>
-    <input type="text" id="localidad" class="text" value="${gomeria.localidad||''}" />
+    <input type="text" id="localidad" class="text" value="${e(gomeria.localidad||'')}" />
   </div>
   <div class="field">
     <label for="telefono">Teléfono</label>
-    <input type="text" id="telefono" class="text" value="${gomeria.telefono||''}" />
+    <input type="text" id="telefono" class="text" value="${e(gomeria.telefono||'')}" />
   </div>
   <div class="form-actions">
     <button class="btn-primary" onclick="guardar()">Guardar</button>

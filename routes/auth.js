@@ -2,8 +2,19 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const { sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+
+// Máximo 10 intentos de login por IP cada 15 minutos
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  message: 'Demasiados intentos de acceso. Intentá de nuevo en 15 minutos.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 // GET /manual
 router.get('/manual', requireAuth, (req, res) => {
@@ -21,7 +32,7 @@ router.get('/login', (req, res) => {
 });
 
 // POST /login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { usr, pass } = req.body;
   try {
     const rows = await sql`
@@ -36,11 +47,17 @@ router.post('/login', async (req, res) => {
       return res.render('login', { error: 'Usuario o contraseña incorrectos' });
     }
     const token = jwt.sign(
-      { id: user.id, usuario: user.usuario, tipo: user.tipo, nombre: user.nombre },
+      { id: user.id, usuario: user.usuario, tipo: user.tipo, nombre: user.nombre, gomeria_id: user.gomeria_id || null },
       process.env.JWT_SECRET,
-      { expiresIn: '8h' }
+      { expiresIn: '2h' }
     );
-    res.cookie('token', token, { httpOnly: true, maxAge: 8 * 60 * 60 * 1000 });
+    const isProd = process.env.NODE_ENV === 'production';
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'Strict' : 'Lax',
+      maxAge: 2 * 60 * 60 * 1000,
+    });
     res.redirect('/');
   } catch (e) {
     console.error(e);

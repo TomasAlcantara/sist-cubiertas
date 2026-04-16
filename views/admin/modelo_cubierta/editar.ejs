@@ -13,11 +13,11 @@ function guardar() {
   <div class="form-header"><h2>Editar Modelo</h2></div>
   <div class="field">
     <label for="marca">Marca</label>
-    <input type="text" id="marca" class="text" value="${modelo.marca}" />
+    <input type="text" id="marca" class="text" value="${e(modelo.marca)}" />
   </div>
   <div class="field">
     <label for="modelo">Modelo</label>
-    <input type="text" id="modelo" class="text" value="${modelo.modelo}" />
+    <input type="text" id="modelo" class="text" value="${e(modelo.modelo)}" />
   </div>
   <div class="form-actions">
     <button class="btn-primary" onclick="guardar()">Guardar</button>

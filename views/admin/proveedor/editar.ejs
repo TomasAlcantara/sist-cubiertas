@@ -14,15 +14,15 @@ function guardar() {
   <div class="form-header"><h2>Editar Proveedor</h2></div>
   <div class="field">
     <label for="proveedor">Proveedor</label>
-    <input type="text" id="proveedor" class="text" value="${proveedor.proveedor}" />
+    <input type="text" id="proveedor" class="text" value="${e(proveedor.proveedor)}" />
   </div>
   <div class="field">
     <label for="tel">Teléfono</label>
-    <input type="text" id="tel" class="text" value="${proveedor.tel||''}" />
+    <input type="text" id="tel" class="text" value="${e(proveedor.tel||'')}" />
   </div>
   <div class="field">
     <label for="mail">Mail</label>
-    <input type="text" id="mail" class="text" value="${proveedor.mail||''}" />
+    <input type="text" id="mail" class="text" value="${e(proveedor.mail||'')}" />
   </div>
   <div class="form-actions">
     <button class="btn-primary" onclick="guardar()">Guardar</button>

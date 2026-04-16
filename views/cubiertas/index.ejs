@@ -1,12 +1,13 @@
 <%
-const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
+const estadoNombre = (est) => est == 1 ? 'Nueva' : est == 2 ? 'Usada' : 'Recapada';
 const currentPage = 'inicio';
 const body = `
 <script>
 function orderby(id) {
   var ob = ${filtros.orderby};
+  var fuego = ${ej(filtros.fuego)};
   if (id == ob) id += 10;
-  location.href = '?fuego=${filtros.fuego}&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=' + id;
+  location.href = '?fuego=' + encodeURIComponent(fuego) + '&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=' + id;
 }
 </script>
 
@@ -17,7 +18,7 @@ function orderby(id) {
 
 <form id="formulario" method="get" action="/cubiertas" class="list-filters">
   <strong>Fuego:</strong>
-  <input type="text" id="fuego" name="fuego" value="${filtros.fuego}" maxlength="8" />
+  <input type="text" id="fuego" name="fuego" value="${e(filtros.fuego)}" maxlength="8" />
   <strong>Modelo:</strong>
   <select id="modelo" name="modelo">
     <option value="0">Todos</option>

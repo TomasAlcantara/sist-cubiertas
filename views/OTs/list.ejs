@@ -18,9 +18,8 @@ const trabajosTooltip = (o) => {
 };
 const body = `
 <style>
-.trab-wrap { position:relative; cursor:default; color:var(--red); font-weight:bold; white-space:nowrap; }
-.trab-tip { display:none; position:absolute; left:0; top:100%; background:var(--bg-card); border:1px solid var(--border-strong); padding:6px 10px; z-index:50; box-shadow:var(--shadow-sm); white-space:nowrap; border-radius:var(--radius); }
-.trab-wrap:hover .trab-tip { display:block; }
+.trab-wrap { cursor:default; color:var(--red); font-weight:bold; white-space:nowrap; }
+.trab-tip { display:none; position:fixed; background:var(--bg-card); border:1px solid var(--border-strong); padding:6px 10px; z-index:9999; box-shadow:var(--shadow-sm); white-space:nowrap; border-radius:var(--radius); pointer-events:none; }
 
 .ot-filters {
   display: flex;
@@ -96,14 +95,39 @@ const body = `
 }
 </style>
 <script>
+// Tooltip de trabajos — position:fixed para evitar clipping en tabla
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.trab-wrap').forEach(function(wrap) {
+    var tip = wrap.querySelector('.trab-tip');
+    wrap.addEventListener('mouseenter', function() {
+      var r = wrap.getBoundingClientRect();
+      tip.style.display = 'block';
+      var left = r.right + 10;
+      var top  = r.top + r.height / 2 - tip.offsetHeight / 2;
+      // si se sale por la derecha, mostrar a la izquierda
+      if (left + tip.offsetWidth > window.innerWidth - 10) left = r.left - tip.offsetWidth - 10;
+      // si se sale por arriba o abajo, ajustar
+      top = Math.max(8, Math.min(top, window.innerHeight - tip.offsetHeight - 8));
+      tip.style.left = left + 'px';
+      tip.style.top  = top  + 'px';
+    });
+    wrap.addEventListener('mouseleave', function() {
+      tip.style.display = 'none';
+    });
+  });
+});
+
 function open_carga(id) {
   $.ajax({ type:'POST', url:'/ajax/mb_cerrar_ot', data:{ ot_id: id },
     success: function(data) {
       if (data) {
         document.getElementById('cerrar_ot').innerHTML = data;
-        document.getElementById('back').style.display = '';
-        document.getElementById('cerrar_ot').style.display = '';
+        document.getElementById('back').style.display = 'block';
+        document.getElementById('cerrar_ot').style.display = 'block';
       }
+    },
+    error: function() {
+      alert('Error al cargar el formulario de cierre');
     }
   });
 }
