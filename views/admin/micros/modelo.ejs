@@ -1,6 +1,18 @@
 <%
 const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
-const posiciones = ['ddi','ddd','tie','tii','tdi','tde','ra'];
+const POSICIONES_POR_TIPO = {
+  1: ['ddi','ddd','tie','tde','ra'],                                     // Auto/Camioneta: 4R+1aux
+  2: ['ddi','ddd','cie','cii','cdi','cde','tie','tde','ra','ra2'],        // Doble Piso: 8R+2aux
+  3: ['ddi','ddd','tie','tii','tdi','tde','ra','ra2'],                    // Mini Bus/Colectivo: 6R+2aux
+  4: ['ddi','ddd','tie','tii','tdi','tde','ra','ra2']                     // legacy = tipo 3
+};
+const posiciones = POSICIONES_POR_TIPO[micro.tipo_unidad] || POSICIONES_POR_TIPO[3];
+const POS_NOMBRE = {
+  ddi:'Del. Izq.', ddd:'Del. Der.',
+  tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.',
+  cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.',
+  ra:'Auxilio', ra2:'Auxilio 2'
+};
 const currentPage = 'admin';
 const body = `
 <style>
@@ -84,7 +96,7 @@ function almacenar() {
   ${posiciones.map(pos => {
     const r = ruedas.find(x => x.posicion === pos);
     return `<tr>
-      <td align="center"><strong>${pos.toUpperCase()}</strong></td>
+      <td align="center"><strong>${POS_NOMBRE[pos] || pos.toUpperCase()}</strong></td>
       ${r ? `
         <td align="center"><a style="cursor:pointer;" onmouseover="showdiv(event,'${pos}')" onmouseout="closediv()">${r.fuego||'-'}</a></td>
         <td align="center">${r.marca||''} ${r.modelo_nombre||''}</td>

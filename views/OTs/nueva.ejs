@@ -27,10 +27,10 @@ var cambios_ot = {};
 var current_pos = '';
 
 var LAYOUTS = {
-  1: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:140 },
-  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], bodyH:80  },
-  3: { del:['ddi','ddd'], tr1:['tie','tde'],              tr2:[], bodyH:140 },
-  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:140 }
+  1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 }, // Auto/Camioneta  4R+1aux
+  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80 }, // Doble Piso 8R+2aux
+  3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }, // Mini Bus/Colectivo 6R+2aux
+  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }  // legacy = tipo 3
 };
 
 function mkRueda(pos) {
@@ -78,8 +78,9 @@ function renderDiagrama(tipo) {
     h += '</div>';
   }
 
-  // Auxilios
-  h += '<div class="aux-row"><span>Auxilio</span>'+mkRueda('ra')+mkRueda('ra2')+'</div>';
+  // Auxilios (cantidad según tipo de vehículo)
+  var auxList = L.aux || ['ra','ra2'];
+  h += '<div class="aux-row"><span>Auxilio</span>' + auxList.map(function(p){ return mkRueda(p); }).join('') + '</div>';
 
   document.getElementById('diagrama-wrap').innerHTML = h;
 }

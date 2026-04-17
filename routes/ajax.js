@@ -258,6 +258,9 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
     const estadoNombre = (e) => e === 1 ? 'Nueva' : e === 2 ? 'Usada' : 'Recapada';
 
     let html = '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Kilómetros</th><th></th></thead>';
+    if (cubiertas.length === 0) {
+      html += '<tr><td colspan="6" style="text-align:center; color:#888; padding:10px;">No hay cubiertas disponibles en almacén. Verificar que estén creadas y no asignadas a otra unidad.</td></tr>';
+    }
     for (const c of cubiertas) {
       // escapeHtml previene XSS; JSON.stringify es seguro para pasar strings en onclick
       const fuegoJson   = JSON.stringify(c.fuego || '');

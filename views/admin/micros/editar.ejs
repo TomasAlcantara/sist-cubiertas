@@ -1,7 +1,7 @@
 <%
 const currentPage = 'admin';
-// Tipo 1 legacy → tratarlo como 4; default 2
-const selectedTipo = micro.tipo_unidad === 3 ? 3 : micro.tipo_unidad === 2 ? 2 : 4;
+// Tipo 4 legacy → tratarlo como 3; default 3
+const selectedTipo = micro.tipo_unidad === 2 ? 2 : micro.tipo_unidad === 1 ? 1 : 3;
 const extraHead = `
 <style>
   .form-card { max-width: 560px; margin: 0 auto; }
@@ -144,22 +144,22 @@ function guardar() {
   <div class="type-section">
     <div class="type-section-label">Tipo de unidad</div>
 
-    <input type="radio" id="radio_2" name="tipo_unidad" value="2" ${selectedTipo===2?'checked':''} style="display:none;" />
+    <input type="radio" id="radio_1" name="tipo_unidad" value="1" ${selectedTipo===1?'checked':''} style="display:none;" />
     <input type="radio" id="radio_3" name="tipo_unidad" value="3" ${selectedTipo===3?'checked':''} style="display:none;" />
-    <input type="radio" id="radio_4" name="tipo_unidad" value="4" ${selectedTipo===4?'checked':''} style="display:none;" />
+    <input type="radio" id="radio_2" name="tipo_unidad" value="2" ${selectedTipo===2?'checked':''} style="display:none;" />
 
     <div class="type-grid">
-      <div class="${selectedTipo===2?'type-card selected':'type-card'}" id="card_2" onclick="select_tipo(2)">
-        <img src="/images/modelo2.png" alt="Tipo 2" />
-        <span class="type-card-label">Colectivo<br>3 ejes</span>
+      <div class="${selectedTipo===1?'type-card selected':'type-card'}" id="card_1" onclick="select_tipo(1)">
+        <img src="/images/modelo3.png" alt="Auto / Camioneta" />
+        <span class="type-card-label">Auto / Camioneta<br>4 ruedas + 1 aux</span>
       </div>
       <div class="${selectedTipo===3?'type-card selected':'type-card'}" id="card_3" onclick="select_tipo(3)">
-        <img src="/images/modelo3.png" alt="Tipo 3" />
-        <span class="type-card-label">Minibus</span>
+        <img src="/images/modelo4.png" alt="Mini Bus / Combi / Colectivo" />
+        <span class="type-card-label">Mini Bus · Combi<br>Colectivo<br>6 ruedas + 2 aux</span>
       </div>
-      <div class="${selectedTipo===4?'type-card selected':'type-card'}" id="card_4" onclick="select_tipo(4)">
-        <img src="/images/modelo4.png" alt="Tipo 4" />
-        <span class="type-card-label">Colectivo<br>eje doble</span>
+      <div class="${selectedTipo===2?'type-card selected':'type-card'}" id="card_2" onclick="select_tipo(2)">
+        <img src="/images/modelo2.png" alt="Colectivo Doble Piso" />
+        <span class="type-card-label">Colectivo<br>Doble Piso<br>8 ruedas + 2 aux</span>
       </div>
     </div>
   </div>
