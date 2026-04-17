@@ -261,15 +261,16 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
     if (cubiertas.length === 0) {
       html += '<tr><td colspan="6" style="text-align:center; color:#888; padding:10px;">No hay cubiertas disponibles en almacén. Verificar que estén creadas y no asignadas a otra unidad.</td></tr>';
     }
+    // Escapa comillas simples para strings dentro de onclick='...' atributos HTML
+    const escJs = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     for (const c of cubiertas) {
-      // escapeHtml previene XSS; JSON.stringify es seguro para pasar strings en onclick
-      const fuegoJson   = JSON.stringify(c.fuego || '');
-      const modeloJson  = JSON.stringify(((c.marca || '') + ' ' + (c.modelo_nombre || '')).trim());
-      const medidaJson  = JSON.stringify(c.medida || '-');
-      const posJson     = JSON.stringify(pos);
+      const fuegoEsc  = escJs(c.fuego);
+      const modeloEsc = escJs(((c.marca || '') + ' ' + (c.modelo_nombre || '')).trim());
+      const medidaEsc = escJs(c.medida || '-');
+      const posEsc    = escJs(pos);
       const btn = modo === 'ot'
-        ? `<input type="button" value="Seleccionar" onclick="seleccionar_ot(${c.id}, ${fuegoJson}, ${modeloJson}, ${medidaJson})" />`
-        : `<input type="button" value="Seleccionar" onclick="colocar(${c.id}, ${parseInt(micro_id) || 0}, ${posJson})" />`;
+        ? `<input type="button" value="Seleccionar" onclick="seleccionar_ot(${c.id}, '${fuegoEsc}', '${modeloEsc}', '${medidaEsc}')" />`
+        : `<input type="button" value="Seleccionar" onclick="colocar(${c.id}, ${parseInt(micro_id) || 0}, '${posEsc}')" />`;
       html += `<tr>
         <td>${escapeHtml(c.fuego) || '-'}</td>
         <td>${escapeHtml(c.marca)} ${escapeHtml(c.modelo_nombre)}</td>
