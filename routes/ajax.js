@@ -368,18 +368,67 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
       ORDER BY oc.posicion
     `;
 
+    // Mapa posicion → fuego para renderizado rápido
+    const cubMap = {};
+    cubiertas.forEach(c => { cubMap[c.posicion] = c.fuego || 'S/N'; });
+
+    const tipoUnidad = parseInt(ot.tipo_unidad) || 1;
+
+    // Layouts idénticos a cargar.ejs
+    const LAYOUTS = {
+      1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[],           aux:['ra'],       bodyH:140 },
+      2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80  },
+      3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[],           aux:['ra','ra2'], bodyH:140 },
+      4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[],           aux:['ra','ra2'], bodyH:140 },
+    };
+    const L = LAYOUTS[tipoUnidad] || LAYOUTS[1];
+
+    // Genera una rueda HTML en modo solo lectura
+    const mkRuedaRO = (pos) => {
+      const fuego = cubMap[pos];
+      const tieneRueda = !!fuego;
+      const estiloRueda = tieneRueda
+        ? 'background:#3a0000;border:2px solid #cc0000;'
+        : 'background:#111;border:2px solid #444;';
+      const estiloFn = tieneRueda
+        ? 'color:#cc0000;font-size:9px;font-weight:bold;text-align:center;word-break:break-all;line-height:1.2;padding:2px;'
+        : 'color:#555;font-size:18px;';
+      const label = tieneRueda ? escapeHtml(fuego) : '+';
+      return `<div style="width:52px;height:68px;${estiloRueda}display:inline-flex;align-items:center;justify-content:center;margin:2px;flex-direction:column;">` +
+             `<span style="${estiloFn}">${label}</span>` +
+             `</div>`;
+    };
+
+    const spacer  = '<div style="width:56px;"></div>';
+    const body200 = '<div style="width:200px;"></div>';
+    const topBot  = '<div style="background:#fff;border:2px solid #333;width:200px;height:16px;"></div>';
+    const side    = `<div style="background:#fff;border-left:2px solid #333;border-right:2px solid #333;width:200px;height:${L.bodyH}px;"></div>`;
+    const axle    = '<div style="background:#ddd;border-left:2px solid #333;border-right:2px solid #333;width:200px;height:24px;"></div>';
+    const row     = (content) => `<div style="display:flex;align-items:center;justify-content:center;">${content}</div>`;
+
+    const midD  = Math.ceil(L.del.length / 2);
+    const midT1 = Math.ceil(L.tr1.length / 2);
+
+    let diagrama = '';
+    diagrama += row(L.del.slice(0, midD).map(mkRuedaRO).join('') + spacer + body200 + spacer + L.del.slice(midD).map(mkRuedaRO).join(''));
+    diagrama += row(spacer + topBot + spacer);
+    diagrama += row(spacer + side   + spacer);
+    diagrama += row(spacer + topBot + spacer);
+    diagrama += row(L.tr1.slice(0, midT1).map(mkRuedaRO).join('') + axle + L.tr1.slice(midT1).map(mkRuedaRO).join(''));
+    if (L.tr2.length) {
+      const midT2 = Math.ceil(L.tr2.length / 2);
+      diagrama += row(L.tr2.slice(0, midT2).map(mkRuedaRO).join('') + axle + L.tr2.slice(midT2).map(mkRuedaRO).join(''));
+    }
+    diagrama += `<div style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px;">` +
+                `<span style="font-size:12px;font-weight:bold;color:#fff;">Auxilio</span>` +
+                L.aux.map(mkRuedaRO).join('') +
+                `</div>`;
+
     const siNo = (v) => v
       ? '<strong style="color:#090">SI</strong>'
       : '<strong style="color:#c00">NO</strong>';
     const chk = (id, val, label) =>
       `<label style="display:block;margin:3px 0;"><input type="checkbox" id="${id}" ${val?'checked':''} /> ${label}</label>`;
-
-    const filasTabla = cubiertas.length
-      ? cubiertas.map(c => `<tr>
-          <td style="border:1px solid #ddd;padding:4px 8px;">${escapeHtml(posNombreCierre(c.posicion))}</td>
-          <td style="border:1px solid #ddd;padding:4px 8px;font-weight:bold;">${escapeHtml(c.fuego) || 'S/N'}</td>
-        </tr>`).join('')
-      : '<tr><td colspan="2" style="border:1px solid #ddd;padding:6px;color:#999;">Sin cubiertas registradas</td></tr>';
 
     const html = `
     <div style="font-size:13px; padding:14px; position:relative;">
@@ -428,18 +477,15 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
           </div>
         </div>
 
-        <!-- Columna derecha: tabla de cubiertas -->
-        <div style="min-width:200px;">
-          <p style="margin:0 0 8px 0;"><strong>Cambio de cubiertas:</strong></p>
-          <table style="border-collapse:collapse; font-size:12px; width:100%;">
-            <thead>
-              <tr style="background:#f0f0f0;">
-                <th style="border:1px solid #ddd;padding:4px 8px;text-align:left;">Posición</th>
-                <th style="border:1px solid #ddd;padding:4px 8px;text-align:left;">Fuego</th>
-              </tr>
-            </thead>
-            <tbody>${filasTabla}</tbody>
-          </table>
+        <!-- Columna derecha: diagrama visual del micro -->
+        <div style="min-width:220px;">
+          <p style="margin:0 0 8px 0;"><strong>Cubiertas a cambiar:</strong></p>
+          <div style="text-align:center; background:#1a1a1a; padding:10px; border-radius:6px;">
+            ${diagrama}
+          </div>
+          ${cubiertas.length === 0
+            ? '<p style="color:#999;font-size:12px;margin-top:6px;text-align:center;">Sin cubiertas registradas</p>'
+            : ''}
         </div>
 
       </div>
