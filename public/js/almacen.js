@@ -2,8 +2,8 @@ var global_dir = "/";
 
 function show_rlist(dir, pos) {
   global_dir = dir;
-  document.getElementById('back').style.display = '';
-  document.getElementById('filter_list').style.display = '';
+  document.getElementById('back').style.display = 'block';
+  document.getElementById('filter_list').style.display = 'block';
   document.getElementById('pos').value = pos;
   filtrar();
 }
