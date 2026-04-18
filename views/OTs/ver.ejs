@@ -1,7 +1,16 @@
 <%
 const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
-const posNombre = (p) => ({ ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.', tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.', cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2' })[p] || p;
+const posNombre = (p) => ({
+  ddi:'Del. Izq.', ddd:'Del. Der.',
+  tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
+  tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.',
+  cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
+  cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.',
+  ra:'Auxilio', ra2:'Auxilio 2'
+})[p] || p;
+
 const currentPage = 'inicio';
+
 const trabajos = [];
 if (ot.rotacion) trabajos.push('Rotación');
 if (ot.arreglo)  trabajos.push('Arreglo');
@@ -9,39 +18,293 @@ if (ot.cambio)   trabajos.push('Cambio');
 if (ot.alinear)  trabajos.push('Alinear');
 if (ot.balanceo) trabajos.push('Balanceo');
 if (ot.armar)    trabajos.push('Armar');
+
+// Build cubiertas map indexed by position
+const cubMap = {};
+cubiertas.forEach(c => { if (c.posicion) cubMap[c.posicion] = c; });
+
+const tipoUnidad = ot.tipo_unidad || 3;
+
 const body = `
+<style>
+  .ver-wrap {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2rem;
+    align-items: start;
+  }
+  @media (max-width: 860px) {
+    .ver-wrap { grid-template-columns: 1fr; }
+  }
+
+  /* ── Info panel ── */
+  .ver-info { min-width: 0; }
+  .ver-meta {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .ver-meta-item { font-size: 13px; color: var(--text-secondary); }
+  .ver-meta-item strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 2px;
+    font-weight: 500;
+  }
+
+  /* ── Bus diagram ── */
+  .diagrama-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1rem;
+    min-width: 280px;
+  }
+  .diagrama-title {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    align-self: flex-start;
+  }
+  .bus-row { display: flex; align-items: center; justify-content: center; }
+  .bus-top-bot { background: var(--bg-card); border: 2px solid var(--border-strong); width: 180px; height: 14px; }
+  .bus-side    { background: var(--bg-card); border-left: 2px solid var(--border-strong); border-right: 2px solid var(--border-strong); width: 180px; }
+  .bus-axle    { background: var(--border); border-left: 2px solid var(--border-strong); border-right: 2px solid var(--border-strong); width: 180px; height: 20px; }
+  .bus-spacer  { width: 52px; }
+  .aux-row { margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .aux-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+  .rueda-ver {
+    width: 48px;
+    height: 64px;
+    border: 2px solid var(--border-strong);
+    border-radius: 4px;
+    background: var(--bg-card);
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    margin: 2px;
+    gap: 3px;
+    position: relative;
+    cursor: default;
+  }
+  .rueda-ver.ocupada-nueva  { border-color: #2e7d32; background: rgba(46,125,50,0.07); }
+  .rueda-ver.ocupada-usada  { border-color: #888;    background: rgba(0,0,0,0.04); }
+  .rueda-ver.ocupada-recap  { border-color: #e67e22; background: rgba(230,126,34,0.07); }
+  .rueda-ver.vacia          { border-style: dashed; opacity: 0.45; }
+
+  .rueda-fuego {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: center;
+    line-height: 1.2;
+    word-break: break-all;
+    padding: 0 3px;
+  }
+  .rueda-fuego.empty { color: var(--text-muted); font-size: 16px; font-weight: 300; }
+  .rueda-pos {
+    font-family: var(--font-mono);
+    font-size: 7.5px;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.1;
+    padding: 0 2px;
+  }
+
+  /* ── Legend ── */
+  .leyenda {
+    display: flex;
+    gap: 12px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .leyenda-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .leyenda-dot {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    border: 2px solid;
+    flex-shrink: 0;
+  }
+  .leyenda-dot.nueva { border-color: #2e7d32; background: rgba(46,125,50,0.12); }
+  .leyenda-dot.usada { border-color: #888;    background: rgba(0,0,0,0.06); }
+  .leyenda-dot.recap { border-color: #e67e22; background: rgba(230,126,34,0.12); }
+  .leyenda-dot.vacia { border-color: var(--border-strong); border-style: dashed; background: transparent; }
+
+  /* ── Detail table ── */
+  .ver-section-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin: 1.5rem 0 0.75rem;
+  }
+</style>
+
+<script>
+var LAYOUTS = {
+  1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[],                      aux:['ra'],        bodyH:120 },
+  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'],            aux:['ra','ra2'],  bodyH:70  },
+  3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[],                      aux:['ra','ra2'],  bodyH:120 },
+  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[],                      aux:['ra','ra2'],  bodyH:120 }
+};
+
+var CUBIERTA_MAP = ${JSON.stringify(cubMap)};
+
+var POS_LABELS = {
+  ddi:'Del.\\nIzq.', ddd:'Del.\\nDer.',
+  tie:'T.Iz.E', tii:'T.Iz.I', tdi:'T.De.I', tde:'T.De.E',
+  cie:'C.Iz.E', cii:'C.Iz.I', cdi:'C.De.I', cde:'C.De.E',
+  ra:'Aux.1', ra2:'Aux.2'
+};
+
+function estadoClass(e) {
+  if (e == 1) return 'ocupada-nueva';
+  if (e == 2) return 'ocupada-usada';
+  if (e == 3) return 'ocupada-recap';
+  return '';
+}
+
+function mkRuedaVer(pos) {
+  var c = CUBIERTA_MAP[pos];
+  var cls = 'rueda-ver ' + (c ? estadoClass(c.estado) : 'vacia');
+  var fuego = c ? '<span class="rueda-fuego">' + (c.fuego || '-') + '</span>' : '<span class="rueda-fuego empty">·</span>';
+  var posLabel = '<span class="rueda-pos">' + (POS_LABELS[pos] || pos).replace('\\n', '<br>') + '</span>';
+  return '<div class="' + cls + '" title="' + (c ? (c.fuego||'-') + ' · ' + (c.marca||'') + ' ' + (c.modelo_nombre||'') : 'Sin cubierta') + '">' + fuego + posLabel + '</div>';
+}
+
+function renderDiagrama(tipo) {
+  var L = LAYOUTS[tipo] || LAYOUTS[3];
+  var del = L.del, tr1 = L.tr1, tr2 = L.tr2;
+  var midD = Math.ceil(del.length / 2);
+  var midT = Math.ceil(tr1.length / 2);
+  var h = '';
+
+  // Delantera
+  h += '<div class="bus-row">';
+  del.slice(0, midD).forEach(function(p) { h += mkRuedaVer(p); });
+  h += '<div class="bus-spacer"></div><div style="width:180px;"></div><div class="bus-spacer"></div>';
+  del.slice(midD).forEach(function(p) { h += mkRuedaVer(p); });
+  h += '</div>';
+
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-side" style="height:' + L.bodyH + 'px;"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+
+  // Eje trasero
+  h += '<div class="bus-row">';
+  tr1.slice(0, midT).forEach(function(p) { h += mkRuedaVer(p); });
+  h += '<div class="bus-axle"></div>';
+  tr1.slice(midT).forEach(function(p) { h += mkRuedaVer(p); });
+  h += '</div>';
+
+  // Eje central (tipo 2 - doble piso)
+  if (tr2.length) {
+    var midT2 = Math.ceil(tr2.length / 2);
+    h += '<div class="bus-row">';
+    tr2.slice(0, midT2).forEach(function(p) { h += mkRuedaVer(p); });
+    h += '<div class="bus-axle"></div>';
+    tr2.slice(midT2).forEach(function(p) { h += mkRuedaVer(p); });
+    h += '</div>';
+  }
+
+  // Auxilio
+  var auxList = L.aux || ['ra'];
+  h += '<div class="aux-row"><span class="aux-label">Aux.</span>' + auxList.map(function(p) { return mkRuedaVer(p); }).join('') + '</div>';
+
+  document.getElementById('diagrama-ver').innerHTML = h;
+}
+
+window.addEventListener('DOMContentLoaded', function() {
+  renderDiagrama(${tipoUnidad});
+});
+</script>
+
 <div class="list-head">
   <h2>OT N° ${ot.numero || ot.id}</h2>
   <button class="btn-ghost" onclick="window.print()">Imprimir</button>
 </div>
 
-<p><strong>Unidad:</strong> ${ot.unidad||'-'}</p>
-<p><strong>Gomería:</strong> ${ot.gomeria_nombre||'-'}</p>
-<p><strong>Fecha:</strong> ${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</p>
-<p><strong>Estado:</strong> ${ot.estado==0?'Pendiente':'Cerrada'}</p>
-${trabajos.length ? '<p><strong>Trabajos:</strong> ' + trabajos.join(', ') + '</p>' : ''}
-${ot.observaciones ? '<p><strong>Observaciones:</strong> ' + ot.observaciones + '</p>' : ''}
-${ot.factura ? '<p><strong>Factura:</strong> ' + ot.factura + '</p>' : ''}
-${ot.costo   ? '<p><strong>Costo:</strong> $' + ot.costo + '</p>' : ''}
+<div class="ver-wrap">
 
-<h3>Cubiertas en esta OT</h3>
-<table>
-  <thead>
-    <th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th>
-  </thead>
-  ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin cubiertas registradas</td></tr>' :
-    cubiertas.map((c, i) => `<tr class="${i%2===0?'light':'dark'}">
-      <td align="center">${c.posicion ? posNombre(c.posicion) : '-'}</td>
-      <td align="center">${c.fuego||'-'}</td>
-      <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
-      <td align="center">${c.medida||'-'}</td>
-      <td align="center">${estadoNombre(c.estado)}</td>
-      <td align="center">${c.km||0}</td>
-    </tr>`).join('')
-  }
-</table>
+  <!-- Diagrama -->
+  <div class="diagrama-panel">
+    <div class="diagrama-title">Esquema de cubiertas</div>
+    <div id="diagrama-ver"></div>
+    <div class="leyenda">
+      <div class="leyenda-item"><div class="leyenda-dot nueva"></div> Nueva</div>
+      <div class="leyenda-item"><div class="leyenda-dot usada"></div> Usada</div>
+      <div class="leyenda-item"><div class="leyenda-dot recap"></div> Recapada</div>
+      <div class="leyenda-item"><div class="leyenda-dot vacia"></div> Vacía</div>
+    </div>
+  </div>
 
-<a href="/OTs/list" class="list-back">&laquo; Volver al listado</a>
+  <!-- Info -->
+  <div class="ver-info">
+    <div class="ver-meta">
+      <div class="ver-meta-item"><strong>Unidad</strong>${ot.unidad || '-'}</div>
+      <div class="ver-meta-item"><strong>Estado</strong>${ot.estado == 0 ? 'Pendiente' : 'Cerrada'}</div>
+      <div class="ver-meta-item"><strong>Gomería</strong>${ot.gomeria_nombre || '-'}</div>
+      <div class="ver-meta-item"><strong>Fecha</strong>${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</div>
+      ${trabajos.length ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Trabajos</strong>' + trabajos.join(' · ') + '</div>' : ''}
+      ${ot.observaciones ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Observaciones</strong>' + ot.observaciones + '</div>' : ''}
+      ${ot.factura ? '<div class="ver-meta-item"><strong>Factura</strong>' + ot.factura + '</div>' : ''}
+      ${ot.costo   ? '<div class="ver-meta-item"><strong>Costo</strong>$' + ot.costo + '</div>' : ''}
+    </div>
+
+    <div class="ver-section-title">Detalle de cubiertas</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Posición</th>
+          <th>Fuego</th>
+          <th>Modelo</th>
+          <th>Medida</th>
+          <th>Estado</th>
+          <th>Km</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${cubiertas.length === 0
+          ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
+          : cubiertas.map((c, i) => `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
+              <td>${c.posicion ? posNombre(c.posicion) : '-'}</td>
+              <td style="font-family:var(--font-mono)">${c.fuego || '-'}</td>
+              <td>${c.marca || ''} ${c.modelo_nombre || ''}</td>
+              <td style="font-family:var(--font-mono)">${c.medida || '-'}</td>
+              <td>${estadoNombre(c.estado)}</td>
+              <td style="font-family:var(--font-mono)">${c.km || 0}</td>
+            </tr>`).join('')
+        }
+      </tbody>
+    </table>
+
+    <a href="/OTs/list" class="list-back">&laquo; Volver al listado</a>
+  </div>
+
+</div>
 `;
 %>
 <%- include('../layout', { body, user, currentPage }) %>

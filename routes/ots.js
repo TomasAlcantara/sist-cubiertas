@@ -49,7 +49,7 @@ router.get('/ver', requireAuth, async (req, res, next) => {
   try {
     const { ot } = req.query;
     const rows = await sql`
-      SELECT o.*, g.nombre AS gomeria_nombre, r.nombre AS recapadora_nombre, m.unidad, m.km_actual
+      SELECT o.*, g.nombre AS gomeria_nombre, r.nombre AS recapadora_nombre, m.unidad, m.km_actual, m.tipo_unidad
       FROM ots o
       LEFT JOIN gomeria g ON o.gomeria_id = g.id
       LEFT JOIN recapadora r ON o.recapadora_id = r.id
