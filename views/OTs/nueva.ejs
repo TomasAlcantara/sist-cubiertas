@@ -125,20 +125,6 @@ function cargar_tires(unidad_id) {
 }
 
 function clearPos(pos) {
-  // Si el swap fue recíproco, limpiar también el otro lado
-  var myId = unidadActual[pos] ? unidadActual[pos].id : null;
-  if (myId) {
-    for (var p in cambios_ot) {
-      if (p !== pos && cambios_ot[p] == myId) {
-        delete cambios_ot[p];
-        var ei = document.getElementById('fn-in-'+p);
-        var ep = document.getElementById('pos-'+p);
-        if (ei) { ei.innerHTML = '+'; ei.classList.remove('con-valor'); }
-        if (ep)  ep.classList.remove('con-entrante');
-        break;
-      }
-    }
-  }
   delete cambios_ot[pos];
   var elIn = document.getElementById('fn-in-'+pos);
   var pEl  = document.getElementById('pos-'+pos);
@@ -196,8 +182,7 @@ function seleccionar_ot(id, fuego) {
 var _dragSrc = null;
 
 function dStart(e, pos) {
-  var hasTire = cambios_ot[pos] !== undefined || !!unidadActual[pos];
-  if (!hasTire) { e.preventDefault(); return; }
+  if (!unidadActual[pos]) { e.preventDefault(); return; }
   _dragSrc = pos;
   e.dataTransfer.effectAllowed = 'move';
   setTimeout(function() {
@@ -216,11 +201,8 @@ function dOver(e) { e.preventDefault(); return false; }
 
 function dEnter(pos) {
   if (!_dragSrc || _dragSrc === pos) return;
-  var dstHasTire = cambios_ot[pos] !== undefined || !!unidadActual[pos];
-  if (dstHasTire) {
-    var el = document.getElementById('pos-'+pos);
-    if (el) el.classList.add('drag-over');
-  }
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.add('drag-over');
 }
 
 function dLeave(pos) {
@@ -240,30 +222,15 @@ function dDrop(e, pos) {
   var srcEl = document.getElementById('pos-'+srcPos);
   if (srcEl) srcEl.classList.remove('dragging');
 
-  function getTire(p) {
-    if (cambios_ot[p] !== undefined) {
-      var fnIn = document.getElementById('fn-in-'+p);
-      return { id: cambios_ot[p], fuego: fnIn ? fnIn.innerHTML : '-' };
-    }
-    var u = unidadActual[p];
-    return u ? { id: u.id, fuego: u.fuego || '-' } : null;
-  }
+  var u = unidadActual[srcPos];
+  if (!u) return false;
 
-  var srcTire = getTire(srcPos);
-  var dstTire = getTire(pos);
-  // Solo se permite el swap si ambas posiciones tienen cubierta
-  if (!srcTire || !dstTire) return false;
-
-  function setPos(p, tire) {
-    var elIn = document.getElementById('fn-in-'+p);
-    var pEl  = document.getElementById('pos-'+p);
-    cambios_ot[p] = tire.id;
-    if (elIn) { elIn.innerHTML = tire.fuego; elIn.classList.add('con-valor'); }
-    if (pEl)  pEl.classList.add('con-entrante');
-  }
-
-  setPos(srcPos, dstTire);
-  setPos(pos, srcTire);
+  // Movimiento de una sola vía: solo cambia el destino
+  cambios_ot[pos] = u.id;
+  var elIn = document.getElementById('fn-in-'+pos);
+  var pEl  = document.getElementById('pos-'+pos);
+  if (elIn) { elIn.innerHTML = u.fuego || '-'; elIn.classList.add('con-valor'); }
+  if (pEl)  pEl.classList.add('con-entrante');
   return false;
 }
 
