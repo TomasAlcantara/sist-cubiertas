@@ -58,17 +58,22 @@ router.get('/ver', requireAuth, async (req, res, next) => {
     `;
     if (!rows.length) return res.redirect('/OTs/list');
 
-    const cubiertas = await sql`
-      SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m2.medida, oc.posicion
-      FROM ot_cubiertas oc
-      JOIN cubiertas c ON oc.cubierta_id = c.id
-      LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-      LEFT JOIN medidas m2 ON c.medida_id = m2.id
-      WHERE oc.ot_id = ${parseInt(ot) || 0}
-      ORDER BY oc.posicion
-    `;
+    const [cubiertas, unitTires] = await Promise.all([
+      sql`
+        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m2.medida, oc.posicion
+        FROM ot_cubiertas oc
+        JOIN cubiertas c ON oc.cubierta_id = c.id
+        LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+        LEFT JOIN medidas m2 ON c.medida_id = m2.id
+        WHERE oc.ot_id = ${parseInt(ot) || 0}
+        ORDER BY oc.posicion
+      `,
+      rows[0].unidad_id
+        ? sql`SELECT c.id, c.fuego, c.posicion, c.estado FROM cubiertas c WHERE c.micro_id = ${rows[0].unidad_id} AND c.activo = 1 AND c.posicion IS NOT NULL`
+        : Promise.resolve([]),
+    ]);
 
-    res.render('OTs/ver', { user: req.user, ot: rows[0], cubiertas, currentPage: 'inicio' });
+    res.render('OTs/ver', { user: req.user, ot: rows[0], cubiertas, unitTires, currentPage: 'inicio' });
   } catch (err) { next(err); }
 });
 
@@ -86,15 +91,18 @@ router.get('/cargar', requireAuth, async (req, res, next) => {
     if (!rows.length) return res.redirect('/OTs/list');
     if (rows[0].estado == 1) return res.redirect('/OTs/ver?ot=' + parseInt(ot));
 
-    const [almacenes, modelos, medidas, ot_cubiertas] = await Promise.all([
+    const [almacenes, modelos, medidas, ot_cubiertas, unitTires] = await Promise.all([
       sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
       sql`SELECT * FROM marcas_ruedas ORDER BY marca, modelo`,
       sql`SELECT * FROM medidas ORDER BY medida`,
       sql`SELECT oc.posicion, oc.cubierta_id, c.fuego FROM ot_cubiertas oc JOIN cubiertas c ON oc.cubierta_id = c.id WHERE oc.ot_id = ${parseInt(ot) || 0} AND oc.posicion IS NOT NULL`,
+      rows[0].unidad_id
+        ? sql`SELECT c.id, c.fuego, c.posicion FROM cubiertas c WHERE c.micro_id = ${rows[0].unidad_id} AND c.activo = 1 AND c.posicion IS NOT NULL`
+        : Promise.resolve([]),
     ]);
 
     res.render('OTs/cargar', {
-      user: req.user, ot: rows[0], almacenes, modelos, medidas, ot_cubiertas, currentPage: 'inicio'
+      user: req.user, ot: rows[0], almacenes, modelos, medidas, ot_cubiertas, unitTires, currentPage: 'inicio'
     });
   } catch (err) { next(err); }
 });

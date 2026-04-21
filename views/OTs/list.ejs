@@ -71,14 +71,14 @@ const body = `
 .ot-nueva:hover { background: var(--red-bright); }
 
 .ot-modal {
-  width: 720px;
-  max-height: 90vh;
+  width: min(960px, 96vw);
+  max-height: 92vh;
   overflow-y: auto;
   position: fixed;
   background: var(--bg-card);
   z-index: 99;
   display: none;
-  top: 60px;
+  top: 40px;
   left: 50%;
   transform: translateX(-50%);
   border: 1px solid var(--border-strong);
@@ -138,6 +138,9 @@ function close_carga() {
 function confirmar_cerrar(ot_id) {
   var km = document.getElementById('km_cierre').value;
   if (!km) { alert('Ingrese los km actuales'); return; }
+  var destinoEl = document.getElementById('destino_almacen_id');
+  var destinoNombre = destinoEl ? destinoEl.options[destinoEl.selectedIndex].text : '';
+  var destinoVal    = destinoEl ? destinoEl.value : '';
   $.ajax({ type:'POST', url:'/ajax/confirmar_cerrar_ot',
     data: {
       ot_id: ot_id,
@@ -149,11 +152,32 @@ function confirmar_cerrar(ot_id) {
       cambio:   document.getElementById('cb_cam_cierre').checked ? '1':'0',
       alinear:  document.getElementById('cb_ali_cierre').checked ? '1':'0',
       balanceo: document.getElementById('cb_bal_cierre').checked ? '1':'0',
-      armar:    document.getElementById('cb_arm_cierre').checked ? '1':'0'
+      armar:    document.getElementById('cb_arm_cierre').checked ? '1':'0',
+      destino_almacen_id: destinoVal
     },
     success: function(data) {
-      if (data === 'ok') location.reload();
-      else alert('Error al cerrar la OT');
+      if (data === 'ok') {
+        close_carga();
+        // Notificación de destino
+        var notif = document.createElement('div');
+        notif.style.cssText = [
+          'position:fixed','top:24px','left:50%','transform:translateX(-50%)',
+          'background:#1b5e20','color:#fff','padding:16px 28px',
+          'border-radius:10px','font-size:14px','font-weight:600',
+          'z-index:9999','box-shadow:0 6px 24px rgba(0,0,0,0.4)',
+          'text-align:center','line-height:1.5','max-width:420px'
+        ].join(';');
+        notif.innerHTML = '✔ OT N°' + ot_id + ' cerrada correctamente<br>' +
+          '<span style="font-weight:400;font-size:13px;">Cubiertas salientes enviadas a: <strong>' + destinoNombre + '</strong></span>';
+        document.body.appendChild(notif);
+        setTimeout(function() {
+          notif.style.transition = 'opacity 0.4s';
+          notif.style.opacity = '0';
+          setTimeout(function() { location.reload(); }, 450);
+        }, 2800);
+      } else {
+        alert('Error al cerrar la OT');
+      }
     }
   });
 }

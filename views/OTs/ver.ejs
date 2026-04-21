@@ -19,9 +19,13 @@ if (ot.alinear)  trabajos.push('Alinear');
 if (ot.balanceo) trabajos.push('Balanceo');
 if (ot.armar)    trabajos.push('Armar');
 
-// Build cubiertas map indexed by position
+// Cubiertas de la OT (las que se cambiaron/trabajaron)
 const cubMap = {};
 cubiertas.forEach(c => { if (c.posicion) cubMap[c.posicion] = c; });
+
+// Cubiertas actuales de la unidad (todas las posiciones montadas)
+const unitMap = {};
+(unitTires || []).forEach(t => { if (t.posicion) unitMap[t.posicion] = t; });
 
 const tipoUnidad = ot.tipo_unidad || 3;
 
@@ -107,8 +111,9 @@ const body = `
 
   .rueda-fuego {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
+    font-variant-numeric: slashed-zero;
     color: var(--text-primary);
     text-align: center;
     line-height: 1.2;
@@ -116,6 +121,7 @@ const body = `
     padding: 0 3px;
   }
   .rueda-fuego.empty { color: var(--text-muted); font-size: 16px; font-weight: 300; }
+  .rueda-ver.ot-cambiada { outline: 2px solid var(--red); outline-offset: -2px; }
   .rueda-pos {
     font-family: var(--font-mono);
     font-size: 7.5px;
@@ -172,6 +178,7 @@ var LAYOUTS = {
 };
 
 var CUBIERTA_MAP = ${JSON.stringify(cubMap)};
+var UNIT_MAP     = ${JSON.stringify(unitMap)};
 
 var POS_LABELS = {
   ddi:'Del.\\nIzq.', ddd:'Del.\\nDer.',
@@ -188,11 +195,18 @@ function estadoClass(e) {
 }
 
 function mkRuedaVer(pos) {
-  var c = CUBIERTA_MAP[pos];
-  var cls = 'rueda-ver ' + (c ? estadoClass(c.estado) : 'vacia');
-  var fuego = c ? '<span class="rueda-fuego">' + (c.fuego || '-') + '</span>' : '<span class="rueda-fuego empty">·</span>';
+  // Prioridad: cubierta de la OT > cubierta actual de la unidad > vacía
+  var c   = CUBIERTA_MAP[pos] || UNIT_MAP[pos] || null;
+  var isOT = !!CUBIERTA_MAP[pos];
+  var cls = 'rueda-ver ' + (c ? estadoClass(c.estado) : 'vacia') + (isOT ? ' ot-cambiada' : '');
+  var fuego = c
+    ? '<span class="rueda-fuego">' + (c.fuego || '-') + '</span>'
+    : '<span class="rueda-fuego empty">·</span>';
   var posLabel = '<span class="rueda-pos">' + (POS_LABELS[pos] || pos).replace('\\n', '<br>') + '</span>';
-  return '<div class="' + cls + '" title="' + (c ? (c.fuego||'-') + ' · ' + (c.marca||'') + ' ' + (c.modelo_nombre||'') : 'Sin cubierta') + '">' + fuego + posLabel + '</div>';
+  var title = c
+    ? (c.fuego||'-') + (isOT ? ' (OT)' : '') + (c.marca ? ' · ' + c.marca + ' ' + (c.modelo_nombre||'') : '')
+    : 'Sin cubierta';
+  return '<div class="' + cls + '" title="' + title + '">' + fuego + posLabel + '</div>';
 }
 
 function renderDiagrama(tipo) {

@@ -9,15 +9,34 @@ const fuegosEnviados = ot_cubiertas.length
   ? ot_cubiertas.map(c => c.fuego || 'S/N').join(' | ')
   : 'S/N';
 const siNo = (v) => v ? '<strong class="text-si">SI</strong>' : '<strong class="text-no">NO</strong>';
+// Mapa de cubiertas actuales de la unidad (para mostrar salientes)
+const cubUnidadMap = {};
+(unitTires || []).forEach(t => { cubUnidadMap[t.posicion] = { id: t.id, fuego: t.fuego }; });
 const body = `
 <style>
 .bus-row { display:flex; align-items:center; justify-content:center; }
-.rueda { width:52px; height:68px; background:#111; border:2px solid #444; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; margin:2px; flex-direction:column; }
-.rueda:hover { background:#222; border-color:#666; }
-.rueda.seleccionada { border-color:#c00; background:#3a0000; }
-.rueda .fn { color:#fff; font-size:10px; font-weight:bold; text-align:center; word-break:break-all; line-height:1.2; padding:2px; }
-.rueda .fn.vacia { color:#555; font-size:18px; }
-.rueda.seleccionada .fn { color:#cc0000; }
+.rueda {
+  width:58px; height:88px; background:#111; border:2px solid #444;
+  display:inline-flex; align-items:stretch; cursor:pointer; margin:2px;
+  flex-direction:column; overflow:hidden;
+}
+.rueda:hover { background:#1a1a1a; border-color:#666; }
+.rueda.con-entrante { border-color:#2e7d32; background:#0a1f0a; }
+.rueda-out {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  border-bottom:1px solid #333;
+  font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600;
+  font-variant-numeric:slashed-zero; text-align:center; word-break:break-all;
+  line-height:1.2; padding:2px; color:#888;
+}
+.rueda-out.vacia { color:#2a2a2a; font-size:14px; }
+.rueda-in {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  font-family:'IBM Plex Mono',monospace; font-size:9px; font-weight:600;
+  font-variant-numeric:slashed-zero; text-align:center; word-break:break-all;
+  line-height:1.2; padding:2px; color:#555;
+}
+.rueda-in.con-valor { color:#4caf50; }
 .bus-top-bot { background:#fff; border:2px solid #333; width:200px; height:16px; }
 .bus-side { background:#fff; border-left:2px solid #333; border-right:2px solid #333; width:200px; }
 .bus-axle { background:#ddd; border-left:2px solid #333; border-right:2px solid #333; width:200px; height:24px; }
@@ -29,16 +48,23 @@ const body = `
 <script>
 var cambios_ot = ${JSON.stringify(cambiosIniciales)};
 var current_pos = '';
+var unidadActual = ${JSON.stringify(cubUnidadMap)};
 
 var LAYOUTS = {
-  1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 }, // Auto/Camioneta  4R+1aux
-  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80 }, // Doble Piso 8R+2aux
-  3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }, // Mini Bus/Colectivo 6R+2aux
-  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }  // legacy = tipo 3
+  1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 },
+  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80 },
+  3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 },
+  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }
 };
 
 function mkRueda(pos) {
-  return '<div class="rueda" id="pos-'+pos+'" onclick="abrir_modal(\\''+pos+'\\')"><span class="fn vacia" id="fn-'+pos+'">+</span></div>';
+  var curr = unidadActual[pos];
+  var outTxt  = curr ? (curr.fuego || '-') : '·';
+  var outCls  = curr ? 'rueda-out' : 'rueda-out vacia';
+  return '<div class="rueda" id="pos-'+pos+'" onclick="abrir_modal(\\''+pos+'\\')">'+
+    '<span class="'+outCls+'" id="fn-out-'+pos+'">'+outTxt+'</span>'+
+    '<span class="rueda-in" id="fn-in-'+pos+'">+</span>'+
+    '</div>';
 }
 
 function renderDiagrama(tipo) {
@@ -70,12 +96,13 @@ function renderDiagrama(tipo) {
   var auxList = L.aux || ['ra','ra2'];
   h += '<div class="aux-row"><span>Auxilio</span>' + auxList.map(function(p){ return mkRueda(p); }).join('') + '</div>';
   document.getElementById('diagrama-wrap').innerHTML = h;
+  // Inicializar cubiertas ya asignadas a esta OT (fila entrante)
   var cargadas = ${JSON.stringify(cubCargadas)};
   Object.keys(cargadas).forEach(function(pos) {
-    var el = document.getElementById('fn-'+pos);
-    var p  = document.getElementById('pos-'+pos);
-    if (el) { el.innerHTML = cargadas[pos].fuego || '-'; el.classList.remove('vacia'); }
-    if (p)  { p.classList.add('seleccionada'); }
+    var elIn = document.getElementById('fn-in-'+pos);
+    var p    = document.getElementById('pos-'+pos);
+    if (elIn) { elIn.innerHTML = cargadas[pos].fuego || '-'; elIn.classList.add('con-valor'); }
+    if (p)    { p.classList.add('con-entrante'); }
   });
 }
 
@@ -96,7 +123,8 @@ function filtrar_ot() {
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
-            estado:document.getElementById('f_estado').value, modo:'ot' },
+            estado:document.getElementById('f_estado').value, modo:'ot',
+            unidad_id:'${ot.unidad_id || ''}', current_pos:current_pos },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
 }
@@ -113,10 +141,10 @@ function seleccionar_ot(id, fuego) {
     }
   }
   cambios_ot[current_pos] = id;
-  var el = document.getElementById('fn-'+current_pos);
-  if (el) { el.innerHTML = fuego || id; el.classList.remove('vacia'); }
+  var elIn = document.getElementById('fn-in-'+current_pos);
+  if (elIn) { elIn.innerHTML = fuego || id; elIn.classList.add('con-valor'); }
   var p = document.getElementById('pos-'+current_pos);
-  if (p) p.classList.add('seleccionada');
+  if (p) p.classList.add('con-entrante');
   cerrar_modal();
   actualizar_tabla_resumen();
 }
@@ -127,8 +155,8 @@ function actualizar_tabla_resumen() {
     tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
     cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
   for (var pos in cambios_ot) {
-    var fn = document.getElementById('fn-'+pos);
-    filas += '<tr><td>' + (posNombres[pos]||pos) + '</td><td>' + (fn ? fn.innerHTML : '-') + '</td></tr>';
+    var elIn = document.getElementById('fn-in-'+pos);
+    filas += '<tr><td>' + (posNombres[pos]||pos) + '</td><td>' + (elIn ? elIn.innerHTML : '-') + '</td></tr>';
   }
   var tbody = document.getElementById('resumen-body');
   if (tbody) tbody.innerHTML = filas || '<tr><td colspan="2" style="color:var(--text-muted);">Sin cambios registrados</td></tr>';
@@ -164,7 +192,7 @@ $(function() {
 </script>
 
 <div class="modal-overlay" id="back" onclick="cerrar_modal();"></div>
-<div class="modal-panel" id="filter_list" style="width:600px; max-height:560px; padding:0;">
+<div class="modal-panel" id="filter_list" style="width:600px; max-height:calc(100vh - 100px); padding:0;">
   <button class="modal-close" onclick="cerrar_modal();">&times;</button>
   <form onsubmit="return false;" class="list-filters" style="padding:12px 14px 8px;">
     <strong>Almacén:</strong>

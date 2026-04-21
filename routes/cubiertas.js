@@ -137,10 +137,17 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
     const fuegoBase = fuego.trim();
 
     const fuegosNuevos = Array.from({ length: qty }, (_, i) => nextFuego(fuegoBase, i));
-    const existentes = await sql`SELECT fuego FROM cubiertas WHERE fuego = ANY(${fuegosNuevos}) AND activo = 1`;
+    const existentes = await sql`SELECT fuego FROM cubiertas WHERE fuego = ANY(${fuegosNuevos})`;
     if (existentes.length) {
       const dup = existentes.map(r => r.fuego).join(', ');
-      return res.redirect('/cubiertas/nuevo?error=' + encodeURIComponent('Fuego ya existe: ' + dup));
+      // Sugerir el siguiente fuego disponible si el base es numérico
+      let sugerencia = '';
+      if (/^\d+$/.test(fuegoBase)) {
+        const maxRow = await sql`SELECT MAX(CAST(fuego AS INTEGER)) AS maxf FROM cubiertas WHERE fuego ~ E'^\\d+$'`;
+        const maxFuego = maxRow[0]?.maxf;
+        if (maxFuego) sugerencia = ' — Próximo disponible: ' + (maxFuego + 1);
+      }
+      return res.redirect('/cubiertas/nuevo?error=' + encodeURIComponent('Fuego ya existe: ' + dup + sugerencia));
     }
 
     for (let i = 0; i < qty; i++) {

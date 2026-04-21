@@ -237,32 +237,86 @@ router.post('/save_medida', requireMaster, async (req, res, next) => {
 // POST /ajax/listar_ruedas - Listar cubiertas para selección en micro u OT
 router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
   try {
-    const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro' } = req.body;
+    const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos } = req.body;
 
-    const cubiertas = await sql`
-      SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
-      FROM cubiertas c
-      LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-      LEFT JOIN medidas med ON c.medida_id = med.id
-      WHERE c.activo = 1
-        AND c.micro_id IS NULL
-        AND (${parseInt(almacen)} = 0 OR c.almacen_id = ${parseInt(almacen)})
-        AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
-        AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
-        AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
-        AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
-      ORDER BY c.fuego
-      LIMIT 50
-    `;
+    const [cubiertas, rotacion] = await Promise.all([
+      // Cubiertas en almacén (disponibles)
+      sql`
+        SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
+        FROM cubiertas c
+        LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+        LEFT JOIN medidas med ON c.medida_id = med.id
+        WHERE c.activo = 1
+          AND c.micro_id IS NULL
+          AND (${parseInt(almacen)} = 0 OR c.almacen_id = ${parseInt(almacen)})
+          AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
+          AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
+          AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
+          AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
+        ORDER BY c.fuego
+        LIMIT 50
+      `,
+      // Cubiertas montadas en la unidad para rotación (solo en modo OT con unidad_id)
+      modo === 'ot' && parseInt(unidad_id)
+        ? sql`
+            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km, c.posicion
+            FROM cubiertas c
+            LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+            LEFT JOIN medidas med ON c.medida_id = med.id
+            WHERE c.activo = 1
+              AND c.micro_id = ${parseInt(unidad_id)}
+              AND c.posicion IS NOT NULL
+              AND (${current_pos || ''} = '' OR c.posicion != ${current_pos || ''})
+              AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
+            ORDER BY c.posicion
+          `
+        : Promise.resolve([]),
+    ]);
+
+    const posNombre = (p) => ({
+      ddi:'Del. Izq.', ddd:'Del. Der.',
+      tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
+      tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.',
+      cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
+      cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.',
+      ra:'Auxilio', ra2:'Auxilio 2'
+    })[p] || p;
 
     const estadoNombre = (e) => e === 1 ? 'Nueva' : e === 2 ? 'Usada' : 'Recapada';
-
-    let html = '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Kilómetros</th><th></th></thead>';
-    if (cubiertas.length === 0) {
-      html += '<tr><td colspan="6" style="text-align:center; color:#888; padding:10px;">No hay cubiertas disponibles en almacén. Verificar que estén creadas y no asignadas a otra unidad.</td></tr>';
-    }
-    // Escapa comillas simples para strings dentro de onclick='...' atributos HTML
     const escJs = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+
+    let html = '';
+
+    // ── Sección rotación primero (solo OT) ──────────────────────
+    if (modo === 'ot' && rotacion.length > 0) {
+      html += `<div style="margin-bottom:10px; border-bottom:2px solid #e0a800; padding-bottom:10px;">
+        <p style="margin:0 0 6px 0; font-size:12px; font-weight:700; color:#b8860b; letter-spacing:0.06em; text-transform:uppercase;">
+          ↺ Rotación — cubiertas montadas en esta unidad
+        </p>
+        <table>
+          <thead><th>Fuego</th><th>Posición actual</th><th>Modelo</th><th>Medida</th><th>Estado</th><th></th></thead>`;
+      for (const c of rotacion) {
+        const fuegoEsc  = escJs(c.fuego);
+        const modeloEsc = escJs(((c.marca || '') + ' ' + (c.modelo_nombre || '')).trim());
+        const medidaEsc = escJs(c.medida || '-');
+        html += `<tr style="background:#fffbe6;">
+          <td style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:slashed-zero;">${escapeHtml(c.fuego) || '-'}</td>
+          <td style="color:#b8860b; font-weight:600;">${escapeHtml(posNombre(c.posicion))}</td>
+          <td>${escapeHtml(c.marca)} ${escapeHtml(c.modelo_nombre)}</td>
+          <td>${escapeHtml(c.medida) || '-'}</td>
+          <td>${estadoNombre(c.estado)}</td>
+          <td><input type="button" value="Rotar aquí" style="background:#e6a800;border:none;color:#fff;padding:4px 10px;cursor:pointer;border-radius:3px;"
+               onclick="seleccionar_ot(${c.id}, '${fuegoEsc}', '${modeloEsc}', '${medidaEsc}')" /></td>
+        </tr>`;
+      }
+      html += '</table></div>';
+    }
+
+    // ── Sección almacén ──────────────────────────────────────────
+    html += '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th><th></th></thead>';
+    if (cubiertas.length === 0) {
+      html += '<tr><td colspan="6" style="text-align:center; color:#888; padding:8px;">No hay cubiertas disponibles en almacén.</td></tr>';
+    }
     for (const c of cubiertas) {
       const fuegoEsc  = escJs(c.fuego);
       const modeloEsc = escJs(((c.marca || '') + ' ' + (c.modelo_nombre || '')).trim());
@@ -281,6 +335,7 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
       </tr>`;
     }
     html += '</table>';
+
     res.send(html);
   } catch (err) { next(err); }
 });
@@ -350,31 +405,46 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
   try {
     const { ot_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
-    const rows = await sql`
-      SELECT o.*, m.unidad, m.km_actual, m.tipo_unidad, g.nombre AS gomeria_nombre
-      FROM ots o
-      LEFT JOIN micro m ON o.unidad_id = m.id
-      LEFT JOIN gomeria g ON o.gomeria_id = g.id
-      WHERE o.id = ${otIdInt}
-    `;
+    const [rows, almacenes] = await Promise.all([
+      sql`
+        SELECT o.*, m.unidad, m.km_actual, m.tipo_unidad, g.nombre AS gomeria_nombre
+        FROM ots o
+        LEFT JOIN micro m ON o.unidad_id = m.id
+        LEFT JOIN gomeria g ON o.gomeria_id = g.id
+        WHERE o.id = ${otIdInt}
+      `,
+      sql`SELECT id, nombre FROM almacen WHERE activo = 1 ORDER BY nombre`,
+    ]);
     if (!rows.length) return res.send('');
     const ot = rows[0];
 
-    const cubiertas = await sql`
-      SELECT oc.posicion, c.fuego
-      FROM ot_cubiertas oc
-      JOIN cubiertas c ON oc.cubierta_id = c.id
-      WHERE oc.ot_id = ${otIdInt} AND oc.posicion IS NOT NULL
-      ORDER BY oc.posicion
-    `;
+    // Cubiertas de la OT (entrantes) con sus salientes
+    const [otCubiertas, unitTires] = await Promise.all([
+      sql`
+        SELECT oc.posicion, c_in.fuego AS fuego_in, c_out.fuego AS fuego_out
+        FROM ot_cubiertas oc
+        JOIN cubiertas c_in ON oc.cubierta_id = c_in.id
+        LEFT JOIN cubiertas c_out ON oc.cubierta_anterior_id = c_out.id
+        WHERE oc.ot_id = ${otIdInt} AND oc.posicion IS NOT NULL
+        ORDER BY oc.posicion
+      `,
+      ot.unidad_id
+        ? sql`SELECT fuego, posicion FROM cubiertas WHERE micro_id = ${ot.unidad_id} AND activo = 1 AND posicion IS NOT NULL`
+        : Promise.resolve([]),
+    ]);
 
-    // Mapa posicion → fuego para renderizado rápido
-    const cubMap = {};
-    cubiertas.forEach(c => { cubMap[c.posicion] = c.fuego || 'S/N'; });
+    // Mapas: entrantes (OT), salientes (OT), actuales (unidad)
+    const mapaIn  = {};  // pos → fuego nuevo (entrante)
+    const mapaOut = {};  // pos → fuego saliente (si se registró anterior)
+    otCubiertas.forEach(c => {
+      mapaIn[c.posicion]  = c.fuego_in  || 'S/N';
+      if (c.fuego_out) mapaOut[c.posicion] = c.fuego_out;
+    });
+    const mapaUnidad = {}; // pos → fuego actualmente montado
+    unitTires.forEach(t => { mapaUnidad[t.posicion] = t.fuego || '-'; });
 
     const tipoUnidad = parseInt(ot.tipo_unidad) || 1;
 
-    // Layouts idénticos a cargar.ejs
     const LAYOUTS = {
       1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[],           aux:['ra'],       bodyH:140 },
       2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80  },
@@ -383,20 +453,32 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
     };
     const L = LAYOUTS[tipoUnidad] || LAYOUTS[1];
 
-    // Genera una rueda HTML en modo solo lectura
+    const fMono = "font-family:'IBM Plex Mono',monospace;font-variant-numeric:slashed-zero;font-weight:600;text-align:center;word-break:break-all;line-height:1.2;padding:2px;";
+
+    // Genera rueda con dos filas si hay cambio, o una fila si solo está montada
     const mkRuedaRO = (pos) => {
-      const fuego = cubMap[pos];
-      const tieneRueda = !!fuego;
-      const estiloRueda = tieneRueda
-        ? 'background:#3a0000;border:2px solid #cc0000;'
-        : 'background:#111;border:2px solid #444;';
-      const estiloFn = tieneRueda
-        ? 'color:#cc0000;font-size:9px;font-weight:bold;text-align:center;word-break:break-all;line-height:1.2;padding:2px;'
-        : 'color:#555;font-size:18px;';
-      const label = tieneRueda ? escapeHtml(fuego) : '+';
-      return `<div style="width:52px;height:68px;${estiloRueda}display:inline-flex;align-items:center;justify-content:center;margin:2px;flex-direction:column;">` +
-             `<span style="${estiloFn}">${label}</span>` +
-             `</div>`;
+      const entrante = mapaIn[pos];
+      const saliente = mapaOut[pos] || (entrante ? mapaUnidad[pos] : null);
+      const actual   = mapaUnidad[pos];
+
+      if (entrante) {
+        // Posición con cambio: fila superior = saliente (rojo), fila inferior = entrante (verde)
+        const rowOut = saliente
+          ? `<span style="${fMono}font-size:9px;color:#e57373;border-bottom:1px solid #333;width:100%;display:flex;align-items:center;justify-content:center;flex:1;">${escapeHtml(saliente)}</span>`
+          : `<span style="font-size:12px;color:#333;border-bottom:1px solid #333;width:100%;display:flex;align-items:center;justify-content:center;flex:1;">·</span>`;
+        const rowIn  = `<span style="${fMono}font-size:9px;color:#66bb6a;width:100%;display:flex;align-items:center;justify-content:center;flex:1;">${escapeHtml(entrante)}</span>`;
+        return `<div style="width:62px;height:90px;background:#0a1a0a;border:2px solid #2e7d32;display:inline-flex;align-items:stretch;margin:2px;flex-direction:column;overflow:hidden;">` +
+               rowOut + rowIn + `</div>`;
+      } else if (actual) {
+        // Posición sin cambio en esta OT: mostrar cubierta actual en gris
+        return `<div style="width:62px;height:90px;background:#1a1a1a;border:2px solid #555;display:inline-flex;align-items:center;justify-content:center;margin:2px;flex-direction:column;">` +
+               `<span style="${fMono}font-size:9px;color:#aaa;">${escapeHtml(actual)}</span>` +
+               `</div>`;
+      } else {
+        // Vacío
+        return `<div style="width:62px;height:90px;background:#111;border:2px dashed #333;display:inline-flex;align-items:center;justify-content:center;margin:2px;">` +
+               `<span style="color:#2a2a2a;font-size:18px;">·</span></div>`;
+      }
     };
 
     const spacer  = '<div style="width:56px;"></div>';
@@ -424,6 +506,14 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
                 L.aux.map(mkRuedaRO).join('') +
                 `</div>`;
 
+    // Leyenda del diagrama
+    const leyenda = `
+      <div style="display:flex;gap:14px;justify-content:center;margin-top:8px;font-size:11px;flex-wrap:wrap;">
+        <span style="color:#66bb6a;">▪ Entrante (nueva)</span>
+        <span style="color:#e57373;">▪ Saliente</span>
+        <span style="color:#aaa;">▪ Sin cambio</span>
+      </div>`;
+
     const siNo = (v) => v
       ? '<strong style="color:#090">SI</strong>'
       : '<strong style="color:#c00">NO</strong>';
@@ -431,11 +521,11 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
       `<label style="display:block;margin:3px 0;"><input type="checkbox" id="${id}" ${val?'checked':''} /> ${label}</label>`;
 
     const html = `
-    <div style="font-size:13px; padding:14px; position:relative;">
-      <img src="/images/rojo.png" style="position:absolute;top:10px;right:10px;height:15px;cursor:pointer;border:0;" onclick="close_carga();" />
-      <h3 style="text-align:center; margin:0 0 14px 0;">Cerrar OT N°&nbsp;${otIdInt}</h3>
+    <div style="font-size:13px; padding:18px; position:relative;">
+      <img src="/images/rojo.png" style="position:absolute;top:12px;right:12px;height:15px;cursor:pointer;border:0;" onclick="close_carga();" />
+      <h3 style="text-align:center; margin:0 0 16px 0;">Cerrar OT N°&nbsp;${otIdInt} — Interno ${escapeHtml(ot.unidad||'-')}</h3>
 
-      <div style="display:flex; gap:24px; align-items:flex-start;">
+      <div style="display:flex; gap:28px; align-items:flex-start; flex-wrap:wrap;">
 
         <!-- Columna izquierda: formulario -->
         <div style="flex:1; min-width:240px;">
@@ -450,7 +540,7 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
           </div>
 
           <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
-          <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:140px;" placeholder="km" />
+          <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:150px;" placeholder="km" />
 
           <p style="margin:10px 0 4px 0;"><strong>Tareas Realizadas:</strong></p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:0 10px; font-size:12px;">
@@ -463,29 +553,33 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
           </div>
 
           <p style="margin:10px 0 3px 0;"><strong>Número de Factura:</strong></p>
-          <input type="text" id="factura_cierre" style="width:180px;" placeholder="Opcional" />
+          <input type="text" id="factura_cierre" style="width:200px;" placeholder="Opcional" />
 
           <p style="margin:8px 0 3px 0;"><strong>Fecha:</strong></p>
-          <input type="text" id="fecha_cierre" style="width:130px;" placeholder="DD/MM/AAAA" />
+          <input type="text" id="fecha_cierre" style="width:140px;" placeholder="DD/MM/AAAA" />
 
           <p style="margin:8px 0 3px 0;"><strong>Costo $:</strong></p>
-          <input type="number" id="costo_cierre" style="width:140px;" placeholder="Opcional" />
+          <input type="number" id="costo_cierre" style="width:150px;" placeholder="Opcional" />
 
-          <div style="margin-top:16px;">
-            <input type="button" value="Cerrar OT" onclick="confirmar_cerrar(${otIdInt})" style="width:110px;" />
-            <input type="button" value="Cancelar" onclick="close_carga();" style="width:90px; margin-left:10px;" />
+          <p style="margin:12px 0 4px 0;"><strong>Destino de cubiertas salientes:</strong></p>
+          <select id="destino_almacen_id" style="width:220px;font-size:13px;">
+            ${almacenes.map(a => `<option value="${a.id}">${escapeHtml(a.nombre)}</option>`).join('')}
+            <option value="ceamse">CEAMSE (dar de baja)</option>
+          </select>
+
+          <div style="margin-top:18px; display:flex; gap:10px;">
+            <input type="button" value="Cerrar OT" onclick="confirmar_cerrar(${otIdInt})" style="width:120px;font-size:13px;" />
+            <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
           </div>
         </div>
 
         <!-- Columna derecha: diagrama visual del micro -->
-        <div style="min-width:220px;">
-          <p style="margin:0 0 8px 0;"><strong>Cubiertas a cambiar:</strong></p>
-          <div style="text-align:center; background:#1a1a1a; padding:10px; border-radius:6px;">
+        <div style="flex:0 0 auto;">
+          <p style="margin:0 0 6px 0;"><strong>Esquema completo de la unidad:</strong></p>
+          <div style="text-align:center; background:#1a1a1a; padding:14px; border-radius:8px;">
             ${diagrama}
+            ${leyenda}
           </div>
-          ${cubiertas.length === 0
-            ? '<p style="color:#999;font-size:12px;margin-top:6px;text-align:center;">Sin cubiertas registradas</p>'
-            : ''}
         </div>
 
       </div>
@@ -497,9 +591,11 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
 // POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
 router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
   try {
-    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
+    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, destino_almacen_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!km_actual || !otIdInt) return res.status(400).send('Datos requeridos');
+    const destinoEsCeamse = destino_almacen_id === 'ceamse';
+    const destinoAlmacenId = (!destinoEsCeamse && parseInt(destino_almacen_id)) ? parseInt(destino_almacen_id) : 1;
 
     await sql`UPDATE ots SET
       estado = 1,
@@ -525,15 +621,43 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
       WHERE ot_id = ${otIdInt} AND posicion IS NOT NULL AND cubierta_id IS NOT NULL
     `;
 
+    // IDs de todas las cubiertas que ENTRAN en esta OT (para detectar rotaciones)
+    const incomingIds = new Set(cambios.map(c => c.cubierta_id));
+
+    // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones
     for (const c of cambios) {
       await sql`
         UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL
         WHERE id = ${c.cubierta_id}
       `;
+    }
+
+    // Paso 2: manejar las cubiertas salientes
+    // Si una cubierta "sale" de una posición pero es TAMBIÉN una "entrante" en otra
+    // posición (rotación), no se manda al destino — ya fue movida en el paso 1.
+    for (const c of cambios) {
       if (c.cubierta_anterior_id) {
-        await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = 1 WHERE id = ${c.cubierta_anterior_id}`;
+        if (!incomingIds.has(c.cubierta_anterior_id)) {
+          // Sale de la unidad → enviar al destino elegido
+          if (destinoEsCeamse) {
+            await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = NULL, activo = 0 WHERE id = ${c.cubierta_anterior_id}`;
+          } else {
+            await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = ${destinoAlmacenId} WHERE id = ${c.cubierta_anterior_id}`;
+          }
+        }
+        // Si está en incomingIds es una rotación: ya fue reubicada en el paso 1, no hacer nada.
       } else if (unidad_id) {
-        await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = 1 WHERE micro_id = ${unidad_id} AND posicion = ${c.posicion} AND id != ${c.cubierta_id}`;
+        // Sin anterior registrado: buscar si hay otra cubierta en esa posición (excluir rotantes)
+        const incomingArr = [...incomingIds];
+        if (destinoEsCeamse) {
+          await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = NULL, activo = 0
+            WHERE micro_id = ${unidad_id} AND posicion = ${c.posicion}
+            AND id != ${c.cubierta_id} AND NOT (id = ANY(${incomingArr}))`;
+        } else {
+          await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = ${destinoAlmacenId}
+            WHERE micro_id = ${unidad_id} AND posicion = ${c.posicion}
+            AND id != ${c.cubierta_id} AND NOT (id = ANY(${incomingArr}))`;
+        }
       }
     }
 
