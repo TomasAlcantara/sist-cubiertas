@@ -27,10 +27,10 @@ var cambios_ot = ${JSON.stringify(cambiosIniciales)};
 var current_pos = '';
 
 var LAYOUTS = {
-  1: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:140 },
-  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], bodyH:80  },
-  3: { del:['ddi','ddd'], tr1:['tie','tde'],              tr2:[], bodyH:140 },
-  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], bodyH:140 }
+  1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 },
+  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80  },
+  3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 },
+  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }
 };
 
 function mkRueda(pos) {
@@ -63,7 +63,8 @@ function renderDiagrama(tipo) {
     tr2.slice(midT2).forEach(function(p){ h += mkRueda(p); });
     h += '</div>';
   }
-  h += '<div class="aux-row"><span>Auxilio</span>'+mkRueda('ra')+'</div>';
+  var auxList = L.aux || ['ra'];
+  h += '<div class="aux-row"><span>Auxilio</span>'+auxList.map(function(p){ return mkRueda(p); }).join('')+'</div>';
   document.getElementById('diagrama-wrap').innerHTML = h;
 }
 
