@@ -123,7 +123,31 @@ function cargar_tires(unidad_id) {
   });
 }
 
+function clearPos(pos) {
+  // Si el swap fue recíproco, limpiar también el otro lado
+  var myId = unidadActual[pos] ? unidadActual[pos].id : null;
+  if (myId) {
+    for (var p in cambios_ot) {
+      if (p !== pos && cambios_ot[p] == myId) {
+        delete cambios_ot[p];
+        var ei = document.getElementById('fn-in-'+p);
+        var ep = document.getElementById('pos-'+p);
+        if (ei) { ei.innerHTML = '+'; ei.classList.remove('con-valor'); }
+        if (ep)  ep.classList.remove('con-entrante');
+        break;
+      }
+    }
+  }
+  delete cambios_ot[pos];
+  var elIn = document.getElementById('fn-in-'+pos);
+  var pEl  = document.getElementById('pos-'+pos);
+  if (elIn) { elIn.innerHTML = '+'; elIn.classList.remove('con-valor'); }
+  if (pEl)  pEl.classList.remove('con-entrante');
+}
+
 function abrir_modal(pos) {
+  // Si ya tiene asignación, el click la deshace
+  if (cambios_ot[pos] !== undefined) { clearPos(pos); return; }
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
   document.getElementById('filter_list').style.display = 'block';
@@ -369,7 +393,7 @@ $(function() {
 <!-- Diagrama de cubiertas -->
 <div style="width:420px; margin:10px auto; border:1px solid #ccc; padding:8px;">
   <strong>Cambio de cubiertas:</strong>
-  <p style="font-size:11px; color:#666; margin:2px 0 6px 0;">Clic para seleccionar cubierta &nbsp;·&nbsp; Arrastrá para intercambiar posiciones</p>
+  <p style="font-size:11px; color:#666; margin:2px 0 6px 0;">Arrastrá para rotar entre posiciones &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para cambiar desde almacén</p>
   <div id="diagrama-wrap" style="text-align:center;">
     <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
   </div>
