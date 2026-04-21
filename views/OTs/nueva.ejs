@@ -10,11 +10,14 @@ const body = `
 .bus-row { display:flex; align-items:center; justify-content:center; }
 .rueda {
   width:58px; height:88px; background:#111; border:2px solid #444;
-  display:inline-flex; align-items:stretch; cursor:pointer; margin:2px;
+  display:inline-flex; align-items:stretch; cursor:grab; margin:2px;
   flex-direction:column; overflow:hidden;
 }
+.rueda:active { cursor:grabbing; }
 .rueda:hover { background:#1a1a1a; border-color:#666; }
 .rueda.con-entrante { border-color:#2e7d32; background:#0a1f0a; }
+.rueda.dragging { opacity:0.3; border-style:dashed; }
+.rueda.drag-over { border-color:#fff !important; background:#1a2a1a !important; box-shadow:0 0 0 2px #fff; }
 .rueda-out {
   flex:1; display:flex; align-items:center; justify-content:center;
   border-bottom:1px solid #333;
@@ -54,7 +57,14 @@ function mkRueda(pos) {
   var curr = unidadActual[pos];
   var outTxt = curr ? (curr.fuego || '-') : '·';
   var outCls = curr ? 'rueda-out' : 'rueda-out vacia';
-  return '<div class="rueda" id="pos-'+pos+'" onclick="abrir_modal(\\''+pos+'\\')">'+
+  return '<div class="rueda" id="pos-'+pos+'" draggable="true" '+
+    'onclick="abrir_modal(\\''+pos+'\\');" '+
+    'ondragstart="dStart(event,\\''+pos+'\\');" '+
+    'ondragend="dEnd(\\''+pos+'\\');" '+
+    'ondragover="dOver(event);" '+
+    'ondragenter="dEnter(\\''+pos+'\\');" '+
+    'ondragleave="dLeave(\\''+pos+'\\');" '+
+    'ondrop="dDrop(event,\\''+pos+'\\');">'+
     '<span class="'+outCls+'" id="fn-out-'+pos+'">'+outTxt+'</span>'+
     '<span class="rueda-in" id="fn-in-'+pos+'">+</span>'+
     '</div>';
@@ -155,6 +165,81 @@ function seleccionar_ot(id, fuego) {
   var p = document.getElementById('pos-'+current_pos);
   if (p) p.classList.add('con-entrante');
   cerrar_modal();
+}
+
+// Drag-and-drop: swap forzado entre dos posiciones con cubierta
+var _dragSrc = null;
+
+function dStart(e, pos) {
+  var hasTire = cambios_ot[pos] !== undefined || !!unidadActual[pos];
+  if (!hasTire) { e.preventDefault(); return; }
+  _dragSrc = pos;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(function() {
+    var el = document.getElementById('pos-'+pos);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function dEnd(pos) {
+  _dragSrc = null;
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('dragging');
+}
+
+function dOver(e) { e.preventDefault(); return false; }
+
+function dEnter(pos) {
+  if (!_dragSrc || _dragSrc === pos) return;
+  var dstHasTire = cambios_ot[pos] !== undefined || !!unidadActual[pos];
+  if (dstHasTire) {
+    var el = document.getElementById('pos-'+pos);
+    if (el) el.classList.add('drag-over');
+  }
+}
+
+function dLeave(pos) {
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('drag-over');
+}
+
+function dDrop(e, pos) {
+  e.preventDefault();
+  e.stopPropagation();
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('drag-over');
+  if (!_dragSrc || _dragSrc === pos) { _dragSrc = null; return false; }
+
+  var srcPos = _dragSrc;
+  _dragSrc = null;
+  var srcEl = document.getElementById('pos-'+srcPos);
+  if (srcEl) srcEl.classList.remove('dragging');
+
+  function getTire(p) {
+    if (cambios_ot[p] !== undefined) {
+      var fnIn = document.getElementById('fn-in-'+p);
+      return { id: cambios_ot[p], fuego: fnIn ? fnIn.innerHTML : '-' };
+    }
+    var u = unidadActual[p];
+    return u ? { id: u.id, fuego: u.fuego || '-' } : null;
+  }
+
+  var srcTire = getTire(srcPos);
+  var dstTire = getTire(pos);
+  // Solo se permite el swap si ambas posiciones tienen cubierta
+  if (!srcTire || !dstTire) return false;
+
+  function setPos(p, tire) {
+    var elIn = document.getElementById('fn-in-'+p);
+    var pEl  = document.getElementById('pos-'+p);
+    cambios_ot[p] = tire.id;
+    if (elIn) { elIn.innerHTML = tire.fuego; elIn.classList.add('con-valor'); }
+    if (pEl)  pEl.classList.add('con-entrante');
+  }
+
+  setPos(srcPos, dstTire);
+  setPos(pos, srcTire);
+  return false;
 }
 
 function guardar_ot() {
@@ -284,7 +369,7 @@ $(function() {
 <!-- Diagrama de cubiertas -->
 <div style="width:420px; margin:10px auto; border:1px solid #ccc; padding:8px;">
   <strong>Cambio de cubiertas:</strong>
-  <p style="font-size:11px; color:#666; margin:2px 0 6px 0;">Clic en una posición para seleccionar cubierta</p>
+  <p style="font-size:11px; color:#666; margin:2px 0 6px 0;">Clic para seleccionar cubierta &nbsp;·&nbsp; Arrastrá para intercambiar posiciones</p>
   <div id="diagrama-wrap" style="text-align:center;">
     <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
   </div>
