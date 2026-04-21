@@ -1,10 +1,10 @@
 <%
 const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
 const POSICIONES_POR_TIPO = {
-  1: ['ddi','ddd','tie','tde','ra'],                                     // Auto/Camioneta: 4R+1aux
-  2: ['ddi','ddd','cie','cii','cdi','cde','tie','tde','ra','ra2'],        // Doble Piso: 8R+2aux
-  3: ['ddi','ddd','tie','tii','tdi','tde','ra','ra2'],                    // Mini Bus/Colectivo: 6R+2aux
-  4: ['ddi','ddd','tie','tii','tdi','tde','ra','ra2']                     // legacy = tipo 3
+  1: ['ddi','ddd','tie','tde','ra'],
+  2: ['ddi','ddd','cie','cii','cdi','cde','tie','tde','ra','ra2'],
+  3: ['ddi','ddd','tie','tii','tdi','tde','ra','ra2'],
+  4: ['ddi','ddd','tie','tii','tdi','tde','ra','ra2']
 };
 const posiciones = POSICIONES_POR_TIPO[micro.tipo_unidad] || POSICIONES_POR_TIPO[3];
 const POS_NOMBRE = {
@@ -14,19 +14,158 @@ const POS_NOMBRE = {
   ra:'Auxilio', ra2:'Auxilio 2'
 };
 const currentPage = 'admin';
+
+const ruedasMap = {};
+ruedas.forEach(r => { ruedasMap[r.posicion] = r; });
+
 const body = `
 <style>
 #back, #back2 { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:90; }
+
+/* Diagrama */
+.bus-row { display:flex; align-items:center; justify-content:center; }
+.bus-spacer { width:62px; }
+.bus-top-bot { background:#fff; border:2px solid #333; width:220px; height:16px; }
+.bus-side { background:#fff; border-left:2px solid #333; border-right:2px solid #333; width:220px; }
+.bus-axle { background:#ddd; border-left:2px solid #333; border-right:2px solid #333; width:220px; height:24px; }
+.aux-row { margin-top:16px; display:flex; align-items:flex-start; justify-content:center; gap:16px; }
+.aux-row > span { font-size:12px; font-weight:bold; line-height:1; padding-top:10px; }
+
+.rueda-wrap { display:flex; flex-direction:column; align-items:center; margin:2px; }
+.rueda-label { font-size:9px; color:#888; text-align:center; margin-top:3px; width:66px; line-height:1.2; }
+
+.rueda {
+  width:62px; height:80px; background:#111; border:2px solid #444;
+  display:flex; flex-direction:column; align-items:stretch;
+  cursor:pointer; border-radius:4px; overflow:hidden;
+}
+.rueda:hover { filter:brightness(1.25); }
+.rueda.estado-1 { border-color:#4caf50; }
+.rueda.estado-2 { border-color:#ff9800; }
+.rueda.estado-3 { border-color:#e57373; }
+.rueda.vacia    { border-color:#2a2a2a; background:#0a0a0a; }
+
+.r-fuego {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  font-family:'IBM Plex Mono',monospace; font-size:10px; font-weight:600;
+  text-align:center; word-break:break-all; line-height:1.2; padding:3px;
+  color:#ddd; border-bottom:1px solid #222;
+}
+.r-fuego.vacia { color:#2a2a2a; font-size:18px; }
+.r-estado {
+  display:flex; align-items:center; justify-content:center;
+  font-size:8px; font-weight:bold; padding:2px; text-align:center; height:22px;
+}
+.r-estado.nueva    { color:#4caf50; }
+.r-estado.usada    { color:#ff9800; }
+.r-estado.recapada { color:#e57373; }
+.r-estado.vacia    { color:#333; }
+
+#tooltip {
+  display:none; position:absolute; background:#1c1c1c; border:1px solid #444;
+  padding:8px 12px; border-radius:5px; font-size:12px; line-height:1.7;
+  pointer-events:none; z-index:200; color:#ddd; min-width:150px;
+}
 </style>
+
 <script src="/js/almacen.js"></script>
 <script>
-function showdiv(event, id) {
-  document.getElementById('posicion').innerHTML = document.getElementById('cubierta_' + id) ? document.getElementById('cubierta_' + id).innerHTML : '';
-  document.getElementById('flotante').style.left = (event.clientX + 15) + 'px';
-  document.getElementById('flotante').style.top = (event.clientY + window.scrollY + 15) + 'px';
-  document.getElementById('flotante').style.display = 'block';
+var RUEDAS = ${JSON.stringify(ruedasMap)};
+var POS_NOMBRES = ${JSON.stringify(POS_NOMBRE)};
+
+var LAYOUTS = {
+  1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 },
+  2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80 },
+  3: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 },
+  4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }
+};
+
+function estadoCls(e) { return e==1?'nueva':e==2?'usada':'recapada'; }
+function estadoLabel(e) { return e==1?'Nueva':e==2?'Usada':'Recapada'; }
+
+function mkRuedaWrap(pos) {
+  var r = RUEDAS[pos];
+  var ruedaCls = r ? 'rueda estado-' + r.estado : 'rueda vacia';
+  var fuego    = r ? (r.fuego || '-') : '·';
+  var fuegoCls = r ? 'r-fuego' : 'r-fuego vacia';
+  var estLabel = r ? estadoLabel(r.estado) : 'Vacío';
+  var estCls   = r ? 'r-estado ' + estadoCls(r.estado) : 'r-estado vacia';
+  var label    = POS_NOMBRES[pos] || pos;
+  return '<div class="rueda-wrap">' +
+    '<div class="' + ruedaCls + '" ' +
+      'onclick="show_rlist(\\'/\\', \\'' + pos + '\\')" ' +
+      'onmouseenter="showTip(event, \\'' + pos + '\\')" ' +
+      'onmouseleave="hideTip()">' +
+      '<span class="' + fuegoCls + '">' + fuego + '</span>' +
+      '<span class="' + estCls + '">' + estLabel + '</span>' +
+    '</div>' +
+    '<div class="rueda-label">' + label + '</div>' +
+  '</div>';
 }
-function closediv() { document.getElementById('flotante').style.display = 'none'; }
+
+function showTip(event, pos) {
+  var r = RUEDAS[pos];
+  var tt = document.getElementById('tooltip');
+  var h = '<strong>' + (POS_NOMBRES[pos] || pos) + '</strong><br>';
+  if (r) {
+    h += 'Fuego: '  + (r.fuego || '-') + '<br>';
+    h += 'Modelo: ' + ((r.marca || '') + ' ' + (r.modelo_nombre || '')).trim() + '<br>';
+    h += 'Medida: ' + (r.medida || '-') + '<br>';
+    h += 'Estado: ' + estadoLabel(r.estado) + '<br>';
+    h += 'Km: '     + (r.km || 0);
+  } else {
+    h += '<em style="color:#555;">Sin cubierta</em>';
+  }
+  tt.innerHTML = h;
+  tt.style.display = 'block';
+  tt.style.left = (event.clientX + 16) + 'px';
+  tt.style.top  = (event.clientY + window.scrollY + 10) + 'px';
+}
+function hideTip() { document.getElementById('tooltip').style.display = 'none'; }
+
+function renderDiagrama(tipo) {
+  var L = LAYOUTS[tipo] || LAYOUTS[3];
+  var del = L.del, tr1 = L.tr1, tr2 = L.tr2 || [];
+  var midD = Math.ceil(del.length / 2);
+  var midT = Math.ceil(tr1.length / 2);
+  var h = '';
+
+  // Eje delantero
+  h += '<div class="bus-row">';
+  del.slice(0, midD).forEach(function(p) { h += mkRuedaWrap(p); });
+  h += '<div class="bus-spacer"></div><div style="width:220px;"></div><div class="bus-spacer"></div>';
+  del.slice(midD).forEach(function(p) { h += mkRuedaWrap(p); });
+  h += '</div>';
+
+  // Carrocería
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-side" style="height:' + L.bodyH + 'px;"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+
+  // Eje trasero principal
+  h += '<div class="bus-row">';
+  tr1.slice(0, midT).forEach(function(p) { h += mkRuedaWrap(p); });
+  h += '<div class="bus-axle"></div>';
+  tr1.slice(midT).forEach(function(p) { h += mkRuedaWrap(p); });
+  h += '</div>';
+
+  // Eje trasero extra (doble piso)
+  if (tr2.length) {
+    var midT2 = Math.ceil(tr2.length / 2);
+    h += '<div class="bus-row">';
+    tr2.slice(0, midT2).forEach(function(p) { h += mkRuedaWrap(p); });
+    h += '<div class="bus-axle"></div>';
+    tr2.slice(midT2).forEach(function(p) { h += mkRuedaWrap(p); });
+    h += '</div>';
+  }
+
+  // Auxilio(s)
+  var auxList = L.aux || ['ra'];
+  h += '<div class="aux-row"><span>Aux:</span>' + auxList.map(function(p) { return mkRuedaWrap(p); }).join('') + '</div>';
+
+  document.getElementById('diagrama-wrap').innerHTML = h;
+}
+
 function almacenar() {
   if (!document.getElementById('almacen_id').value) { alert('Seleccione almacén'); return; }
   $.ajax({ type:'POST', url:'/ajax/almacenar_rueda',
@@ -34,6 +173,8 @@ function almacenar() {
     success: function() { location.reload(); }
   });
 }
+
+$(function() { renderDiagrama(${micro.tipo_unidad || 3}); });
 </script>
 
 <div class="modal-overlay" id="back" onclick="close_rlist();"></div>
@@ -91,28 +232,9 @@ function almacenar() {
 <p><strong>Km actual:</strong> ${micro.km_actual||0}</p>
 
 <h3>Cubiertas montadas</h3>
-<table>
-  <thead><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th><th></th></thead>
-  ${posiciones.map(pos => {
-    const r = ruedas.find(x => x.posicion === pos);
-    return `<tr>
-      <td align="center"><strong>${POS_NOMBRE[pos] || pos.toUpperCase()}</strong></td>
-      ${r ? `
-        <td align="center"><a style="cursor:pointer;" onmouseover="showdiv(event,'${pos}')" onmouseout="closediv()">${r.fuego||'-'}</a></td>
-        <td align="center">${r.marca||''} ${r.modelo_nombre||''}</td>
-        <td align="center">${r.medida||'-'}</td>
-        <td align="center">${estadoNombre(r.estado)}</td>
-        <td align="center">${r.km||0}</td>
-        <td align="center"><a style="cursor:pointer;" onclick="show_rlist('/', '${pos}')">CAMBIAR</a></td>
-      ` : `
-        <td colspan="5" align="center" style="color:var(--text-muted);">Vacío</td>
-        <td align="center"><a style="cursor:pointer;" onclick="show_rlist('/', '${pos}')">COLOCAR</a></td>
-      `}
-    </tr>`;
-  }).join('')}
-</table>
+<div id="diagrama-wrap" style="margin:24px 0 32px;"></div>
 
-<div id="flotante"></div>
+<div id="tooltip"></div>
 
 <a href="/admin/micros" class="list-back">&laquo; Volver</a>
 `;
