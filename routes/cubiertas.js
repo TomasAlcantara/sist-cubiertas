@@ -137,13 +137,20 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
     const fuegoBase = fuego.trim();
 
     const fuegosNuevos = Array.from({ length: qty }, (_, i) => nextFuego(fuegoBase, i));
-    const existentes = await sql`SELECT fuego FROM cubiertas WHERE fuego = ANY(${fuegosNuevos}) AND activo = 1`;
-    if (existentes.length) {
-      const dup = existentes.map(r => r.fuego).join(', ');
-      // Sugerir el siguiente fuego disponible si el base es numérico
+
+    // Registros activos con esos fuegos: distinguir vacíos (solo fuego, sin datos) de reales
+    const existentes = await sql`
+      SELECT fuego, modelo_id, medida_id, micro_id, almacen_id
+      FROM cubiertas WHERE fuego = ANY(${fuegosNuevos}) AND activo = 1`;
+
+    const vacias  = new Set(existentes.filter(r => !r.modelo_id && !r.medida_id && !r.micro_id && !r.almacen_id).map(r => r.fuego));
+    const reales  = existentes.filter(r => !vacias.has(r.fuego));
+
+    if (reales.length) {
+      const dup = reales.map(r => r.fuego).join(', ');
       let sugerencia = '';
       if (/^\d+$/.test(fuegoBase)) {
-        const maxRow = await sql`SELECT MAX(CAST(fuego AS INTEGER)) AS maxf FROM cubiertas WHERE fuego ~ E'^\\d+$'`;
+        const maxRow = await sql`SELECT MAX(CAST(fuego AS INTEGER)) AS maxf FROM cubiertas WHERE fuego ~ E'^\\d+$' AND activo = 1`;
         const maxFuego = maxRow[0]?.maxf;
         if (maxFuego) sugerencia = ' — Próximo disponible: ' + (maxFuego + 1);
       }
@@ -152,11 +159,23 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
 
     for (let i = 0; i < qty; i++) {
       const f = nextFuego(fuegoBase, i);
-      await sql`
-        INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
-        VALUES (${f}, ${mId}, ${medId}, ${est}, ${almId}, ${kmVal}, ${provId},
-                ${id_interno?.trim() || null}, ${remito?.trim() || null}, ${precioVal}, ${fechaParsed}, 1)
-      `;
+      if (vacias.has(f)) {
+        // Registro vacío importado del CSV → completar con los datos ingresados
+        await sql`
+          UPDATE cubiertas SET
+            modelo_id = ${mId}, medida_id = ${medId}, estado = ${est},
+            almacen_id = ${almId}, km = ${kmVal}, proveedor_id = ${provId},
+            id_interno = ${id_interno?.trim() || null}, remito = ${remito?.trim() || null},
+            precio = ${precioVal}, fecha_remito = ${fechaParsed}
+          WHERE fuego = ${f} AND activo = 1
+        `;
+      } else {
+        await sql`
+          INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
+          VALUES (${f}, ${mId}, ${medId}, ${est}, ${almId}, ${kmVal}, ${provId},
+                  ${id_interno?.trim() || null}, ${remito?.trim() || null}, ${precioVal}, ${fechaParsed}, 1)
+        `;
+      }
     }
     res.redirect('/cubiertas');
   } catch (err) { next(err); }

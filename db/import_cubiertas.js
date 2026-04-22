@@ -127,6 +127,9 @@ async function main() {
     const marcaRaw  = row[IDX.marca]?.trim();
     const modeloRaw = row[IDX.modelo]?.trim();
     const estadoRaw = row[IDX.estado]?.trim().toUpperCase();
+
+    // Omitir filas con solo número de fuego y sin ningún dato útil
+    if (!medidaRaw && !marcaRaw && !modeloRaw && !estadoRaw) continue;
     const provRaw   = row[IDX.proov]?.trim();
 
     const medida_id = medidaRaw
