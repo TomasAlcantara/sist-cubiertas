@@ -137,7 +137,7 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
     const fuegoBase = fuego.trim();
 
     const fuegosNuevos = Array.from({ length: qty }, (_, i) => nextFuego(fuegoBase, i));
-    const existentes = await sql`SELECT fuego FROM cubiertas WHERE fuego = ANY(${fuegosNuevos})`;
+    const existentes = await sql`SELECT fuego FROM cubiertas WHERE fuego = ANY(${fuegosNuevos}) AND activo = 1`;
     if (existentes.length) {
       const dup = existentes.map(r => r.fuego).join(', ');
       // Sugerir el siguiente fuego disponible si el base es numérico

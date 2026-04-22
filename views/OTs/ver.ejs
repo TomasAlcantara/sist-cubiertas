@@ -82,16 +82,16 @@ const body = `
     align-self: flex-start;
   }
   .bus-row { display: flex; align-items: center; justify-content: center; }
-  .bus-top-bot { background: var(--bg-card); border: 2px solid var(--border-strong); width: 180px; height: 14px; }
-  .bus-side    { background: var(--bg-card); border-left: 2px solid var(--border-strong); border-right: 2px solid var(--border-strong); width: 180px; }
-  .bus-axle    { background: var(--border); border-left: 2px solid var(--border-strong); border-right: 2px solid var(--border-strong); width: 180px; height: 20px; }
-  .bus-spacer  { width: 52px; }
+  .bus-top-bot { background: var(--bg-card); border: 2px solid var(--border-strong); width: 200px; height: 14px; }
+  .bus-side    { background: var(--bg-card); border-left: 2px solid var(--border-strong); border-right: 2px solid var(--border-strong); width: 200px; }
+  .bus-axle    { background: var(--border); border-left: 2px solid var(--border-strong); border-right: 2px solid var(--border-strong); width: 200px; height: 20px; }
+  .bus-spacer  { width: 62px; }
   .aux-row { margin-top: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; }
   .aux-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); white-space: nowrap; }
 
   .rueda-ver {
-    width: 48px;
-    height: 64px;
+    width: 62px;
+    height: 80px;
     border: 2px solid var(--border-strong);
     border-radius: 4px;
     background: var(--bg-card);
@@ -111,8 +111,8 @@ const body = `
 
   .rueda-fuego {
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 15px;
+    font-weight: 700;
     font-variant-numeric: slashed-zero;
     color: var(--text-primary);
     text-align: center;
@@ -120,7 +120,7 @@ const body = `
     word-break: break-all;
     padding: 0 3px;
   }
-  .rueda-fuego.empty { color: var(--text-muted); font-size: 16px; font-weight: 300; }
+  .rueda-fuego.empty { color: var(--text-muted); font-size: 18px; font-weight: 300; }
   .rueda-ver.ot-cambiada { outline: 2px solid var(--red); outline-offset: -2px; }
   .rueda-pos {
     font-family: var(--font-mono);

@@ -145,6 +145,7 @@ function abrir_modal(pos) {
 function cerrar_modal() {
   document.getElementById('back').style.display = 'none';
   document.getElementById('filter_list').style.display = 'none';
+  document.getElementById('f_fuego').value = '';
 }
 
 function filtrar_ot() {
@@ -153,8 +154,7 @@ function filtrar_ot() {
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
-            estado:document.getElementById('f_estado').value, modo:'ot',
-            unidad_id:uid, current_pos:current_pos },
+            estado:document.getElementById('f_estado').value, modo:'micro' },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
 }
@@ -267,6 +267,13 @@ function guardar_ot() {
 
 $(function() {
   $('#fecha').datepicker({ dateFormat: 'dd/mm/yy' });
+  // Al volver al tab, recargar las cubiertas de la unidad seleccionada
+  document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+      var uid = document.getElementById('unidad_id').value;
+      if (uid) cargar_tires(uid);
+    }
+  });
 });
 </script>
 
