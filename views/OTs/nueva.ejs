@@ -154,7 +154,7 @@ function filtrar_ot() {
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
-            estado:document.getElementById('f_estado').value, modo:'micro' },
+            estado:document.getElementById('f_estado').value, modo:'ot' },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
 }
