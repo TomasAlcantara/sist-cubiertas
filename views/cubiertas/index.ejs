@@ -10,6 +10,8 @@ function orderby(id) {
   location.href = '?fuego=' + encodeURIComponent(fuego) + '&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=' + id;
 }
 </script>
+<% const ob = filtros.orderby;
+   const sortIcon = (asc, desc) => ob === asc ? ' ↑' : ob === desc ? ' ↓' : ''; %>
 
 <div class="list-head">
   <h2>Cubiertas</h2>
@@ -41,11 +43,11 @@ function orderby(id) {
 
 <table>
   <thead>
-    <th onclick="orderby(1)" style="cursor:pointer;">Fuego</th>
-    <th onclick="orderby(2)" style="cursor:pointer;">Modelo</th>
-    <th onclick="orderby(3)" style="cursor:pointer;">Medida</th>
-    <th onclick="orderby(4)" style="cursor:pointer;">Estado</th>
-    <th onclick="orderby(5)" style="cursor:pointer;">Km</th>
+    <th onclick="orderby(1)" style="cursor:pointer;">Fuego${sortIcon(1,11)}</th>
+    <th onclick="orderby(2)" style="cursor:pointer;">Modelo${sortIcon(2,12)}</th>
+    <th onclick="orderby(3)" style="cursor:pointer;">Medida${sortIcon(3,13)}</th>
+    <th onclick="orderby(4)" style="cursor:pointer;">Estado${sortIcon(4,14)}</th>
+    <th onclick="orderby(5)" style="cursor:pointer;">Km${sortIcon(5,15)}</th>
     <th>Ubicación</th>
     <th></th>
   </thead>

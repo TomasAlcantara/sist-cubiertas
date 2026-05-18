@@ -7,11 +7,12 @@ const { requireAuth } = require('../middleware/auth');
 const PER_PAGE = 25;
 
 const ORD_MAP = {
-  1: 'c.fuego ASC', 11: 'c.fuego DESC',
-  2: 'mr.marca ASC', 12: 'mr.marca DESC',
-  3: 'm.medida ASC', 13: 'm.medida DESC',
-  4: 'c.estado ASC', 14: 'c.estado DESC',
-  5: 'c.km ASC', 15: 'c.km DESC',
+  1:  "CASE WHEN c.fuego ~ '^\\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END ASC,  c.fuego ASC",
+  11: "CASE WHEN c.fuego ~ '^\\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END DESC, c.fuego DESC",
+  2:  'mr.marca ASC',  12: 'mr.marca DESC',
+  3:  'm.medida ASC',  13: 'm.medida DESC',
+  4:  'c.estado ASC',  14: 'c.estado DESC',
+  5:  'c.km ASC',      15: 'c.km DESC',
 };
 
 // GET /cubiertas
