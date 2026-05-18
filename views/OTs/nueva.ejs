@@ -104,9 +104,51 @@ function renderDiagrama(tipo) {
   document.getElementById('diagrama-wrap').innerHTML = h;
 }
 
+function mkRuedaStatic(pos) {
+  var curr = unidadActual[pos];
+  var outTxt = curr ? (curr.fuego || '-') : '·';
+  var outCls = curr ? 'rueda-out' : 'rueda-out vacia';
+  return '<div class="rueda" style="cursor:default;">'+
+    '<span class="'+outCls+'">'+outTxt+'</span>'+
+    '</div>';
+}
+
+function renderDiagramaStatic(tipo) {
+  var L = LAYOUTS[tipo] || LAYOUTS[1];
+  var del = L.del, tr1 = L.tr1, tr2 = L.tr2;
+  var midD = Math.ceil(del.length/2), midT = Math.ceil(tr1.length/2);
+  var h = '';
+  h += '<div class="bus-row">';
+  del.slice(0,midD).forEach(function(p){ h += mkRuedaStatic(p); });
+  h += '<div class="bus-spacer"></div><div style="width:200px;"></div><div class="bus-spacer"></div>';
+  del.slice(midD).forEach(function(p){ h += mkRuedaStatic(p); });
+  h += '</div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-side" style="height:'+L.bodyH+'px;"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
+  h += '<div class="bus-row">';
+  tr1.slice(0,midT).forEach(function(p){ h += mkRuedaStatic(p); });
+  h += '<div class="bus-axle"></div>';
+  tr1.slice(midT).forEach(function(p){ h += mkRuedaStatic(p); });
+  h += '</div>';
+  if (tr2.length) {
+    var midT2 = Math.ceil(tr2.length/2);
+    h += '<div class="bus-row">';
+    tr2.slice(0,midT2).forEach(function(p){ h += mkRuedaStatic(p); });
+    h += '<div class="bus-axle"></div>';
+    tr2.slice(midT2).forEach(function(p){ h += mkRuedaStatic(p); });
+    h += '</div>';
+  }
+  var auxList = L.aux || ['ra','ra2'];
+  h += '<div class="aux-row"><span>Auxilio</span>' + auxList.map(function(p){ return mkRuedaStatic(p); }).join('') + '</div>';
+  document.getElementById('diagrama-antes').innerHTML = h;
+}
+
 function cargar_tires(unidad_id) {
+  var msgVacio = '<p style="color:#999;font-size:12px;text-align:center;">Seleccione una unidad para ver el diagrama</p>';
   if (!unidad_id) {
-    document.getElementById('diagrama-wrap').innerHTML = '<p style="color:#999;font-size:12px;text-align:center;">Seleccione una unidad para ver el diagrama</p>';
+    document.getElementById('diagrama-antes').innerHTML = msgVacio;
+    document.getElementById('diagrama-wrap').innerHTML  = msgVacio;
     unidadActual = {};
     cambios_ot = {};
     return;
@@ -118,6 +160,7 @@ function cargar_tires(unidad_id) {
       (data.cubiertas || []).forEach(function(c) {
         unidadActual[c.posicion] = { id: c.id, fuego: c.fuego };
       });
+      renderDiagramaStatic(tipo);
       renderDiagrama(tipo);
       cambios_ot = {};
     }
@@ -370,12 +413,23 @@ $(function() {
   <textarea id="observaciones" style="width:100%; height:60px; margin-top:4px; resize:vertical;"></textarea>
 </div>
 
-<!-- Diagrama de cubiertas -->
-<div style="width:420px; margin:10px auto; border:1px solid #ccc; padding:8px;">
+<!-- Diagrama de cubiertas — comparativa -->
+<div style="max-width:860px; margin:10px auto; border:1px solid #ccc; padding:8px;">
   <strong>Cambio de cubiertas:</strong>
-  <p style="font-size:11px; color:#666; margin:2px 0 6px 0;">Arrastrá para rotar entre posiciones &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para cambiar desde almacén</p>
-  <div id="diagrama-wrap" style="text-align:center;">
-    <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
+  <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar entre posiciones &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para cambiar desde almacén</p>
+  <div class="comparativa-wrap">
+    <div class="comparativa-lado">
+      <div style="text-align:center; font-size:11px; font-weight:600; color:#888; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Estado actual</div>
+      <div id="diagrama-antes" style="text-align:center;">
+        <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
+      </div>
+    </div>
+    <div class="comparativa-lado">
+      <div style="text-align:center; font-size:11px; font-weight:600; color:#888; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Cambios propuestos</div>
+      <div id="diagrama-wrap" style="text-align:center;">
+        <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
+      </div>
+    </div>
   </div>
 </div>
 
