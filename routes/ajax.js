@@ -255,7 +255,7 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
               AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
               AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
               AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
-            ORDER BY c.fuego DESC
+            ORDER BY CASE WHEN c.fuego ~ '^\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END DESC, c.fuego DESC
             LIMIT 50
           `
         : sql`
@@ -270,7 +270,7 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
               AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
               AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
               AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
-            ORDER BY c.fuego ASC
+            ORDER BY CASE WHEN c.fuego ~ '^\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END ASC, c.fuego ASC
             LIMIT 50
           `,
       // Cubiertas montadas en la unidad para rotación (solo en modo OT con unidad_id)
@@ -357,15 +357,16 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-// GET /ajax/ultimo_fuego - Sugerir el siguiente número de fuego disponible
+// GET /ajax/ultimo_fuego - Sugerir el siguiente número de fuego (basado en la última cubierta creada)
 router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
   try {
     const [row] = await sql`
-      SELECT MAX(CAST(fuego AS INTEGER)) AS max_fuego
-      FROM cubiertas
-      WHERE fuego ~ '^\d+$' AND activo = 1
+      SELECT fuego FROM cubiertas WHERE activo = 1 ORDER BY id DESC LIMIT 1
     `;
-    const sugerido = row?.max_fuego ? String(parseInt(row.max_fuego) + 1) : '1';
+    if (!row?.fuego) return res.json({ sugerido: '1' });
+    const base = row.fuego;
+    const m = base.match(/^(.*?)(\d+)$/);
+    const sugerido = m ? m[1] + String(parseInt(m[2]) + 1).padStart(m[2].length, '0') : base + '1';
     res.json({ sugerido });
   } catch (err) { next(err); }
 });
