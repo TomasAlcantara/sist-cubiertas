@@ -15,6 +15,7 @@ ${errorMsg ? `<p class="error-msg">${errorMsg}</p>` : ''}
       <input type="number" name="cantidad" id="cantidad" value="1" min="1" max="200" />
     </div>
   </div>
+  <div id="fuego-preview" style="display:none; margin:-8px 0 10px 0; padding:6px 10px; background:#111; border-radius:4px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#aaa; line-height:1.6;"></div>
   <div class="field">
     <label for="modelo_id">Modelo</label>
     <select name="modelo_id" id="modelo_id">
@@ -81,7 +82,38 @@ ${errorMsg ? `<p class="error-msg">${errorMsg}</p>` : ''}
   </div>
 </form>
 <script>
-$(function() { $('#fecha_remito').datepicker({ dateFormat: 'dd/mm/yy' }); });
+$(function() {
+  $('#fecha_remito').datepicker({ dateFormat: 'dd/mm/yy' });
+
+  function nextFuego(base, i) {
+    if (i === 0) return base;
+    var m = base.match(/^(.*?)(\d+)$/);
+    if (m) return m[1] + String(parseInt(m[2]) + i).padStart(m[2].length, '0');
+    return base + i;
+  }
+
+  function actualizarPreview() {
+    var base = document.getElementById('fuego').value.trim();
+    var qty  = parseInt(document.getElementById('cantidad').value) || 1;
+    var prev = document.getElementById('fuego-preview');
+    if (!base || qty < 2) { prev.style.display = 'none'; return; }
+    var nums = [];
+    for (var i = 0; i < qty; i++) nums.push(nextFuego(base, i));
+    prev.style.display = 'block';
+    prev.innerHTML = '<span style="color:#666;">Se crearán:</span> ' + nums.join(' &nbsp;·&nbsp; ') +
+      ' <span style="color:#555;">(' + qty + ' cubiertas)</span>';
+  }
+
+  fetch('/ajax/ultimo_fuego')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var f = document.getElementById('fuego');
+      if (f && !f.value) { f.value = d.sugerido; actualizarPreview(); }
+    });
+
+  document.getElementById('fuego').addEventListener('input', actualizarPreview);
+  document.getElementById('cantidad').addEventListener('input', actualizarPreview);
+});
 </script>
 `;
 %>

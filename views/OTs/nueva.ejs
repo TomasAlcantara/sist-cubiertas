@@ -154,7 +154,8 @@ function filtrar_ot() {
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
-            estado:document.getElementById('f_estado').value, modo:'ot' },
+            estado:document.getElementById('f_estado').value, orden:document.getElementById('f_orden').value,
+            modo:'ot', unidad_id:uid },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
 }
@@ -292,6 +293,10 @@ $(function() {
     </select>
     <strong style="margin-left:8px;">Fuego:</strong>
     <input type="text" id="f_fuego" style="width:80px;" />
+    <select id="f_orden" style="width:76px;">
+      <option value="asc">↑ Asc</option>
+      <option value="desc">↓ Desc</option>
+    </select>
     <strong style="margin-left:8px;">Modelo:</strong>
     <select id="f_modelo">
       <option value="0">Todos</option>

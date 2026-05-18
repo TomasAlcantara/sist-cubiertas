@@ -237,25 +237,42 @@ router.post('/save_medida', requireMaster, async (req, res, next) => {
 // POST /ajax/listar_ruedas - Listar cubiertas para selección en micro u OT
 router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
   try {
-    const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos } = req.body;
+    const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos, orden = 'asc' } = req.body;
+    const orderDir = orden === 'desc' ? 'DESC' : 'ASC';
 
     const [cubiertas, rotacion] = await Promise.all([
       // Cubiertas en almacén (disponibles)
-      sql`
-        SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
-        FROM cubiertas c
-        LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-        LEFT JOIN medidas med ON c.medida_id = med.id
-        WHERE c.activo = 1
-          AND c.micro_id IS NULL
-          AND (${parseInt(almacen)} = 0 OR c.almacen_id = ${parseInt(almacen)})
-          AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
-          AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
-          AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
-          AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
-        ORDER BY c.fuego
-        LIMIT 50
-      `,
+      orderDir === 'DESC'
+        ? sql`
+            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
+            FROM cubiertas c
+            LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+            LEFT JOIN medidas med ON c.medida_id = med.id
+            WHERE c.activo = 1
+              AND c.micro_id IS NULL
+              AND (${parseInt(almacen)} = 0 OR c.almacen_id = ${parseInt(almacen)})
+              AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
+              AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
+              AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
+              AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
+            ORDER BY c.fuego DESC
+            LIMIT 50
+          `
+        : sql`
+            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
+            FROM cubiertas c
+            LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+            LEFT JOIN medidas med ON c.medida_id = med.id
+            WHERE c.activo = 1
+              AND c.micro_id IS NULL
+              AND (${parseInt(almacen)} = 0 OR c.almacen_id = ${parseInt(almacen)})
+              AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
+              AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
+              AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
+              AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
+            ORDER BY c.fuego ASC
+            LIMIT 50
+          `,
       // Cubiertas montadas en la unidad para rotación (solo en modo OT con unidad_id)
       modo === 'ot' && parseInt(unidad_id)
         ? sql`
@@ -337,6 +354,19 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
     html += '</table>';
 
     res.send(html);
+  } catch (err) { next(err); }
+});
+
+// GET /ajax/ultimo_fuego - Sugerir el siguiente número de fuego disponible
+router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
+  try {
+    const [row] = await sql`
+      SELECT MAX(CAST(fuego AS INTEGER)) AS max_fuego
+      FROM cubiertas
+      WHERE fuego ~ '^\d+$' AND activo = 1
+    `;
+    const sugerido = row?.max_fuego ? String(parseInt(row.max_fuego) + 1) : '1';
+    res.json({ sugerido });
   } catch (err) { next(err); }
 });
 
