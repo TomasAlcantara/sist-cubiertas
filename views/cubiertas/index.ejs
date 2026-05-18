@@ -1,6 +1,8 @@
 <%
 const estadoNombre = (est) => est == 1 ? 'Nueva' : est == 2 ? 'Usada' : 'Recapada';
 const currentPage = 'inicio';
+const ob = filtros.orderby;
+const sortIcon = (asc, desc) => ob === asc ? ' ↑' : ob === desc ? ' ↓' : '';
 const body = `
 <script>
 function orderby(id) {
@@ -10,8 +12,6 @@ function orderby(id) {
   location.href = '?fuego=' + encodeURIComponent(fuego) + '&modelo=${filtros.modelo}&estado=${filtros.estado}&proveedor=${filtros.proveedor}&orderby=' + id;
 }
 </script>
-<% const ob = filtros.orderby;
-   const sortIcon = (asc, desc) => ob === asc ? ' ↑' : ob === desc ? ' ↓' : ''; %>
 
 <div class="list-head">
   <h2>Cubiertas</h2>
