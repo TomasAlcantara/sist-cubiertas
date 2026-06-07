@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
-const { sql } = require('../db');
+const { sql, sanitizeFuego, nextFuego } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 
 const PER_PAGE = 25;
@@ -119,13 +119,6 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
       return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
     };
 
-    const nextFuego = (base, i) => {
-      if (i === 0) return base;
-      const m = base.match(/^(.*?)(\d+)$/);
-      if (m) return m[1] + String(parseInt(m[2]) + i).padStart(m[2].length, '0');
-      return base + i;
-    };
-
     const qty = Math.max(1, Math.min(parseInt(cantidad) || 1, 200));
     const fechaParsed = parseFecha(fecha_remito);
     const mId = parseInt(modelo_id) || null;
@@ -135,7 +128,7 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
     const kmVal = parseInt(km) || 0;
     const provId = parseInt(proveedor_id) || null;
     const precioVal = parseFloat(precio) || null;
-    const fuegoBase = fuego.trim();
+    const fuegoBase = sanitizeFuego(fuego);
 
     const fuegosNuevos = Array.from({ length: qty }, (_, i) => nextFuego(fuegoBase, i));
 

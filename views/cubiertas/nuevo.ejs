@@ -85,15 +85,27 @@ ${errorMsg ? `<p class="error-msg">${errorMsg}</p>` : ''}
 $(function() {
   $('#fecha_remito').datepicker({ dateFormat: 'dd/mm/yy' });
 
+  // Quita caracteres invisibles (zero-width, marcas bidi, controles, BOM) que sobreviven
+  // a .trim() y romperían la correlatividad al pegar el número desde otra app.
+  var INVISIBLES = new RegExp(
+    '[\\u0000-\\u001F\\u007F-\\u009F\\u00AD\\u200B-\\u200F\\u2028\\u2029\\u202A-\\u202E\\u2060\\uFEFF]',
+    'g'
+  );
+  function sanitizeFuego(s) {
+    return String(s || '').replace(INVISIBLES, '').trim();
+  }
+
   function nextFuego(base, i) {
     if (i === 0) return base;
-    var m = base.match(/^(.*?)(\d+)$/);
+    // Usar [0-9] y no la clase \d: este script se sirve dentro de un template
+    // literal de Node, y EJS colapsa la barra-d a una simple d al renderizar.
+    var m = base.match(/^(.*?)([0-9]+)$/);
     if (m) return m[1] + String(parseInt(m[2]) + i).padStart(m[2].length, '0');
     return base + i;
   }
 
   function actualizarPreview() {
-    var base = document.getElementById('fuego').value.trim();
+    var base = sanitizeFuego(document.getElementById('fuego').value);
     var qty  = parseInt(document.getElementById('cantidad').value) || 1;
     var prev = document.getElementById('fuego-preview');
     if (!base || qty < 2) { prev.style.display = 'none'; return; }
@@ -111,6 +123,12 @@ $(function() {
       var f = document.getElementById('fuego');
       if (f && !f.value) { f.value = d.sugerido; actualizarPreview(); }
     });
+
+  // Al salir del campo, limpiar el valor visible (y el que se enviará) de invisibles.
+  document.getElementById('fuego').addEventListener('blur', function() {
+    var limpio = sanitizeFuego(this.value);
+    if (limpio !== this.value) { this.value = limpio; actualizarPreview(); }
+  });
 
   document.getElementById('fuego').addEventListener('input', actualizarPreview);
   document.getElementById('cantidad').addEventListener('input', actualizarPreview);

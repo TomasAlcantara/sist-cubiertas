@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
-const { sql } = require('../db');
+const { sql, sanitizeFuego } = require('../db');
 const { requireAuth, requireMaster } = require('../middleware/auth');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -364,7 +364,7 @@ router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
       SELECT fuego FROM cubiertas WHERE activo = 1 ORDER BY id DESC LIMIT 1
     `;
     if (!row?.fuego) return res.json({ sugerido: '1' });
-    const base = row.fuego;
+    const base = sanitizeFuego(row.fuego);
     const m = base.match(/^(.*?)(\d+)$/);
     const sugerido = m ? m[1] + String(parseInt(m[2]) + 1).padStart(m[2].length, '0') : base + '1';
     res.json({ sugerido });
