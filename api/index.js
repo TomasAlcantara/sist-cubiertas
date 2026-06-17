@@ -52,6 +52,7 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, '../public')));
 
 // Routes
+app.use('/health', require('../routes/health')); // chequeo publico para el dashboard de control
 app.use('/', require('../routes/auth'));
 app.use('/almacen', require('../routes/almacen'));
 app.use('/gomerias', require('../routes/gomerias'));
