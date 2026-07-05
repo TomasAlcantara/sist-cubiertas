@@ -1,5 +1,21 @@
 /* ─── Tables — dark industrial theme ─────────────────────────── */
 
+/* ─── Contenedor para hacer las tablas responsive en móviles ─── */
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+}
+.table-responsive table {
+  margin-bottom: 0;
+  border: none;
+  border-radius: 0;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
@@ -26,6 +42,10 @@ table thead th {
   text-align: left;
   white-space: nowrap;
   vertical-align: middle;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 1px 0 var(--border); /* Sombra para simular borde abajo al scrollear */
 }
 
 table tbody td {

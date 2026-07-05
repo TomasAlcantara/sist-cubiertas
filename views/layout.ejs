@@ -9,23 +9,41 @@
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link href="/css/style.css" rel="stylesheet" />
 <link href="/css/tables.css" rel="stylesheet" />
+<!-- CDNs para UI Mejorada -->
+<script src="https://unpkg.com/@phosphor-icons/web"></script>
+<link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+<link href="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/css/tom-select.css" rel="stylesheet">
+
 <link rel="icon" type="image/png" href="/images/icon.png" />
 <script src="/js/jquery.min.js"></script>
 <script src="/js/jquery-ui.min.js"></script>
 <script src="/js/functions.js"></script>
 <script src="/js/calendar/jquery-ui.js"></script>
+<!-- Scripts para UI Mejorada -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tom-select@2.3.1/dist/js/tom-select.complete.min.js"></script>
+
 <link rel="stylesheet" href="/js/calendar/jquery-ui.css">
 <%- typeof extraHead !== 'undefined' ? extraHead : '' %>
 </head>
 <body>
+  <!-- Overlay para menú móvil -->
+  <div class="nav-overlay"></div>
+
   <nav class="nav">
     <a href="/" class="nav-brand">
       <img src="/images/masterbus-logo.png" alt="Master Bus" />
       <span class="nav-brand-sub">Sistema de Cubiertas</span>
     </a>
     <div class="nav-sep"></div>
-    <% if (typeof user !== 'undefined' && user) { %>
-    <ul class="nav-links">
+
+    <button class="mobile-toggle" aria-label="Abrir menú">
+      <i class="ph ph-list"></i>
+    </button>
+
+    <div class="nav-menu">
+      <% if (typeof user !== 'undefined' && user) { %>
+      <ul class="nav-links">
       <li class="<%= currentPage === 'inicio' ? 'active' : '' %>">
         <a href="/">Inicio</a>
       </li>
@@ -43,14 +61,15 @@
       <li class="nav-logout">
         <a href="/logout">Salir</a>
       </li>
-    </ul>
-    <% } else { %>
-    <ul class="nav-links">
-      <li class="nav-logout">
-        <a href="/login">Ingresar</a>
-      </li>
-    </ul>
-    <% } %>
+      </ul>
+      <% } else { %>
+      <ul class="nav-links">
+        <li class="nav-logout">
+          <a href="/login"><i class="ph ph-sign-in"></i> Ingresar</a>
+        </li>
+      </ul>
+      <% } %>
+    </div>
   </nav>
 
   <main class="page-wrap">

@@ -6,38 +6,44 @@ const modules = [
     href: '/almacen',
     label: 'Almacenes',
     desc: 'Gestión de stock e inventario de neumáticos',
-    tag: 'STOCK'
+    tag: 'STOCK',
+    icon: 'ph-warehouse'
   },
   {
     href: '/gomerias',
     label: 'Gomerías',
     desc: 'Talleres habilitados y datos de servicio',
-    tag: 'SERVICIO'
+    tag: 'SERVICIO',
+    icon: 'ph-wrench'
   },
   {
     href: '/OTs/list',
     label: 'Órdenes de Trabajo',
     desc: 'Listado y seguimiento de OTs activas',
     tag: 'OT',
-    featured: true
+    featured: true,
+    icon: 'ph-clipboard-text'
   },
   {
     href: '/CargaKm',
     label: 'Carga de Km',
     desc: 'Registro de kilómetros recorridos por unidad',
-    tag: 'KM'
+    tag: 'KM',
+    icon: 'ph-odometer'
   },
   {
     href: '/cubiertas',
     label: 'Cubiertas',
     desc: 'Inventario y vida útil de neumáticos',
-    tag: 'INV'
+    tag: 'INV',
+    icon: 'ph-circles-three'
   },
   {
     href: '/recapadoras',
     label: 'Recapadoras',
     desc: 'Empresas recapadoras habilitadas',
-    tag: 'RECAP'
+    tag: 'RECAP',
+    icon: 'ph-factory'
   }
 ];
 
@@ -45,7 +51,7 @@ let cards = '';
 for (const m of modules) {
   const cls = 'mod-card' + (m.featured ? ' mod-card--featured' : '');
   cards += '<a href="' + m.href + '" class="' + cls + '">' +
-    '<span class="mod-tag">' + m.tag + '</span>' +
+    '<span class="mod-tag"><i class="ph ' + m.icon + '"></i> ' + m.tag + '</span>' +
     '<div class="mod-name">' + m.label + '</div>' +
     '<div class="mod-desc">' + m.desc + '</div>' +
     '</a>';
