@@ -10,7 +10,8 @@
           "public/**",
           "routes/**",
           "middleware/**",
-          "db/**"
+          "db/**",
+          "lib/**"
         ]
       }
     }

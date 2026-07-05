@@ -12,7 +12,12 @@ jest.mock('../db', () => {
   return { sql: fn };
 });
 
+jest.mock('../lib/mailer', () => ({
+  enviarAvisoPinchadura: jest.fn().mockResolvedValue(undefined),
+}));
+
 const { sql } = require('../db');
+const { enviarAvisoPinchadura } = require('../lib/mailer');
 const app = require('../api/index');
 
 function makeToken(tipo = 1) {
@@ -116,6 +121,73 @@ describe('POST /ajax/nueva_ot', () => {
       .send({ fecha: '15/04/2025' });
     expect(res.status).toBe(302);
     expect(res.headers['location']).toBe('/login');
+  });
+
+  test('con pinchadura=1 → crea la OT y envía el aviso por mail', async () => {
+    sql.mockResolvedValueOnce([{ id: 42 }]); // INSERT ... RETURNING id
+    sql.mockResolvedValue([]);
+    const res = await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '15/04/2025', gomeria_id: 1, unidad_id: 1, cambio: '1', pinchadura: '1' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('42');
+    expect(enviarAvisoPinchadura).toHaveBeenCalledTimes(1);
+    expect(enviarAvisoPinchadura).toHaveBeenCalledWith(expect.objectContaining({ otId: 42 }));
+  });
+
+  test('sin pinchadura → no envía mail', async () => {
+    sql.mockResolvedValueOnce([{ id: 43 }]);
+    sql.mockResolvedValue([]);
+    const res = await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '15/04/2025', gomeria_id: 1, unidad_id: 1, cambio: '1', pinchadura: '0' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('43');
+    expect(enviarAvisoPinchadura).not.toHaveBeenCalled();
+  });
+
+  test('si el mail falla, la OT se crea igual', async () => {
+    sql.mockResolvedValueOnce([{ id: 44 }]);
+    sql.mockResolvedValue([]);
+    enviarAvisoPinchadura.mockRejectedValueOnce(new Error('smtp down'));
+    const res = await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '15/04/2025', gomeria_id: 1, unidad_id: 1, cambio: '1', pinchadura: '1' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('44');
+  });
+});
+
+// ─── POST /ajax/actualizar_ot ─────────────────────────────────
+describe('POST /ajax/actualizar_ot', () => {
+  test('sin campo pinchadura (caso CARGAR) → no explota y no envía mail', async () => {
+    sql.mockResolvedValue([]);
+    const res = await request(app)
+      .post('/ajax/actualizar_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ ot_id: 7, fecha: '15/04/2025', gomeria_id: 1, unidad_id: 1, cambio: '1' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('7');
+    expect(enviarAvisoPinchadura).not.toHaveBeenCalled();
+  });
+
+  test('con pinchadura=1 → actualiza sin enviar mail', async () => {
+    sql.mockResolvedValue([]);
+    const res = await request(app)
+      .post('/ajax/actualizar_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ ot_id: 8, fecha: '15/04/2025', gomeria_id: 1, unidad_id: 1, cambio: '1', pinchadura: '1' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('8');
+    expect(enviarAvisoPinchadura).not.toHaveBeenCalled();
   });
 });
 

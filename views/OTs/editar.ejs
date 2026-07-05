@@ -139,6 +139,7 @@ function guardar_ot() {
             alinear:   document.getElementById('cb_alinear').checked   ? '1':'0',
             balanceo:  document.getElementById('cb_balanceo').checked  ? '1':'0',
             armar:     document.getElementById('cb_armar').checked     ? '1':'0',
+            pinchadura: document.getElementById('cb_pinchadura').checked ? '1':'0',
             cambios_ot_json: JSON.stringify(cambios_ot) },
     success: function(id) {
       if (id) location.href = '/OTs/ver?ot='+id;
@@ -225,6 +226,9 @@ $(function() {
       <label><input type="checkbox" id="cb_alinear"  ${ot.alinear ?'checked':''} /> Alinear</label>
       <label><input type="checkbox" id="cb_balanceo" ${ot.balanceo?'checked':''} /> Balanceo</label>
       <label><input type="checkbox" id="cb_armar"    ${ot.armar   ?'checked':''} /> Armar</label>
+    </div>
+    <div style="margin-top:8px; padding:6px 8px; border:1px solid #c62828; border-radius:4px; background:rgba(198,40,40,0.08);">
+      <label style="color:var(--red-bright, #c62828); font-weight:600;"><input type="checkbox" id="cb_pinchadura" ${ot.pinchadura?'checked':''} /> Por pinchadura (se avisa por email al crear)</label>
     </div>
   </div>
 

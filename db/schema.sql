@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS ots (
   alinear BOOLEAN DEFAULT FALSE,
   balanceo BOOLEAN DEFAULT FALSE,
   armar BOOLEAN DEFAULT FALSE,
+  pinchadura BOOLEAN DEFAULT FALSE,
   observaciones TEXT
 );
 

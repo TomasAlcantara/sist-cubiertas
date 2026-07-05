@@ -283,6 +283,7 @@ window.addEventListener('DOMContentLoaded', function() {
       <div class="ver-meta-item"><strong>Gomería</strong>${ot.gomeria_nombre || '-'}</div>
       <div class="ver-meta-item"><strong>Fecha</strong>${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</div>
       ${trabajos.length ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Trabajos</strong>' + trabajos.join(' · ') + '</div>' : ''}
+      ${ot.pinchadura ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Motivo</strong><span style="color:var(--red-bright); font-weight:bold;">PINCHADURA</span></div>' : ''}
       ${ot.observaciones ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Observaciones</strong>' + ot.observaciones + '</div>' : ''}
       ${ot.factura ? '<div class="ver-meta-item"><strong>Factura</strong>' + ot.factura + '</div>' : ''}
       ${ot.costo   ? '<div class="ver-meta-item"><strong>Costo</strong>$' + ot.costo + '</div>' : ''}

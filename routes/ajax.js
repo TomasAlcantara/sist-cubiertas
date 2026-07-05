@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego } = require('../db');
 const { requireAuth, requireMaster } = require('../middleware/auth');
+const { enviarAvisoPinchadura } = require('../lib/mailer');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -699,7 +700,7 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
 // POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
 router.post('/nueva_ot', requireAuth, async (req, res, next) => {
   try {
-    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
+    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, pinchadura } = req.body;
     if (!fecha) return res.send('');
 
     const parseFecha = (f) => {
@@ -711,11 +712,11 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
     const fechaISO = parseFecha(fecha);
 
     const result = await sql`
-      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, solicitado_por)
+      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, pinchadura, solicitado_por)
       VALUES (
         ${fechaISO}, ${parseInt(gomeria_id)||null}, ${parseInt(unidad_id)||null}, ${observaciones||null},
         ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
-        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${req.user?.usuario || null}
+        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${pinchadura === '1'}, ${req.user?.usuario || null}
       )
       RETURNING id
     `;
@@ -742,6 +743,36 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
       } catch(e) { /* JSON inválido, ignorar */ }
     }
 
+    if (pinchadura === '1') {
+      // En Vercel serverless hay que esperar el envío antes de responder,
+      // pero un fallo del mail no debe romper la creación de la OT.
+      try {
+        const [unidadRow, gomeriaRow, cubs] = await Promise.all([
+          sql`SELECT unidad FROM micro WHERE id = ${parseInt(unidad_id)||0}`,
+          sql`SELECT nombre FROM gomeria WHERE id = ${parseInt(gomeria_id)||0}`,
+          sql`
+            SELECT oc.posicion, c.fuego, ca.fuego AS fuego_anterior
+            FROM ot_cubiertas oc
+            JOIN cubiertas c ON oc.cubierta_id = c.id
+            LEFT JOIN cubiertas ca ON oc.cubierta_anterior_id = ca.id
+            WHERE oc.ot_id = ${ot_id}
+          `,
+        ]);
+        await enviarAvisoPinchadura({
+          otId: ot_id,
+          unidad: unidadRow[0]?.unidad,
+          gomeria: gomeriaRow[0]?.nombre,
+          fecha,
+          trabajos: { rotacion, arreglo, cambio, alinear, balanceo, armar },
+          cambios: cubs.map(c => ({ ...c, posicion: posNombreCierre(c.posicion) })),
+          observaciones,
+          solicitadoPor: req.user?.usuario,
+        });
+      } catch (e) {
+        console.error(`[MAIL pinchadura] OT ${ot_id}: ${e.message}`);
+      }
+    }
+
     res.send(ot_id.toString());
   } catch (err) { next(err); }
 });
@@ -749,7 +780,7 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
 // POST /ajax/actualizar_ot - Editar OT existente (solo si está abierta)
 router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
   try {
-    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar } = req.body;
+    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, pinchadura } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!otIdInt || !fecha) return res.send('');
 
@@ -766,7 +797,8 @@ router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
         fecha = ${fechaISO}, gomeria_id = ${parseInt(gomeria_id)||null}, unidad_id = ${parseInt(unidad_id)||null},
         observaciones = ${observaciones||null},
         rotacion = ${rotacion === '1'}, arreglo = ${arreglo === '1'}, cambio = ${cambio === '1'},
-        alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'}
+        alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'},
+        pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END
       WHERE id = ${otIdInt} AND estado = 0
     `;
 

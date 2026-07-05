@@ -8,6 +8,7 @@ const trabajosTooltip = (o) => {
     ['Alinear',  o.alinear],
     ['Balanceo', o.balanceo],
     ['Armar',    o.armar],
+    ['Pinchadura', o.pinchadura],
   ];
   const filas = items.map(([n, v]) =>
     '<tr><td style="color:var(--text-secondary)">' + n + ':</td><td style="padding-left:6px; color:' + (v ? '#2e7d32' : 'var(--red-bright)') + '; font-weight:bold;">' + (v ? 'SI' : 'NO') + '</td></tr>'
