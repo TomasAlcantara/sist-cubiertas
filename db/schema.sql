@@ -108,6 +108,12 @@ CREATE TABLE IF NOT EXISTS ot_cubiertas (
   PRIMARY KEY (ot_id, cubierta_id)
 );
 
+-- Config clave/valor (credenciales de mail, etc.). Cargar con: node db/set_mail_config.js
+CREATE TABLE IF NOT EXISTS config (
+  clave TEXT PRIMARY KEY,
+  valor TEXT
+);
+
 -- Usuario admin por defecto (password: admin)
 -- El hash se genera al ejecutar db/seed.js
 INSERT INTO usuarios (usuario, password, tipo, nombre, activo)
