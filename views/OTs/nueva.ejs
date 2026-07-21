@@ -291,6 +291,8 @@ function guardar_ot() {
                    document.getElementById('cb_balanceo').checked ||
                    document.getElementById('cb_armar').checked;
   if (!tieneTarea) { alert('Seleccione al menos un trabajo a realizar'); return; }
+  var pinchaduraSel = document.querySelector('input[name="pinchadura_radio"]:checked');
+  if (!pinchaduraSel) { alert('Indique si fue una pinchadura'); return; }
   $.ajax({ type:'POST', url:'/ajax/nueva_ot',
     data: { unidad_id, gomeria_id, fecha,
             observaciones: document.getElementById('observaciones').value,
@@ -300,7 +302,7 @@ function guardar_ot() {
             alinear:   document.getElementById('cb_alinear').checked   ? '1':'0',
             balanceo:  document.getElementById('cb_balanceo').checked  ? '1':'0',
             armar:     document.getElementById('cb_armar').checked     ? '1':'0',
-            pinchadura: document.getElementById('cb_pinchadura').checked ? '1':'0',
+            pinchadura: pinchaduraSel.value,
             cambios_ot_json: JSON.stringify(cambios_ot) },
     success: function(id) {
       if (id) location.href = '/OTs/ver?ot='+id;
@@ -406,8 +408,14 @@ $(function() {
     <label><input type="checkbox" id="cb_balanceo" /> Balanceo</label>
     <label><input type="checkbox" id="cb_armar" /> Armar</label>
   </div>
-  <div style="margin-top:8px; padding:6px 8px; border:1px solid #c62828; border-radius:4px; background:rgba(198,40,40,0.08);">
-    <label style="color:var(--red-bright, #c62828); font-weight:600;"><input type="checkbox" id="cb_pinchadura" /> Por pinchadura (se avisa por email)</label>
+</div>
+
+<!-- Motivo: pinchadura -->
+<div style="width:420px; margin:10px auto; border:1px solid #c62828; border-radius:4px; padding:8px; background:rgba(198,40,40,0.08);">
+  <strong style="color:var(--red-bright, #c62828);">¿Fue una pinchadura?</strong>
+  <div style="margin-top:6px; display:flex; gap:24px;">
+    <label><input type="radio" name="pinchadura_radio" id="pinchadura_si" value="1" /> Sí</label>
+    <label><input type="radio" name="pinchadura_radio" id="pinchadura_no" value="0" /> No</label>
   </div>
 </div>
 
