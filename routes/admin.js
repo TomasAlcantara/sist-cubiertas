@@ -235,7 +235,7 @@ router.get('/anulaOT', requireMaster, async (req, res, next) => {
     const ots = await sql`
       SELECT o.*, r.nombre AS recapadora_nombre FROM ots o
       LEFT JOIN recapadora r ON o.recapadora_id = r.id
-      WHERE o.estado = 0 ORDER BY o.id DESC
+      WHERE o.estado = 0 ORDER BY o.fecha DESC, o.id DESC
     `;
     res.render('admin/anulaOT/index', { user: req.user, ots, currentPage: 'admin' });
   } catch (err) { next(err); }

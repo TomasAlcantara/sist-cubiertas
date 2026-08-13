@@ -19,7 +19,7 @@ router.get('/list', requireAuth, async (req, res, next) => {
         WHERE (${parseInt(gomeria)} = 0 OR o.gomeria_id = ${parseInt(gomeria)})
           AND (${parseInt(unidad)} = 0 OR o.unidad_id = ${parseInt(unidad)})
           AND (${parseInt(estado)} = -1 OR o.estado = ${parseInt(estado)})
-        ORDER BY o.id DESC
+        ORDER BY o.fecha DESC, o.id DESC
       `,
     ]);
 

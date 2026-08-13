@@ -629,10 +629,13 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
     const destinoEsCeamse = destino_almacen_id === 'ceamse';
     const destinoAlmacenId = (!destinoEsCeamse && parseInt(destino_almacen_id)) ? parseInt(destino_almacen_id) : 1;
 
+    const kmCierre = parseInt(km_actual) || 0;
+
     await sql`UPDATE ots SET
       estado = 1,
       factura = ${factura||null},
       costo = ${costo||null},
+      km = ${kmCierre},
       rotacion = ${rotacion === '1'},
       arreglo  = ${arreglo  === '1'},
       cambio   = ${cambio   === '1'},
@@ -644,7 +647,10 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
     const ot = await sql`SELECT unidad_id FROM ots WHERE id = ${otIdInt}`;
     const unidad_id = ot[0]?.unidad_id;
     if (unidad_id) {
-      await sql`UPDATE micro SET km_actual = ${parseInt(km_actual)} WHERE id = ${unidad_id}`;
+      // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar
+      // un kilometraje más reciente cargado a mano en Carga de Km.
+      await sql`UPDATE micro SET km_actual = ${kmCierre}
+        WHERE id = ${unidad_id} AND ${kmCierre} > COALESCE(km_actual, 0)`;
     }
 
     const cambios = await sql`

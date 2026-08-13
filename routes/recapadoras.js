@@ -14,7 +14,7 @@ router.get('/', requireAuth, async (req, res) => {
     LEFT JOIN recapadora r ON o.recapadora_id = r.id
     WHERE (${parseInt(recapadora)} = 0 OR o.recapadora_id = ${parseInt(recapadora)})
       AND (${parseInt(estado)} = -1 OR o.estado = ${parseInt(estado)})
-    ORDER BY o.id DESC
+    ORDER BY o.fecha DESC, o.id DESC
   `;
 
   res.render('recapadoras/index', {

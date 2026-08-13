@@ -829,18 +829,3 @@ p.error-msg {
   .form-card, .ot-section { width: 100%; }
   .field-row { grid-template-columns: 1fr; }
 }
-
-/* Comparativa antes/después en cargar OT */
-.comparativa-wrap {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  margin-top: 8px;
-}
-.comparativa-lado {
-  flex: 1;
-  min-width: 0;
-}
-@media (max-width: 700px) {
-  .comparativa-wrap { flex-direction: column; }
-}

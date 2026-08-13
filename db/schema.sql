@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS ots (
   unidad_id INTEGER REFERENCES micro(id),
   factura VARCHAR(50),
   costo DECIMAL(10,2),
+  km INTEGER,                      -- km de la unidad al momento del cierre
   solicitado_por VARCHAR(100),
   rotacion BOOLEAN DEFAULT FALSE,
   arreglo BOOLEAN DEFAULT FALSE,

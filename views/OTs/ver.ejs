@@ -282,6 +282,7 @@ window.addEventListener('DOMContentLoaded', function() {
       <div class="ver-meta-item"><strong>Estado</strong>${ot.estado == 0 ? 'Pendiente' : 'Cerrada'}</div>
       <div class="ver-meta-item"><strong>Gomería</strong>${ot.gomeria_nombre || '-'}</div>
       <div class="ver-meta-item"><strong>Fecha</strong>${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</div>
+      <div class="ver-meta-item"><strong>Km de la unidad</strong>${ot.km != null ? Number(ot.km).toLocaleString('es-AR') + ' km' : '-'}</div>
       ${trabajos.length ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Trabajos</strong>' + trabajos.join(' · ') + '</div>' : ''}
       ${ot.pinchadura ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Motivo</strong><span style="color:var(--red-bright); font-weight:bold;">PINCHADURA</span></div>' : ''}
       ${ot.observaciones ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Observaciones</strong>' + ot.observaciones + '</div>' : ''}

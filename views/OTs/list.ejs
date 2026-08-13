@@ -214,17 +214,19 @@ function confirmar_cerrar(ot_id) {
     <th>Micro</th>
     <th>Gomería</th>
     <th>Fecha</th>
+    <th>Km</th>
     <th>Solicitó</th>
     <th>Trabajos</th>
     <th>Estado</th>
     <th style="width:160px;">Editar</th>
   </thead>
-  ${ots.length === 0 ? '<tr><td colspan="8" align="center">Sin órdenes de trabajo</td></tr>' :
+  ${ots.length === 0 ? '<tr><td colspan="9" align="center">Sin órdenes de trabajo</td></tr>' :
     ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
       <td align="center">${o.numero || o.id}</td>
       <td align="center">${o.unidad||'-'}</td>
       <td align="center">${o.gomeria_nombre||'-'}</td>
       <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center" style="font-family:var(--font-mono)">${o.km != null ? Number(o.km).toLocaleString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
       <td>${trabajosTooltip(o)}</td>
       <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>

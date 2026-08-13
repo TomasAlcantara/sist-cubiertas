@@ -116,46 +116,6 @@ function renderDiagrama(tipo) {
   });
 }
 
-function mkRuedaStatic(pos) {
-  var curr = unidadActual[pos];
-  var outTxt = curr ? (curr.fuego || '-') : '·';
-  var outCls = curr ? 'rueda-out' : 'rueda-out vacia';
-  return '<div class="rueda" style="cursor:default;">'+
-    '<span class="'+outCls+'">'+outTxt+'</span>'+
-    '</div>';
-}
-
-function renderDiagramaStatic(tipo) {
-  var L = LAYOUTS[tipo] || LAYOUTS[1];
-  var del = L.del, tr1 = L.tr1, tr2 = L.tr2;
-  var midD = Math.ceil(del.length/2), midT = Math.ceil(tr1.length/2);
-  var h = '';
-  h += '<div class="bus-row">';
-  del.slice(0,midD).forEach(function(p){ h += mkRuedaStatic(p); });
-  h += '<div class="bus-spacer"></div><div style="width:200px;"></div><div class="bus-spacer"></div>';
-  del.slice(midD).forEach(function(p){ h += mkRuedaStatic(p); });
-  h += '</div>';
-  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
-  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-side" style="height:'+L.bodyH+'px;"></div><div class="bus-spacer"></div></div>';
-  h += '<div class="bus-row"><div class="bus-spacer"></div><div class="bus-top-bot"></div><div class="bus-spacer"></div></div>';
-  h += '<div class="bus-row">';
-  tr1.slice(0,midT).forEach(function(p){ h += mkRuedaStatic(p); });
-  h += '<div class="bus-axle"></div>';
-  tr1.slice(midT).forEach(function(p){ h += mkRuedaStatic(p); });
-  h += '</div>';
-  if (tr2.length) {
-    var midT2 = Math.ceil(tr2.length/2);
-    h += '<div class="bus-row">';
-    tr2.slice(0,midT2).forEach(function(p){ h += mkRuedaStatic(p); });
-    h += '<div class="bus-axle"></div>';
-    tr2.slice(midT2).forEach(function(p){ h += mkRuedaStatic(p); });
-    h += '</div>';
-  }
-  var auxList = L.aux || ['ra','ra2'];
-  h += '<div class="aux-row"><span>Auxilio</span>' + auxList.map(function(p){ return mkRuedaStatic(p); }).join('') + '</div>';
-  document.getElementById('diagrama-antes').innerHTML = h;
-}
-
 function abrir_modal(pos) {
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
@@ -316,7 +276,6 @@ function finalizar() {
 
 $(function() {
   var tipo = ${ot.tipo_unidad || 1};
-  renderDiagramaStatic(tipo);
   renderDiagrama(tipo);
 });
 </script>
@@ -388,20 +347,12 @@ $(function() {
   <strong style="color:var(--text-primary);">Cubiertas enviadas:</strong> ${fuegosEnviados}
 </div>
 
-<!-- Comparativa: estado actual + cambios propuestos -->
+<!-- Diagrama de cubiertas -->
 <div style="width:420px; margin:10px auto; border:1px solid #333; padding:8px;">
   <strong>Cambio de cubiertas:</strong>
   <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar &nbsp;·&nbsp; Clic en vacía para asignar desde almacén</p>
-  <div class="comparativa-wrap">
-    <div class="comparativa-lado">
-      <div style="text-align:center; font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Estado actual</div>
-      <div id="diagrama-antes" style="text-align:center;"></div>
-    </div>
-    <div class="comparativa-lado">
-      <div style="text-align:center; font-size:11px; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:6px;">Cambios propuestos</div>
-      <div id="diagrama-wrap" style="text-align:center;"></div>
-    </div>
-  </div>
+  <p style="font-size:11px; color:#666; margin:0 0 8px 0;">En cada rueda: arriba la cubierta actual, abajo la que entra.</p>
+  <div id="diagrama-wrap" style="text-align:center;"></div>
 </div>
 
 <hr class="ot-sep">
