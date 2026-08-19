@@ -8,6 +8,7 @@ const trabajosTooltip = (o) => {
     ['Alinear',  o.alinear],
     ['Balanceo', o.balanceo],
     ['Armar',    o.armar],
+    ['Preventivo', o.preventivo],
     ['Pinchadura', o.pinchadura],
   ];
   const filas = items.map(([n, v]) =>
@@ -154,6 +155,7 @@ function confirmar_cerrar(ot_id) {
       alinear:  document.getElementById('cb_ali_cierre').checked ? '1':'0',
       balanceo: document.getElementById('cb_bal_cierre').checked ? '1':'0',
       armar:    document.getElementById('cb_arm_cierre').checked ? '1':'0',
+      preventivo: document.getElementById('cb_pre_cierre').checked ? '1':'0',
       destino_almacen_id: destinoVal
     },
     success: function(data) {

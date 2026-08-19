@@ -1,0 +1,193 @@
+<%
+const currentPage = 'reportes';
+
+const esc = (v) => v == null ? '' : String(v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+
+const estadoNombre = (e) => e==1 ? 'Nueva' : e==2 ? 'Usada' : e==3 ? 'Recapada' : '-';
+const posNombre = (p) => ({
+  ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
+  tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
+  cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2'
+})[p] || (p || '-');
+
+const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-AR') : 'sin dato';
+const fmtKm = (k) => k == null ? 'sin dato' : Number(k).toLocaleString('es-AR');
+
+const EVENTO = {
+  alta:       { label: 'Ingreso al sistema', color: '#5c6bc0' },
+  colocacion: { label: 'Colocación',         color: '#2e7d32' },
+  retiro:     { label: 'Retiro',             color: '#ef6c00' },
+  reparacion: { label: 'Reparación',         color: '#0277bd' },
+  recapado:   { label: 'Recapado',           color: '#6a1b9a' },
+  baja:       { label: 'Baja',               color: '#c62828' },
+};
+
+const ubicacion = (c) => c.unidad ? 'Unidad ' + esc(c.unidad) + (c.posicion ? ' · ' + posNombre(c.posicion) : '')
+  : c.almacen_nombre ? 'Almacén ' + esc(c.almacen_nombre)
+  : c.gomeria_nombre ? 'Gomería ' + esc(c.gomeria_nombre)
+  : c.activo === 0 ? 'Dada de baja' : 'Sin ubicación';
+
+let contenido = '';
+
+if (coincidencias.length) {
+  contenido = `
+  <p style="color:var(--text-muted); font-size:13px; margin-top:14px;">
+    ${coincidencias.length} cubiertas coinciden con "${esc(fuego)}". Elegí una:
+  </p>
+  <table>
+    <thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Ubicación</th><th></th></thead>
+    ${coincidencias.map((c,i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center" style="font-family:var(--font-mono)">${esc(c.fuego)}</td>
+      <td align="center">${esc(c.marca||'')} ${esc(c.modelo_nombre||'')}</td>
+      <td align="center" style="font-family:var(--font-mono)">${esc(c.medida||'-')}</td>
+      <td align="center">${estadoNombre(c.estado)}</td>
+      <td align="center">${ubicacion(c)}</td>
+      <td align="center"><a href="/reportes/historial?id=${c.id}">VER HISTORIAL</a></td>
+    </tr>`).join('')}
+  </table>`;
+} else if (ficha) {
+  const c = ficha.cubierta;
+  const r = ficha.resumen;
+
+  const tarjetas = [
+    ['Km totales registrados', fmtKm(r.kmTotal) + ' km'],
+    ['Reparaciones', r.reparaciones],
+    ['Recapados', r.recapados],
+    ['Unidades por las que pasó', r.unidadesDistintas],
+  ];
+
+  contenido = `
+  <div class="ficha-head">
+    <div>
+      <div class="ficha-fuego">${esc(c.fuego || '-')}</div>
+      <div class="ficha-sub">
+        ${esc(c.marca||'')} ${esc(c.modelo_nombre||'')} · ${esc(c.medida||'sin medida')} · ${estadoNombre(c.estado)}
+      </div>
+    </div>
+    <div class="ficha-ubic">
+      <span>Ubicación actual</span>
+      <strong>${ubicacion(c)}</strong>
+    </div>
+  </div>
+
+  <div class="ficha-cards">
+    ${tarjetas.map(([t,v]) => `<div class="ficha-card"><span>${t}</span><strong>${v}</strong></div>`).join('')}
+  </div>
+
+  ${r.hayIncompletos ? `
+  <p class="ficha-aviso">
+    Algunos tramos no tienen kilometraje en los dos extremos, así que no suman al total.
+    Los km por cubierta se calculan con el kilometraje que se carga al cerrar cada OT:
+    los movimientos anteriores a esa práctica quedan sin medir.
+  </p>` : ''}
+
+  <div class="ficha-titulo">Tramos de montaje</div>
+  ${ficha.tramos.length === 0
+    ? '<p style="color:var(--text-muted); font-size:13px;">Esta cubierta nunca estuvo montada en una unidad.</p>'
+    : `<table>
+      <thead><th>Unidad</th><th>Posición</th><th>Desde</th><th>Hasta</th><th>Km inicio</th><th>Km fin</th><th>Km recorridos</th></thead>
+      ${ficha.tramos.map((t,i) => `<tr class="${i%2===0?'light':'dark'}">
+        <td align="center">${esc(t.unidad || '-')}</td>
+        <td align="center">${posNombre(t.posicion)}</td>
+        <td align="center">${fmtFecha(t.desde)}</td>
+        <td align="center">${t.abierto ? '<em>en curso</em>' : fmtFecha(t.hasta)}</td>
+        <td align="center" style="font-family:var(--font-mono)">${fmtKm(t.km_desde)}</td>
+        <td align="center" style="font-family:var(--font-mono)">${fmtKm(t.km_hasta)}</td>
+        <td align="center" style="font-family:var(--font-mono)">
+          ${t.km == null ? '<span style="color:var(--text-muted)">sin medir</span>' : '<strong>' + fmtKm(t.km) + ' km</strong>'}
+        </td>
+      </tr>`).join('')}
+    </table>`}
+
+  <div class="ficha-titulo">Línea de tiempo</div>
+  ${ficha.eventos.length === 0
+    ? '<p style="color:var(--text-muted); font-size:13px;">Sin eventos registrados.</p>'
+    : `<div class="timeline">
+      ${ficha.eventos.map(e => {
+        const meta = EVENTO[e.tipo] || { label: e.tipo, color: '#777' };
+        const detalles = [
+          e.unidad ? 'Unidad ' + esc(e.unidad) : null,
+          e.posicion ? posNombre(e.posicion) : null,
+          e.km_unidad != null ? fmtKm(e.km_unidad) + ' km' : null,
+        ].filter(Boolean).join(' · ');
+        return `<div class="tl-item">
+          <div class="tl-dot" style="background:${meta.color}"></div>
+          <div class="tl-body">
+            <div class="tl-top">
+              <strong style="color:${meta.color}">${meta.label}</strong>
+              <span class="tl-fecha">${fmtFecha(e.fecha)}</span>
+            </div>
+            ${detalles ? `<div class="tl-meta">${detalles}</div>` : ''}
+            ${e.detalle ? `<div class="tl-detalle">${esc(e.detalle)}</div>` : ''}
+            ${e.ot_id ? `<a class="tl-ot" href="/OTs/ver?ot=${e.ot_id}">Ver OT N° ${e.ot_id}</a>` : ''}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}`;
+} else if (fuego) {
+  contenido = '<p style="color:var(--text-muted); margin-top:14px;">No hay ninguna cubierta con ese número de fuego.</p>';
+} else {
+  contenido = '<p style="color:var(--text-muted); margin-top:14px;">Ingresá un número de fuego para ver toda la vida de esa cubierta.</p>';
+}
+
+const body = `
+<style>
+.ficha-head {
+  display:flex; justify-content:space-between; align-items:flex-start; gap:20px; flex-wrap:wrap;
+  border:1px solid var(--border); border-left:3px solid var(--red);
+  border-radius:var(--radius); padding:14px 16px; margin-top:14px; background:var(--bg-surface);
+}
+.ficha-fuego { font-family:var(--font-mono); font-size:1.9rem; font-weight:700; line-height:1; color:var(--text-primary); }
+.ficha-sub { color:var(--text-secondary); font-size:13px; margin-top:6px; }
+.ficha-ubic { text-align:right; }
+.ficha-ubic span { display:block; font-family:var(--font-mono); font-size:10px; letter-spacing:0.12em;
+  text-transform:uppercase; color:var(--text-muted); margin-bottom:3px; }
+.ficha-ubic strong { font-size:14px; color:var(--text-primary); }
+
+.ficha-cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; margin-top:10px; }
+.ficha-card { border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; background:var(--bg-surface); }
+.ficha-card span { display:block; font-family:var(--font-mono); font-size:10px; letter-spacing:0.1em;
+  text-transform:uppercase; color:var(--text-muted); margin-bottom:5px; }
+.ficha-card strong { font-size:1.25rem; color:var(--text-primary); }
+
+.ficha-aviso { margin-top:12px; padding:10px 12px; border-radius:var(--radius);
+  border:1px solid var(--border-strong); background:var(--bg-surface);
+  color:var(--text-secondary); font-size:12px; line-height:1.5; }
+
+.ficha-titulo { font-family:var(--font-display); font-size:12px; font-weight:700; letter-spacing:0.09em;
+  text-transform:uppercase; color:var(--text-muted); margin:22px 0 8px 0; }
+
+.timeline { border-left:2px solid var(--border-strong); margin-left:7px; padding-left:0; }
+.tl-item { position:relative; padding:0 0 16px 20px; }
+.tl-dot { position:absolute; left:-7px; top:3px; width:12px; height:12px; border-radius:50%;
+  border:2px solid var(--bg-card); }
+.tl-top { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.tl-fecha { font-family:var(--font-mono); font-size:12px; color:var(--text-muted); }
+.tl-meta { font-size:12px; color:var(--text-secondary); margin-top:2px; }
+.tl-detalle { font-size:12px; color:var(--text-muted); margin-top:2px; }
+.tl-ot { display:inline-block; margin-top:4px; font-size:12px; }
+
+@media (max-width:640px) {
+  .ficha-head { flex-direction:column; }
+  .ficha-ubic { text-align:left; }
+}
+</style>
+
+<div class="list-head">
+  <h2>Historial de Cubierta</h2>
+</div>
+
+<form method="get" action="/reportes/historial" class="list-filters">
+  <strong>N° de fuego:</strong>
+  <input type="text" name="fuego" value="${esc(fuego)}" placeholder="Ej: 1234" />
+  <button type="submit" class="btn-filter">Buscar</button>
+</form>
+
+${contenido}
+
+<a href="/reportes" class="list-back">&laquo; Volver</a>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

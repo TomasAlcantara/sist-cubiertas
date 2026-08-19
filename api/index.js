@@ -61,6 +61,7 @@ app.use('/CargaKm', require('../routes/cargaKm'));
 app.use('/cubiertas', require('../routes/cubiertas'));
 app.use('/recapadoras', require('../routes/recapadoras'));
 app.use('/reportes', require('../routes/reportes'));
+app.use('/mantenimiento', require('../routes/mantenimiento'));
 app.use('/admin', require('../routes/admin'));
 app.use('/ajax', require('../routes/ajax'));
 

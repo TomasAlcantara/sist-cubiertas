@@ -50,6 +50,9 @@
       <li class="<%= currentPage === 'reportes' ? 'active' : '' %>">
         <a href="/reportes">Reportes</a>
       </li>
+      <li class="<%= currentPage === 'mantenimiento' ? 'active' : '' %>">
+        <a href="/mantenimiento">Mantenimiento</a>
+      </li>
       <% if (user.tipo === 1) { %>
       <li class="<%= currentPage === 'admin' ? 'active' : '' %>">
         <a href="/admin">Administrar</a>

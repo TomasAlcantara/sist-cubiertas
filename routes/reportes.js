@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { fichaDeCubierta } = require('../lib/cubiertaHistorial');
 
 // GET /reportes
 router.get('/', requireAuth, async (req, res, next) => {
@@ -29,6 +30,43 @@ router.get('/recorrido', requireAuth, async (req, res, next) => {
       `;
     }
     res.render('reportes/recorrido', { user: req.user, cubiertas, fuego, currentPage: 'reportes' });
+  } catch (err) { next(err); }
+});
+
+// GET /reportes/historial - Historial de vida de una cubierta por número de fuego
+router.get('/historial', requireAuth, async (req, res, next) => {
+  try {
+    const fuego = (req.query.fuego || '').trim();
+    const id = parseInt(req.query.id) || 0;
+
+    let ficha = null;
+    let coincidencias = [];
+
+    if (id) {
+      ficha = await fichaDeCubierta(id);
+    } else if (fuego) {
+      coincidencias = await sql`
+        SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado,
+               a.nombre AS almacen_nombre, g.nombre AS gomeria_nombre, mi.unidad
+        FROM cubiertas c
+        LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+        LEFT JOIN medidas med      ON c.medida_id = med.id
+        LEFT JOIN almacen a        ON c.almacen_id = a.id
+        LEFT JOIN gomeria g        ON c.gomeria_id = g.id
+        LEFT JOIN micro mi         ON c.micro_id = mi.id
+        WHERE c.fuego ILIKE ${'%' + fuego + '%'}
+        ORDER BY c.fuego
+        LIMIT 50`;
+      // Un solo resultado: se va directo a la ficha
+      if (coincidencias.length === 1) {
+        ficha = await fichaDeCubierta(coincidencias[0].id);
+        coincidencias = [];
+      }
+    }
+
+    res.render('reportes/historial', {
+      user: req.user, ficha, coincidencias, fuego, currentPage: 'reportes',
+    });
   } catch (err) { next(err); }
 });
 

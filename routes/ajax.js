@@ -5,6 +5,7 @@ const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego } = require('../db');
 const { requireAuth, requireMaster } = require('../middleware/auth');
 const { enviarAvisoPinchadura } = require('../lib/mailer');
+const { registrarEvento } = require('../lib/cubiertaHistorial');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -69,7 +70,19 @@ router.post('/carga_masiva_km', requireAuth, async (req, res, next) => {
 router.post('/mover_cubierta', requireAuth, async (req, res, next) => {
   try {
     const { cubierta, almacen } = req.body;
-    await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen) || null}, gomeria_id = NULL, micro_id = NULL, posicion = NULL WHERE id = ${parseInt(cubierta) || 0}`;
+    const cubId = parseInt(cubierta) || 0;
+    // Si estaba montada, moverla a un almacén es un retiro y hay que dejarlo en el historial
+    const antes = await sql`SELECT micro_id, posicion FROM cubiertas WHERE id = ${cubId}`;
+    await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen) || null}, gomeria_id = NULL, micro_id = NULL, posicion = NULL WHERE id = ${cubId}`;
+    if (antes[0] && antes[0].micro_id) {
+      const km = await sql`SELECT km_actual FROM micro WHERE id = ${antes[0].micro_id}`;
+      await registrarEvento({
+        cubierta_id: cubId, tipo: 'retiro', fecha: new Date().toISOString().slice(0, 10),
+        micro_id: antes[0].micro_id, posicion: antes[0].posicion,
+        km_unidad: km[0] ? km[0].km_actual : null,
+        detalle: 'Movida a almacén por fuera de una OT',
+      });
+    }
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -78,7 +91,15 @@ router.post('/mover_cubierta', requireAuth, async (req, res, next) => {
 router.post('/nuevo_estado', requireAuth, async (req, res, next) => {
   try {
     const { r_id, estado } = req.body;
-    await sql`UPDATE cubiertas SET estado = ${parseInt(estado)} WHERE id = ${parseInt(r_id) || 0}`;
+    const cubId = parseInt(r_id) || 0;
+    const previa = await sql`SELECT estado FROM cubiertas WHERE id = ${cubId}`;
+    await sql`UPDATE cubiertas SET estado = ${parseInt(estado)} WHERE id = ${cubId}`;
+    if (parseInt(estado) === 3 && previa[0] && previa[0].estado !== 3) {
+      await registrarEvento({
+        cubierta_id: cubId, tipo: 'recapado', fecha: new Date().toISOString().slice(0, 10),
+        detalle: 'Marcada como recapada',
+      });
+    }
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -569,6 +590,7 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
             <span>Alinear: ${siNo(ot.alinear)}</span>
             <span>Balanceo: ${siNo(ot.balanceo)}</span>
             <span>Armar: ${siNo(ot.armar)}</span>
+            <span>Preventivo: ${siNo(ot.preventivo)}</span>
           </div>
 
           <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
@@ -582,6 +604,7 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
             ${chk('cb_ali_cierre', ot.alinear,  'Alinear')}
             ${chk('cb_bal_cierre', ot.balanceo, 'Balanceo')}
             ${chk('cb_arm_cierre', ot.armar,    'Armar')}
+            ${chk('cb_pre_cierre', ot.preventivo, 'Preventivo')}
           </div>
 
           <p style="margin:10px 0 3px 0;"><strong>Número de Factura:</strong></p>
@@ -623,7 +646,7 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
 // POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
 router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
   try {
-    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, destino_almacen_id } = req.body;
+    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, destino_almacen_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!km_actual || !otIdInt) return res.status(400).send('Datos requeridos');
     const destinoEsCeamse = destino_almacen_id === 'ceamse';
@@ -641,16 +664,29 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
       cambio   = ${cambio   === '1'},
       alinear  = ${alinear  === '1'},
       balanceo = ${balanceo === '1'},
-      armar    = ${armar    === '1'}
+      armar    = ${armar    === '1'},
+      preventivo = ${preventivo === '1'}
     WHERE id = ${otIdInt}`;
 
-    const ot = await sql`SELECT unidad_id FROM ots WHERE id = ${otIdInt}`;
+    const ot = await sql`SELECT unidad_id, fecha FROM ots WHERE id = ${otIdInt}`;
     const unidad_id = ot[0]?.unidad_id;
+    const otFecha = ot[0]?.fecha || null;
     if (unidad_id) {
       // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar
       // un kilometraje más reciente cargado a mano en Carga de Km.
       await sql`UPDATE micro SET km_actual = ${kmCierre}
         WHERE id = ${unidad_id} AND ${kmCierre} > COALESCE(km_actual, 0)`;
+
+      // Fechas de mantenimiento: solo avanzan, para que cerrar una OT vieja no
+      // haga parecer que el servicio se hizo después de lo que realmente se hizo.
+      if (otFecha && alinear === '1') {
+        await sql`UPDATE micro SET ultima_alineacion = ${otFecha}
+          WHERE id = ${unidad_id} AND (ultima_alineacion IS NULL OR ultima_alineacion < ${otFecha})`;
+      }
+      if (otFecha && preventivo === '1') {
+        await sql`UPDATE micro SET ultimo_preventivo = ${otFecha}
+          WHERE id = ${unidad_id} AND (ultimo_preventivo IS NULL OR ultimo_preventivo < ${otFecha})`;
+      }
     }
 
     const cambios = await sql`
@@ -699,6 +735,43 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
       }
     }
 
+    // Paso 3: registrar el historial de vida de las cubiertas involucradas.
+    // Primero los retiros y después las colocaciones: en una rotación la misma
+    // cubierta sale de una posición y entra en otra dentro de la misma OT, y el
+    // orden de los eventos es lo que define dónde se corta cada tramo de km.
+    for (const c of cambios) {
+      if (!c.cubierta_anterior_id) continue;
+      const saleDeLaUnidad = !incomingIds.has(c.cubierta_anterior_id);
+      await registrarEvento({
+        cubierta_id: c.cubierta_anterior_id, tipo: 'retiro', fecha: otFecha,
+        micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
+        detalle: saleDeLaUnidad
+          ? (destinoEsCeamse ? 'Sale de la unidad — baja por CEAMSE' : 'Sale de la unidad al almacén')
+          : 'Cambia de posición dentro de la unidad (rotación)',
+      });
+      if (arreglo === '1') {
+        await registrarEvento({
+          cubierta_id: c.cubierta_anterior_id, tipo: 'reparacion', fecha: otFecha,
+          micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
+          detalle: 'Arreglo registrado en la OT N° ' + otIdInt,
+        });
+      }
+      if (saleDeLaUnidad && destinoEsCeamse) {
+        await registrarEvento({
+          cubierta_id: c.cubierta_anterior_id, tipo: 'baja', fecha: otFecha,
+          micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
+          detalle: 'Baja por CEAMSE',
+        });
+      }
+    }
+    for (const c of cambios) {
+      await registrarEvento({
+        cubierta_id: c.cubierta_id, tipo: 'colocacion', fecha: otFecha,
+        micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
+        detalle: 'Entra por OT N° ' + otIdInt,
+      });
+    }
+
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -706,7 +779,7 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
 // POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
 router.post('/nueva_ot', requireAuth, async (req, res, next) => {
   try {
-    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, pinchadura } = req.body;
+    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
     if (!fecha) return res.send('');
 
     const parseFecha = (f) => {
@@ -718,11 +791,11 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
     const fechaISO = parseFecha(fecha);
 
     const result = await sql`
-      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, pinchadura, solicitado_por)
+      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, solicitado_por)
       VALUES (
         ${fechaISO}, ${parseInt(gomeria_id)||null}, ${parseInt(unidad_id)||null}, ${observaciones||null},
         ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
-        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${pinchadura === '1'}, ${req.user?.usuario || null}
+        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${preventivo === '1'}, ${pinchadura === '1'}, ${req.user?.usuario || null}
       )
       RETURNING id
     `;
@@ -786,7 +859,7 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
 // POST /ajax/actualizar_ot - Editar OT existente (solo si está abierta)
 router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
   try {
-    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, pinchadura } = req.body;
+    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!otIdInt || !fecha) return res.send('');
 
@@ -804,6 +877,7 @@ router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
         observaciones = ${observaciones||null},
         rotacion = ${rotacion === '1'}, arreglo = ${arreglo === '1'}, cambio = ${cambio === '1'},
         alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'},
+        preventivo = CASE WHEN ${preventivo === undefined} THEN preventivo ELSE ${preventivo === '1'} END,
         pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END
       WHERE id = ${otIdInt} AND estado = 0
     `;

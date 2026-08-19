@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS micro (
   descripcion VARCHAR(200),
   km_actual INTEGER DEFAULT 0,
   tipo_unidad SMALLINT DEFAULT 1,  -- 1, 2, 3 o 4 (tipo de vehículo)
+  ultima_alineacion DATE,          -- se actualiza al cerrar una OT con "Alinear"
+  ultimo_preventivo DATE,          -- se actualiza al cerrar una OT con "Preventivo"
   activo SMALLINT DEFAULT 1
 );
 
@@ -97,6 +99,7 @@ CREATE TABLE IF NOT EXISTS ots (
   alinear BOOLEAN DEFAULT FALSE,
   balanceo BOOLEAN DEFAULT FALSE,
   armar BOOLEAN DEFAULT FALSE,
+  preventivo BOOLEAN DEFAULT FALSE,
   pinchadura BOOLEAN DEFAULT FALSE,
   observaciones TEXT
 );
@@ -109,7 +112,30 @@ CREATE TABLE IF NOT EXISTS ot_cubiertas (
   PRIMARY KEY (ot_id, cubierta_id)
 );
 
--- Config clave/valor (credenciales de mail, etc.). Cargar con: node db/set_mail_config.js
+-- Historial de vida de cada cubierta. Se llena solo al cerrar OTs.
+-- Para datos ya existentes: node db/backfill_cubierta_eventos.js
+CREATE TABLE IF NOT EXISTS cubierta_eventos (
+  id SERIAL PRIMARY KEY,
+  cubierta_id INTEGER NOT NULL REFERENCES cubiertas(id) ON DELETE CASCADE,
+  tipo VARCHAR(20) NOT NULL,   -- alta | colocacion | retiro | reparacion | recapado | baja
+  fecha DATE,                  -- NULL = sin dato (movimientos previos al historial)
+  micro_id INTEGER REFERENCES micro(id),
+  posicion VARCHAR(10),
+  km_unidad INTEGER,           -- km de la unidad al momento del evento
+  ot_id INTEGER REFERENCES ots(id) ON DELETE SET NULL,
+  detalle TEXT,
+  origen VARCHAR(10) DEFAULT 'sistema',  -- sistema | backfill
+  creado_en TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cub_ev_cubierta ON cubierta_eventos (cubierta_id, fecha, id);
+CREATE INDEX IF NOT EXISTS idx_cub_ev_ot ON cubierta_eventos (ot_id);
+-- Evita duplicar eventos si se reprocesa el cierre de una misma OT
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cub_ev_unico
+  ON cubierta_eventos (cubierta_id, tipo, ot_id) WHERE ot_id IS NOT NULL;
+
+-- Config clave/valor (credenciales de mail, intervalos de mantenimiento, etc.).
+-- Mail: node db/set_mail_config.js
+-- Intervalos: dias_alineacion (default 180) y dias_preventivo (default 45)
 CREATE TABLE IF NOT EXISTS config (
   clave TEXT PRIMARY KEY,
   valor TEXT

@@ -1,0 +1,98 @@
+<%
+const currentPage = 'mantenimiento';
+
+const esc = (v) => v == null ? '' : String(v)
+  .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+  .replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+
+const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-AR') : null;
+
+// Un servicio sin fecha registrada no es "al día": es desconocido, y hay que hacerlo.
+const estadoDe = (dias) => {
+  if (dias === null || dias === undefined) return { clase:'sin-dato', texto:'Sin registro', orden:0 };
+  const d = Number(dias);
+  if (d < 0)   return { clase:'vencido',  texto:'Vencido hace ' + Math.abs(d) + ' d', orden:1 };
+  if (d <= 15) return { clase:'proximo',  texto:'En ' + d + ' d',                     orden:2 };
+  return { clase:'al-dia', texto:'En ' + d + ' d', orden:3 };
+};
+
+const filas = unidades.map(u => {
+  const ali = estadoDe(u.dias_alineacion);
+  const pre = estadoDe(u.dias_preventivo);
+  return { u, ali, pre, prioridad: Math.min(ali.orden, pre.orden) };
+});
+// Primero lo que falta hacer: sin registro, vencidos, y después el resto
+filas.sort((a, b) => a.prioridad - b.prioridad || String(a.u.unidad).localeCompare(String(b.u.unidad), 'es', { numeric: true }));
+
+const cuenta = (clase) => filas.filter(f => f.ali.clase === clase || f.pre.clase === clase).length;
+
+const celda = (est, fecha, proxima) => `
+  <td align="center">
+    <span class="badge ${est.clase}">${est.texto}</span>
+    <div class="celda-sub">
+      ${fecha ? 'Último: ' + fecha : 'Nunca registrado'}
+      ${proxima ? '<br>Vence: ' + proxima : ''}
+    </div>
+  </td>`;
+
+const body = `
+<style>
+.mant-resumen { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin:14px 0 6px 0; }
+.mant-card { border:1px solid var(--border); border-radius:var(--radius); padding:12px 14px; background:var(--bg-surface); }
+.mant-card span { display:block; font-family:var(--font-mono); font-size:10px; letter-spacing:0.1em;
+  text-transform:uppercase; color:var(--text-muted); margin-bottom:5px; }
+.mant-card strong { font-size:1.5rem; }
+
+.badge { display:inline-block; padding:3px 9px; border-radius:999px; font-family:var(--font-mono);
+  font-size:11px; font-weight:700; white-space:nowrap; }
+.badge.vencido  { background:rgba(198,40,40,0.14);  color:#c62828; }
+.badge.proximo  { background:rgba(230,126,34,0.16); color:#e67e22; }
+.badge.al-dia   { background:rgba(46,125,50,0.14);  color:#2e7d32; }
+.badge.sin-dato { background:rgba(120,120,120,0.16); color:var(--text-muted); }
+
+.celda-sub { font-family:var(--font-mono); font-size:10.5px; color:var(--text-muted); margin-top:4px; line-height:1.4; }
+
+.mant-nota { margin-top:14px; padding:10px 12px; border-radius:var(--radius);
+  border:1px solid var(--border-strong); background:var(--bg-surface);
+  color:var(--text-secondary); font-size:12px; line-height:1.55; }
+</style>
+
+<div class="list-head">
+  <h2>Mantenimiento por Unidad</h2>
+</div>
+
+<div class="mant-resumen">
+  <div class="mant-card"><span>Unidades</span><strong>${filas.length}</strong></div>
+  <div class="mant-card"><span>Con algo vencido</span><strong style="color:#c62828">${cuenta('vencido')}</strong></div>
+  <div class="mant-card"><span>Vencen en 15 días</span><strong style="color:#e67e22">${cuenta('proximo')}</strong></div>
+  <div class="mant-card"><span>Sin registro</span><strong style="color:var(--text-muted)">${cuenta('sin-dato')}</strong></div>
+</div>
+
+<table>
+  <thead>
+    <th>Unidad</th>
+    <th>Km actual</th>
+    <th>Alineación (cada ${cfg.dias_alineacion} d)</th>
+    <th>Preventivo (cada ${cfg.dias_preventivo} d)</th>
+    <th></th>
+  </thead>
+  ${filas.length === 0 ? '<tr><td colspan="5" align="center">Sin unidades activas</td></tr>' :
+    filas.map((f, i) => `<tr class="${i%2===0?'light':'dark'}">
+      <td align="center"><strong>${esc(f.u.unidad)}</strong>${f.u.descripcion ? '<div class="celda-sub">' + esc(f.u.descripcion) + '</div>' : ''}</td>
+      <td align="center" style="font-family:var(--font-mono)">${f.u.km_actual != null ? Number(f.u.km_actual).toLocaleString('es-AR') : '-'}</td>
+      ${celda(f.ali, fmtFecha(f.u.ultima_alineacion), fmtFecha(f.u.proxima_alineacion))}
+      ${celda(f.pre, fmtFecha(f.u.ultimo_preventivo), fmtFecha(f.u.proximo_preventivo))}
+      <td align="center"><a href="/OTs/nueva">NUEVA OT</a></td>
+    </tr>`).join('')
+  }
+</table>
+
+<p class="mant-nota">
+  Las fechas se actualizan solas al cerrar una OT con "Alinear" o "Preventivo" marcado.
+  Las unidades que figuran <strong>sin registro</strong> son las que todavía no pasaron por
+  ninguna OT con esos trabajos desde que se empezó a registrar: no significa que no se les
+  haya hecho el servicio, sino que no quedó asentado en el sistema.
+</p>
+`;
+%>
+<%- include('../layout', { body, user, currentPage }) %>

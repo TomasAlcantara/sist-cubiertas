@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego, nextFuego } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { registrarEvento } = require('../lib/cubiertaHistorial');
 
 const PER_PAGE = 25;
 
@@ -171,6 +172,16 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
         `;
       }
     }
+
+    // Alta en el historial de vida de cada cubierta recién cargada
+    const creadas = await sql`SELECT id FROM cubiertas WHERE fuego = ANY(${fuegosNuevos}) AND activo = 1`;
+    for (const c of creadas) {
+      await registrarEvento({
+        cubierta_id: c.id, tipo: 'alta', fecha: fechaParsed,
+        detalle: remito?.trim() ? 'Remito ' + remito.trim() : null,
+      });
+    }
+
     res.redirect('/cubiertas');
   } catch (err) { next(err); }
 });
@@ -201,6 +212,8 @@ router.post('/editar', requireAuth, async (req, res, next) => {
     const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
     if (!id || !fuego) return res.redirect('/cubiertas');
 
+    const previa = await sql`SELECT estado FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
+
     const parseFecha = (f) => {
       if (!f) return null;
       const p = f.split('/');
@@ -224,6 +237,15 @@ router.post('/editar', requireAuth, async (req, res, next) => {
         fecha_remito = ${parseFecha(fecha_remito)}
       WHERE id = ${parseInt(id) || 0}
     `;
+
+    // Pasar a "Recapada" es un hito de la vida de la cubierta
+    if (parseInt(estado) === 3 && previa[0] && previa[0].estado !== 3) {
+      await registrarEvento({
+        cubierta_id: parseInt(id), tipo: 'recapado', fecha: new Date().toISOString().slice(0, 10),
+        detalle: 'Marcada como recapada',
+      });
+    }
+
     res.redirect('/cubiertas');
   } catch (err) { next(err); }
 });
