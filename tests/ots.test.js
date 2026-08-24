@@ -20,12 +20,10 @@ const { sql } = require('../db');
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const app = require('../api/index');
 
-function makeToken(tipo = 1) {
-  return jwt.sign(
-    { id: 1, usuario: 'test', tipo, nombre: 'Test' },
-    process.env.JWT_SECRET,
-    { expiresIn: '1h' }
-  );
+function makeToken(tipo = 1, permisos) {
+  const payload = { id: 1, usuario: 'test', tipo, nombre: 'Test' };
+  if (permisos !== undefined) payload.permisos = permisos;
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
 
 beforeEach(() => {
@@ -233,5 +231,116 @@ describe('POST /ajax/anular_ot', () => {
     expect(res.status).toBe(200);
     expect(res.text).toBe('ok');
     expect(sql).toHaveBeenCalled();
+  });
+});
+
+// ─── Permisos: compatibilidad con usuarios anteriores ─────────
+describe('permisosDe — usuarios sin la columna cargada', () => {
+  const { permisosDe, PRESETS, TODOS, sanitizarPermisos } = require('../lib/permisos');
+
+  test('tipo Master sin permisos → todos (no se queda afuera al deployar)', () => {
+    expect(permisosDe({ tipo: 1 })).toEqual(TODOS);
+  });
+
+  test('tipo Gomería sin permisos → preset gomero', () => {
+    expect(permisosDe({ tipo: 0 })).toEqual(PRESETS.gomero);
+  });
+
+  test('permisos explícitos ganan sobre el tipo', () => {
+    expect(permisosDe({ tipo: 1, permisos: 'ot_ver' })).toEqual(['ot_ver']);
+  });
+
+  test('slugs inventados se descartan', () => {
+    expect(sanitizarPermisos('ot_ver,borrar_todo,admin')).toEqual(['ot_ver', 'admin']);
+  });
+
+  test('CSV vacío → cae al fallback por tipo, no a lista vacía', () => {
+    expect(permisosDe({ tipo: 1, permisos: '   ' })).toEqual(TODOS);
+  });
+});
+
+// ─── Motivo rotura ────────────────────────────────────────────
+describe('POST /ajax/nueva_ot — motivo rotura', () => {
+  test('rotura=1 se persiste y NO dispara mail', async () => {
+    sql.mockResolvedValue([{ id: 77 }]);
+    const res = await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '20/08/2026', unidad_id: 1, gomeria_id: 1, cambio: '1', pinchadura: '0', rotura: '1' });
+
+    expect(res.status).toBe(200);
+    expect(enviarAvisoPinchadura).not.toHaveBeenCalled();
+
+    // El INSERT lleva la columna rotura
+    const inserts = sql.mock.calls.filter(c => String(c[0]).includes('INSERT INTO ots'));
+    expect(inserts.length).toBeGreaterThan(0);
+    expect(String(inserts[0][0])).toContain('rotura');
+  });
+
+  test('pinchadura=1 sigue disparando el mail', async () => {
+    sql.mockResolvedValue([{ id: 78 }]);
+    await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '20/08/2026', unidad_id: 1, gomeria_id: 1, cambio: '1', pinchadura: '1', rotura: '0' });
+
+    expect(enviarAvisoPinchadura).toHaveBeenCalled();
+  });
+});
+
+// ─── Mediciones de profundidad ────────────────────────────────
+describe('POST /ajax/nueva_ot — mediciones de profundidad', () => {
+  const insertsMediciones = () =>
+    sql.mock.calls.filter(c => String(c[0]).includes('INSERT INTO ot_mediciones'));
+
+  test('JSON inválido no tumba la creación de la OT', async () => {
+    sql.mockResolvedValue([{ id: 90 }]);
+    const res = await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
+              mediciones_json: '{esto no es json' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('90');
+  });
+
+  test('valores válidos se insertan', async () => {
+    sql.mockResolvedValue([{ id: 91 }]);
+    await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
+              mediciones_json: JSON.stringify({ ddi: { ext: 8.5, int: 3 } }) });
+    expect(insertsMediciones().length).toBe(1);
+  });
+
+  test('valores fuera de rango o no numéricos se descartan', async () => {
+    sql.mockResolvedValue([{ id: 92 }]);
+    await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
+              mediciones_json: JSON.stringify({
+                ddi: { ext: 999, int: 'ocho' },   // ambos inválidos → no se inserta
+                ddd: { ext: -3, int: null },      // ambos inválidos → no se inserta
+                tie: { ext: 7.5, int: 'x' },      // ext válido → sí se inserta
+              }) });
+    expect(insertsMediciones().length).toBe(1);
+  });
+
+  test('posición con nombre absurdo se ignora', async () => {
+    sql.mockResolvedValue([{ id: 93 }]);
+    await request(app)
+      .post('/ajax/nueva_ot')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
+              mediciones_json: JSON.stringify({ 'posicion-larguisima-invalida': { ext: 5 } }) });
+    expect(insertsMediciones().length).toBe(0);
   });
 });

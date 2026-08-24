@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
 const { requirePerm } = require('../middleware/auth');
+const { leerConfigInt, MM_DEFAULTS } = require('../lib/config');
 
 // GET /OTs/list
 router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
@@ -33,14 +34,15 @@ router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
 // GET /OTs/nueva
 router.get('/nueva', requirePerm('ot_crear'), async (req, res, next) => {
   try {
-    const [gomerias, unidades, almacenes, modelos, medidas] = await Promise.all([
+    const [gomerias, unidades, almacenes, modelos, medidas, cfg] = await Promise.all([
       sql`SELECT * FROM gomeria WHERE activo = 1 ORDER BY nombre`,
       sql`SELECT * FROM micro WHERE activo = 1 ORDER BY unidad`,
       sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
       sql`SELECT * FROM marcas_ruedas ORDER BY marca, modelo`,
       sql`SELECT * FROM medidas ORDER BY medida`,
+      leerConfigInt(MM_DEFAULTS),
     ]);
-    res.render('OTs/nueva', { user: req.user, gomerias, unidades, almacenes, modelos, medidas, currentPage: 'inicio' });
+    res.render('OTs/nueva', { user: req.user, gomerias, unidades, almacenes, modelos, medidas, cfg, currentPage: 'inicio' });
   } catch (err) { next(err); }
 });
 
@@ -58,9 +60,9 @@ router.get('/ver', requirePerm('ot_ver'), async (req, res, next) => {
     `;
     if (!rows.length) return res.redirect('/OTs/list');
 
-    const [cubiertas, unitTires] = await Promise.all([
+    const [cubiertas, unitTires, mediciones, cfg] = await Promise.all([
       sql`
-        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m2.medida, oc.posicion
+        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m2.medida, m2.presion, oc.posicion
         FROM ot_cubiertas oc
         JOIN cubiertas c ON oc.cubierta_id = c.id
         LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
@@ -71,9 +73,20 @@ router.get('/ver', requirePerm('ot_ver'), async (req, res, next) => {
       rows[0].unidad_id
         ? sql`SELECT c.id, c.fuego, c.posicion, c.estado FROM cubiertas c WHERE c.micro_id = ${rows[0].unidad_id} AND c.activo = 1 AND c.posicion IS NOT NULL`
         : Promise.resolve([]),
+      sql`
+        SELECT om.posicion, om.mm_ext, om.mm_int, c.fuego
+        FROM ot_mediciones om
+        LEFT JOIN cubiertas c ON om.cubierta_id = c.id
+        WHERE om.ot_id = ${parseInt(ot) || 0}
+        ORDER BY om.posicion
+      `,
+      leerConfigInt(MM_DEFAULTS),
     ]);
 
-    res.render('OTs/ver', { user: req.user, ot: rows[0], cubiertas, unitTires, currentPage: 'inicio' });
+    res.render('OTs/ver', {
+      user: req.user, ot: rows[0], cubiertas, unitTires,
+      mediciones: mediciones || [], cfg, currentPage: 'inicio',
+    });
   } catch (err) { next(err); }
 });
 

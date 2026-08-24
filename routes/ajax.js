@@ -7,6 +7,7 @@ const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth'
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
 const { sanitizarPermisos } = require('../lib/permisos');
+const { parseFecha } = require('../lib/fechas');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -603,6 +604,8 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
             <span>Balanceo: ${siNo(ot.balanceo)}</span>
             <span>Armar: ${siNo(ot.armar)}</span>
             <span>Preventivo: ${siNo(ot.preventivo)}</span>
+            <span>Pinchadura: ${siNo(ot.pinchadura)}</span>
+            <span>Rotura: ${siNo(ot.rotura)}</span>
           </div>
 
           <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
@@ -788,26 +791,62 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
   } catch (err) { next(err); }
 });
 
+/**
+ * Guarda la profundidad de dibujo medida por posición.
+ *
+ * La medición pertenece a la cubierta que el gomero tuvo en la mano, o sea la
+ * que estaba montada al abrir la OT — no la que entra por el cambio. Por eso
+ * `cubierta_id` se resuelve contra lo que hay montado hoy en esa posición.
+ */
+async function guardarMediciones(otId, unidadId, mediciones) {
+  if (!mediciones || typeof mediciones !== 'object') return;
+
+  const montadas = unidadId
+    ? await sql`SELECT id, posicion FROM cubiertas WHERE micro_id = ${unidadId} AND activo = 1 AND posicion IS NOT NULL`
+    : [];
+  const porPosicion = {};
+  for (const c of montadas) porPosicion[c.posicion] = c.id;
+
+  // Valor válido: número entre 0 y 30 mm. Cualquier otra cosa se descarta en
+  // silencio en vez de romper la carga entera de la OT.
+  const mm = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n >= 0 && n <= 30 ? Math.round(n * 10) / 10 : null;
+  };
+
+  for (const [posicion, valores] of Object.entries(mediciones)) {
+    if (!posicion || typeof posicion !== 'string' || posicion.length > 10) continue;
+    if (!valores || typeof valores !== 'object') continue;
+
+    const ext = mm(valores.ext);
+    const int = mm(valores.int);
+    if (ext === null && int === null) continue;
+
+    await sql`
+      INSERT INTO ot_mediciones (ot_id, posicion, cubierta_id, mm_ext, mm_int)
+      VALUES (${otId}, ${posicion}, ${porPosicion[posicion] || null}, ${ext}, ${int})
+      ON CONFLICT (ot_id, posicion)
+      DO UPDATE SET cubierta_id = EXCLUDED.cubierta_id, mm_ext = EXCLUDED.mm_ext, mm_int = EXCLUDED.mm_int
+    `;
+  }
+}
+
 // POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
 router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
   try {
-    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
+    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura } = req.body;
     if (!fecha) return res.send('');
 
-    const parseFecha = (f) => {
-      const p = f.split('/');
-      if (p.length !== 3) return f;
-      const year = p[2].length === 2 ? '20' + p[2] : p[2];
-      return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-    };
     const fechaISO = parseFecha(fecha);
 
     const result = await sql`
-      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, solicitado_por)
+      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura, solicitado_por)
       VALUES (
         ${fechaISO}, ${parseInt(gomeria_id)||null}, ${parseInt(unidad_id)||null}, ${observaciones||null},
         ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
-        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${preventivo === '1'}, ${pinchadura === '1'}, ${req.user?.usuario || null}
+        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${preventivo === '1'},
+        ${pinchadura === '1'}, ${rotura === '1'}, ${req.user?.usuario || null}
       )
       RETURNING id
     `;
@@ -832,6 +871,17 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
           `;
         }
       } catch(e) { /* JSON inválido, ignorar */ }
+    }
+
+    // Profundidad de dibujo medida por el gomero, en su propio try/catch: una
+    // medición mal formada no puede tumbar la creación de la OT.
+    const medicionesJson = req.body.mediciones_json;
+    if (medicionesJson) {
+      try {
+        await guardarMediciones(ot_id, parseInt(unidad_id) || null, JSON.parse(medicionesJson));
+      } catch (e) {
+        console.error(`[mediciones] OT ${ot_id}: ${e.message}`);
+      }
     }
 
     if (pinchadura === '1') {
@@ -871,16 +921,10 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
 // POST /ajax/actualizar_ot - Editar OT existente (solo si está abierta)
 router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) => {
   try {
-    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
+    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!otIdInt || !fecha) return res.send('');
 
-    const parseFecha = (f) => {
-      const p = f.split('/');
-      if (p.length !== 3) return f;
-      const year = p[2].length === 2 ? '20' + p[2] : p[2];
-      return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-    };
     const fechaISO = parseFecha(fecha);
 
     await sql`
@@ -890,7 +934,8 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
         rotacion = ${rotacion === '1'}, arreglo = ${arreglo === '1'}, cambio = ${cambio === '1'},
         alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'},
         preventivo = CASE WHEN ${preventivo === undefined} THEN preventivo ELSE ${preventivo === '1'} END,
-        pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END
+        pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END,
+        rotura = CASE WHEN ${rotura === undefined} THEN rotura ELSE ${rotura === '1'} END
       WHERE id = ${otIdInt} AND estado = 0
     `;
 

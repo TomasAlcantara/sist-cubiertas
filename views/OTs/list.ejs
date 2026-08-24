@@ -10,6 +10,7 @@ const trabajosTooltip = (o) => {
     ['Armar',    o.armar],
     ['Preventivo', o.preventivo],
     ['Pinchadura', o.pinchadura],
+    ['Rotura',     o.rotura],
   ];
   const filas = items.map(([n, v]) =>
     '<tr><td style="color:var(--text-secondary)">' + n + ':</td><td style="padding-left:6px; color:' + (v ? '#2e7d32' : 'var(--red-bright)') + '; font-weight:bold;">' + (v ? 'SI' : 'NO') + '</td></tr>'
@@ -216,18 +217,20 @@ function confirmar_cerrar(ot_id) {
     <th>Micro</th>
     <th>Gomería</th>
     <th>Fecha</th>
+    <th>Alta</th>
     <th>Km</th>
     <th>Solicitó</th>
     <th>Trabajos</th>
     <th>Estado</th>
     <th style="width:160px;">Editar</th>
   </thead>
-  ${ots.length === 0 ? '<tr><td colspan="9" align="center">Sin órdenes de trabajo</td></tr>' :
+  ${ots.length === 0 ? '<tr><td colspan="10" align="center">Sin órdenes de trabajo</td></tr>' :
     ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
       <td align="center">${o.numero || o.id}</td>
       <td align="center">${o.unidad||'-'}</td>
       <td align="center">${o.gomeria_nombre||'-'}</td>
-      <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center">${fmtFecha(o.fecha)}</td>
+      <td align="center" style="font-family:var(--font-mono); font-size:11px; white-space:nowrap;">${fmtFechaHora(o.creado_en)}</td>
       <td align="center" style="font-family:var(--font-mono)">${o.km != null ? Number(o.km).toLocaleString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
       <td>${trabajosTooltip(o)}</td>

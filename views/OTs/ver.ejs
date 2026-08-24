@@ -30,6 +30,22 @@ const unitMap = {};
 
 const tipoUnidad = ot.tipo_unidad || 3;
 
+const motivos = [];
+if (ot.pinchadura) motivos.push('PINCHADURA');
+if (ot.rotura)     motivos.push('ROTURA');
+
+// Profundidad medida al abrir la OT, por posición
+const medMap = {};
+(mediciones || []).forEach(m => { if (m.posicion) medMap[m.posicion] = m; });
+const mmNum = (v) => (v === null || v === undefined ? null : Number(v));
+const bajoMinimo = (m) => {
+  if (!m) return false;
+  const vals = [mmNum(m.mm_ext), mmNum(m.mm_int)].filter(v => v !== null);
+  return vals.some(v => v < cfg.mm_min);
+};
+const fmtMm = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(1));
+const hayMediciones = (mediciones || []).length > 0;
+
 const body = `
 <style>
   .ver-wrap {
@@ -282,11 +298,14 @@ window.addEventListener('DOMContentLoaded', function() {
       <div class="ver-meta-item"><strong>Unidad</strong>${ot.unidad || '-'}</div>
       <div class="ver-meta-item"><strong>Estado</strong>${ot.estado == 0 ? 'Pendiente' : 'Cerrada'}</div>
       <div class="ver-meta-item"><strong>Gomería</strong>${ot.gomeria_nombre || '-'}</div>
-      <div class="ver-meta-item"><strong>Fecha</strong>${ot.fecha ? new Date(ot.fecha).toLocaleDateString('es-AR') : '-'}</div>
+      <div class="ver-meta-item"><strong>Fecha de solicitud</strong>${fmtFecha(ot.fecha)}</div>
+      <div class="ver-meta-item"><strong>Alta en el sistema</strong>${fmtFechaHora(ot.creado_en)}</div>
       <div class="ver-meta-item"><strong>Km de la unidad</strong>${ot.km != null ? Number(ot.km).toLocaleString('es-AR') + ' km' : '-'}</div>
+      ${ot.cerrado_por ? '<div class="ver-meta-item"><strong>Cerrada por</strong>' + e(ot.cerrado_por) + '</div>' : ''}
       ${trabajos.length ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Trabajos</strong>' + trabajos.join(' · ') + '</div>' : ''}
-      ${ot.pinchadura ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Motivo</strong><span style="color:var(--red-bright); font-weight:bold;">PINCHADURA</span></div>' : ''}
-      ${ot.observaciones ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Observaciones</strong>' + ot.observaciones + '</div>' : ''}
+      ${motivos.length ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Motivo</strong><span style="color:var(--red-bright); font-weight:bold;">' + motivos.join(' · ') + '</span></div>' : ''}
+      ${ot.observaciones ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Observaciones</strong>' + e(ot.observaciones) + '</div>' : ''}
+      ${ot.descripcion_cierre ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Descripción del cierre</strong>' + e(ot.descripcion_cierre) + '</div>' : ''}
       ${ot.factura ? '<div class="ver-meta-item"><strong>Factura</strong>' + ot.factura + '</div>' : ''}
       ${ot.costo   ? '<div class="ver-meta-item"><strong>Costo</strong>$' + ot.costo + '</div>' : ''}
     </div>
@@ -299,24 +318,57 @@ window.addEventListener('DOMContentLoaded', function() {
           <th>Fuego</th>
           <th>Modelo</th>
           <th>Medida</th>
+          <th>Presión</th>
           <th>Estado</th>
           <th>Km</th>
         </tr>
       </thead>
       <tbody>
         ${cubiertas.length === 0
-          ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
+          ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
           : cubiertas.map((c, i) => `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
               <td>${c.posicion ? posNombre(c.posicion) : '-'}</td>
               <td style="font-family:var(--font-mono)">${c.fuego || '-'}</td>
               <td>${c.marca || ''} ${c.modelo_nombre || ''}</td>
               <td style="font-family:var(--font-mono)">${c.medida || '-'}</td>
+              <td style="font-family:var(--font-mono)">${c.presion != null ? c.presion + ' psi' : '-'}</td>
               <td>${estadoNombre(c.estado)}</td>
               <td style="font-family:var(--font-mono)">${c.km || 0}</td>
             </tr>`).join('')
         }
       </tbody>
     </table>
+
+    ${hayMediciones ? `
+    <div class="ver-section-title">Profundidad medida al abrir la OT</div>
+    <table>
+      <thead>
+        <tr><th>Posición</th><th>Fuego</th><th>Exterior</th><th>Interior</th><th>Dif.</th><th></th></tr>
+      </thead>
+      <tbody>
+        ${mediciones.map((m, i) => {
+          const ext = mmNum(m.mm_ext), int = mmNum(m.mm_int);
+          // Una diferencia grande entre hombros es el síntoma clásico de
+          // desalineación: se marca aunque los dos valores estén sobre el mínimo.
+          const dif = (ext !== null && int !== null) ? Math.abs(ext - int) : null;
+          const gastada = bajoMinimo(m);
+          return `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
+            <td>${posNombre(m.posicion)}</td>
+            <td style="font-family:var(--font-mono)">${e(m.fuego || '-')}</td>
+            <td style="font-family:var(--font-mono); ${ext !== null && ext < cfg.mm_min ? 'color:var(--red-bright); font-weight:700;' : ''}">${fmtMm(m.mm_ext)}</td>
+            <td style="font-family:var(--font-mono); ${int !== null && int < cfg.mm_min ? 'color:var(--red-bright); font-weight:700;' : ''}">${fmtMm(m.mm_int)}</td>
+            <td style="font-family:var(--font-mono)">${dif === null ? '-' : dif.toFixed(1)}</td>
+            <td style="font-size:11px;">
+              ${gastada ? '<span style="color:var(--red-bright); font-weight:700;">Bajo mínimo</span>' : ''}
+              ${dif !== null && dif >= 2 ? '<span style="color:#e67e22; font-weight:700;">Revisar alineación</span>' : ''}
+            </td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+    <p style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">
+      Mínimo aceptable: ${cfg.mm_min} mm. Valores en milímetros de profundidad de dibujo.
+    </p>` : ''}
 
     <a href="/OTs/list" class="list-back">&laquo; Volver al listado</a>
   </div>
