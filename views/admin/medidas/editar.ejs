@@ -3,7 +3,9 @@ const currentPage = 'admin';
 const body = `
 <script>
 function guardar() {
-  $.ajax({ type:'POST', url:'/ajax/save_medida', data:{ id: ${medida.id}, medida: document.getElementById('medida').value },
+  $.ajax({ type:'POST', url:'/ajax/save_medida',
+    data:{ id: ${medida.id}, medida: document.getElementById('medida').value,
+           presion: document.getElementById('presion').value },
     success: function(data) { if(data) { alert(data); location.href='/admin/medidas'; } else alert('Error'); }
   });
 }
@@ -12,7 +14,12 @@ function guardar() {
   <div class="form-header"><h2>Editar Medida</h2></div>
   <div class="field">
     <label for="medida">Medida</label>
-    <input type="text" id="medida" class="text" value="${medida.medida}" />
+    <input type="text" id="medida" class="text" value="${e(medida.medida)}" />
+  </div>
+  <div class="field">
+    <label for="presion">Presión de inflado (PSI)</label>
+    <input type="number" id="presion" class="text" min="0" max="200" value="${medida.presion != null ? medida.presion : ''}" placeholder="ej: 115" />
+    <p class="field-hint">Se muestra en la tabla de consulta de Presiones y junto a la medida en las OTs.</p>
   </div>
   <div class="form-actions">
     <button class="btn-primary" onclick="guardar()">Guardar</button>

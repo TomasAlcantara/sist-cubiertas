@@ -3,9 +3,12 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego } = require('../db');
-const { requireAuth, requireMaster } = require('../middleware/auth');
+const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth');
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
+const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
+const { parseFecha } = require('../lib/fechas');
+const { CONFIG_EDITABLE } = require('../lib/config');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -24,7 +27,7 @@ function escapeHtml(str) {
 }
 
 // POST /ajax/inactive - Activar/desactivar registro
-router.post('/inactive', requireAuth, async (req, res, next) => {
+router.post('/inactive', requireMaster, async (req, res, next) => {
   try {
     const { id, active, table } = req.body;
     const allowed = ['usuarios', 'almacen', 'gomeria', 'recapadora', 'micro', 'marcas_ruedas', 'cubiertas'];
@@ -42,7 +45,7 @@ router.post('/change_filter', requireAuth, (req, res) => {
 });
 
 // POST /ajax/cargar_km - Cargar km individual
-router.post('/cargar_km', requireAuth, async (req, res, next) => {
+router.post('/cargar_km', requirePerm('km_cargar'), async (req, res, next) => {
   try {
     const { id, km } = req.body;
     await sql`UPDATE micro SET km_actual = ${parseInt(km) || 0} WHERE id = ${parseInt(id) || 0}`;
@@ -51,7 +54,7 @@ router.post('/cargar_km', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/carga_masiva_km - Carga masiva de km
-router.post('/carga_masiva_km', requireAuth, async (req, res, next) => {
+router.post('/carga_masiva_km', requirePerm('km_cargar'), async (req, res, next) => {
   try {
     const updates = [];
     for (const key in req.body) {
@@ -67,7 +70,7 @@ router.post('/carga_masiva_km', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/mover_cubierta - Mover cubierta a otro almacén
-router.post('/mover_cubierta', requireAuth, async (req, res, next) => {
+router.post('/mover_cubierta', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { cubierta, almacen } = req.body;
     const cubId = parseInt(cubierta) || 0;
@@ -88,7 +91,7 @@ router.post('/mover_cubierta', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/nuevo_estado - Cambiar estado de cubierta
-router.post('/nuevo_estado', requireAuth, async (req, res, next) => {
+router.post('/nuevo_estado', requirePerm('cubiertas_editar'), async (req, res, next) => {
   try {
     const { r_id, estado } = req.body;
     const cubId = parseInt(r_id) || 0;
@@ -128,18 +131,29 @@ router.post('/save_usuario', requireMaster, saveUsuarioValidators, async (req, r
     return res.status(400).send(msg);
   }
   try {
-    const { id, usuario, password, tipo, nombre, mail, avisa, gomeria } = req.body;
+    const { id, usuario, password, tipo, nombre, mail, avisa, gomeria, permisos } = req.body;
     const hash = password ? await bcrypt.hash(password, 10) : null;
+
+    // Nunca guardar el CSV crudo: solo slugs que existan en el catálogo.
+    const permisosCsv = sanitizarPermisos(permisos).join(',');
+    if (!permisosCsv) return res.status(400).send('Seleccione al menos un permiso válido');
+
+    // Quitarse a uno mismo el permiso de administrar deja el sistema sin acceso
+    // a la administración si es el único admin. Se bloquea de entrada.
+    if (id && parseInt(id) === parseInt(req.user.id) && !permisosCsv.split(',').includes('admin')) {
+      return res.status(400).send('No podés quitarte a vos mismo el permiso de Administración');
+    }
+
     if (id) {
       if (hash) {
-        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, password=${hash}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null} WHERE id=${parseInt(id)}`;
+        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, password=${hash}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null}, permisos=${permisosCsv} WHERE id=${parseInt(id)}`;
       } else {
-        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null} WHERE id=${parseInt(id)}`;
+        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null}, permisos=${permisosCsv} WHERE id=${parseInt(id)}`;
       }
       res.send('Usuario actualizado correctamente');
     } else {
       if (!hash) return res.status(400).send('Contraseña requerida');
-      await sql`INSERT INTO usuarios (usuario, password, tipo, nombre, mail, avisa, gomeria_id) VALUES (${usuario.trim()},${hash},${parseInt(tipo)},${nombre||null},${mail||null},${parseInt(avisa)||0},${parseInt(gomeria)||null})`;
+      await sql`INSERT INTO usuarios (usuario, password, tipo, nombre, mail, avisa, gomeria_id, permisos) VALUES (${usuario.trim()},${hash},${parseInt(tipo)},${nombre||null},${mail||null},${parseInt(avisa)||0},${parseInt(gomeria)||null},${permisosCsv})`;
       res.send('Usuario creado correctamente');
     }
   } catch (err) { next(err); }
@@ -245,19 +259,50 @@ router.post('/save_recapadora', requireMaster, async (req, res, next) => {
 // POST /ajax/save_medida
 router.post('/save_medida', requireMaster, async (req, res, next) => {
   try {
-    const { id, medida } = req.body;
+    const { id, medida, presion } = req.body;
+    // Vacío = sin dato, no cero: una presión 0 no existe y ensuciaría la tabla.
+    const psi = presion === '' || presion == null ? null : parseInt(presion);
+    const psiVal = Number.isFinite(psi) && psi > 0 && psi <= 200 ? psi : null;
     if (id) {
-      await sql`UPDATE medidas SET medida=${medida} WHERE id=${parseInt(id)}`;
+      await sql`UPDATE medidas SET medida=${medida}, presion=${psiVal} WHERE id=${parseInt(id)}`;
       res.send('Medida actualizada correctamente');
     } else {
-      await sql`INSERT INTO medidas (medida) VALUES (${medida})`;
+      await sql`INSERT INTO medidas (medida, presion) VALUES (${medida}, ${psiVal})`;
       res.send('Medida creada correctamente');
     }
   } catch (err) { next(err); }
 });
 
+// POST /ajax/save_config - Guardar parámetros de la pantalla de configuración
+router.post('/save_config', requireMaster, async (req, res, next) => {
+  try {
+    const guardadas = [];
+    for (const [clave, valor] of Object.entries(req.body)) {
+      // Whitelist estricta: la tabla config guarda también las credenciales de
+      // Gmail, y aceptar una clave arbitraria las dejaría pisar desde la web.
+      const campo = Object.prototype.hasOwnProperty.call(CONFIG_EDITABLE, clave)
+        ? CONFIG_EDITABLE[clave]
+        : null;
+      if (!campo) return res.status(400).send(`Parámetro no permitido: ${clave}`);
+
+      const n = parseInt(valor);
+      if (!Number.isFinite(n) || n < campo.min || n > campo.max) {
+        return res.status(400).send(`${campo.label}: debe estar entre ${campo.min} y ${campo.max}`);
+      }
+
+      await sql`
+        INSERT INTO config (clave, valor) VALUES (${clave}, ${String(n)})
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+      `;
+      guardadas.push(campo.label);
+    }
+    if (!guardadas.length) return res.status(400).send('Nada para guardar');
+    res.send('Configuración guardada');
+  } catch (err) { next(err); }
+});
+
 // POST /ajax/listar_ruedas - Listar cubiertas para selección en micro u OT
-router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
+router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
     const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos, orden = 'asc' } = req.body;
     const orderDir = orden === 'desc' ? 'DESC' : 'ASC';
@@ -380,7 +425,7 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
 });
 
 // GET /ajax/ultimo_fuego - Sugerir el siguiente número de fuego (basado en la última cubierta creada)
-router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
+router.get('/ultimo_fuego', requirePerm('cubiertas_crear'), async (req, res, next) => {
   try {
     const [row] = await sql`
       SELECT fuego FROM cubiertas WHERE activo = 1 ORDER BY id DESC LIMIT 1
@@ -394,7 +439,7 @@ router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
 });
 
 // GET /ajax/cubiertas_unidad - Obtener cubiertas actuales de un micro por posición
-router.get('/cubiertas_unidad', requireAuth, async (req, res, next) => {
+router.get('/cubiertas_unidad', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
     const { unidad_id } = req.query;
     if (!unidad_id) return res.json({ tipo_unidad: 1, cubiertas: [] });
@@ -415,20 +460,24 @@ router.get('/cubiertas_unidad', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/colocar_rueda - Colocar cubierta en posición de micro
-router.post('/colocar_rueda', requireAuth, async (req, res, next) => {
+router.post('/colocar_rueda', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { id, unidad, pos } = req.body;
     const existing = await sql`SELECT id FROM cubiertas WHERE micro_id = ${parseInt(unidad) || 0} AND posicion = ${pos} AND activo = 1`;
     if (existing.length) {
       await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL WHERE id = ${existing[0].id}`;
     }
-    await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL WHERE id = ${parseInt(id) || 0}`;
+    // Al montarse deja de ser "Nueva". Con CASE y no con estado = 2 a secas:
+    // una Recapada que se monta sigue siendo Recapada, no baja a Usada.
+    await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL,
+      estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
+      WHERE id = ${parseInt(id) || 0}`;
     res.send('OK');
   } catch (err) { next(err); }
 });
 
 // POST /ajax/almacenar_rueda - Guardar cubierta en almacén desde micro
-router.post('/almacenar_rueda', requireAuth, async (req, res, next) => {
+router.post('/almacenar_rueda', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { r_id, almacen_id } = req.body;
     await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen_id) || null}, micro_id = NULL, posicion = NULL, gomeria_id = NULL WHERE id = ${parseInt(r_id) || 0}`;
@@ -437,7 +486,7 @@ router.post('/almacenar_rueda', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/almacenar_ruedas - Guardar múltiples cubiertas en almacén
-router.post('/almacenar_ruedas', requireAuth, async (req, res, next) => {
+router.post('/almacenar_ruedas', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { almacen_id, cubiertas_ids } = req.body;
     if (!cubiertas_ids) return res.send('ok');
@@ -447,6 +496,24 @@ router.post('/almacenar_ruedas', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Una OT es "solo preventivo" cuando tiene el preventivo marcado y ningun otro
+ * trabajo. Solo esas puede cerrarlas un gomero, y con descripcion obligatoria;
+ * las que tienen trabajo real las cierra un administrador.
+ */
+const TRABAJOS_REALES = ['rotacion', 'arreglo', 'cambio', 'alinear', 'balanceo', 'armar'];
+
+function esSoloPreventivo(ot) {
+  if (!ot || !ot.preventivo) return false;
+  return TRABAJOS_REALES.every(t => !ot[t]);
+}
+
+/** Quien no tiene ot_cerrar solo llega hasta los preventivos. */
+function puedeCerrar(user, ot) {
+  if (tienePermiso(user, 'ot_cerrar')) return true;
+  return tienePermiso(user, 'ot_cerrar_preventivo') && esSoloPreventivo(ot);
+}
+
 // POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
 const posNombreCierre = (p) => ({
   ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
@@ -454,7 +521,7 @@ const posNombreCierre = (p) => ({
   cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2'
 })[p] || p;
 
-router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
+router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), async (req, res, next) => {
   try {
     const { ot_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
@@ -470,6 +537,20 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
     ]);
     if (!rows.length) return res.send('');
     const ot = rows[0];
+
+    if (!puedeCerrar(req.user, ot)) {
+      return res.send(`<div style="padding:22px; text-align:center;">
+        <p style="font-size:14px; margin:0 0 6px 0;"><strong>Esta OT la cierra un administrador</strong></p>
+        <p style="font-size:12.5px; color:#888; margin:0 0 16px 0;">
+          Solo se pueden cerrar desde gomería las OTs que son únicamente de Preventivo.
+        </p>
+        <input type="button" value="Cerrar" onclick="close_carga();" style="width:100px;font-size:13px;" />
+      </div>`);
+    }
+
+    // El gomero cierra un preventivo: no hay trabajos que tildar, ni factura,
+    // ni cubiertas salientes que mandar a ningún lado. Solo km y descripción.
+    const cierreReducido = !tienePermiso(req.user, 'ot_cerrar');
 
     // Cubiertas de la OT (entrantes) con sus salientes
     const [otCubiertas, unitTires] = await Promise.all([
@@ -582,6 +663,26 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
 
         <!-- Columna izquierda: formulario -->
         <div style="flex:1; min-width:240px;">
+          ${cierreReducido ? `
+          <p style="margin:0 0 10px 0; padding:8px 10px; background:rgba(46,125,50,0.12); border-left:3px solid #2e7d32; font-size:12.5px;">
+            Cierre de <strong>Preventivo</strong>. Detallá abajo qué se revisó y si quedó todo OK.
+          </p>
+
+          <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
+          <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:150px;" placeholder="km" />
+
+          <p style="margin:10px 0 3px 0;"><strong>Fecha:</strong></p>
+          <input type="text" id="fecha_cierre" style="width:140px;" placeholder="DD/MM/AAAA" />
+
+          <p style="margin:10px 0 3px 0;"><strong>Descripción del preventivo:</strong> <span style="color:#c00;">*</span></p>
+          <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:90px; resize:vertical;"
+                    placeholder="Ej: se revisó presión en las 6 posiciones, todo OK"></textarea>
+
+          <div style="margin-top:18px; display:flex; gap:10px;">
+            <input type="button" value="Cerrar Preventivo" onclick="confirmar_cerrar(${otIdInt})" style="width:150px;font-size:13px;" />
+            <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
+          </div>
+          ` : `
           <p style="margin:0 0 5px 0;"><strong>Tareas a Realizar:</strong></p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; margin-bottom:12px; font-size:12px;">
             <span>Rotación: ${siNo(ot.rotacion)}</span>
@@ -591,6 +692,8 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
             <span>Balanceo: ${siNo(ot.balanceo)}</span>
             <span>Armar: ${siNo(ot.armar)}</span>
             <span>Preventivo: ${siNo(ot.preventivo)}</span>
+            <span>Pinchadura: ${siNo(ot.pinchadura)}</span>
+            <span>Rotura: ${siNo(ot.rotura)}</span>
           </div>
 
           <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
@@ -622,10 +725,15 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
             <option value="ceamse">CEAMSE (dar de baja)</option>
           </select>
 
+          <p style="margin:10px 0 3px 0;"><strong>Descripción del cierre:</strong></p>
+          <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:60px; resize:vertical;"
+                    placeholder="Opcional">${escapeHtml(ot.descripcion_cierre || '')}</textarea>
+
           <div style="margin-top:18px; display:flex; gap:10px;">
             <input type="button" value="Cerrar OT" onclick="confirmar_cerrar(${otIdInt})" style="width:120px;font-size:13px;" />
             <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
           </div>
+          `}
         </div>
 
         <!-- Columna derecha: diagrama visual del micro -->
@@ -644,33 +752,68 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
-router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
+router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), async (req, res, next) => {
   try {
-    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, destino_almacen_id } = req.body;
+    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, destino_almacen_id, descripcion_cierre } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!km_actual || !otIdInt) return res.status(400).send('Datos requeridos');
+
+    // La OT se relee de la base antes de nada: el formulario recortado que ve el
+    // gomero es cosmetico, y confiar en lo que llega en el body dejaria que un
+    // POST armado a mano cerrara cualquier OT.
+    const otPrevia = await sql`SELECT * FROM ots WHERE id = ${otIdInt}`;
+    if (!otPrevia.length) return res.status(404).send('OT inexistente');
+    if (otPrevia[0].estado == 1) return res.status(400).send('La OT ya está cerrada');
+
+    const soloPreventivo = esSoloPreventivo(otPrevia[0]);
+    const cierraTodo = tienePermiso(req.user, 'ot_cerrar');
+    if (!cierraTodo) {
+      if (!tienePermiso(req.user, 'ot_cerrar_preventivo') || !soloPreventivo) {
+        return res.status(403).send('Solo un administrador puede cerrar OTs con trabajos realizados');
+      }
+    }
+
+    const descripcion = String(descripcion_cierre || '').trim() || null;
+    if (!cierraTodo && !descripcion) {
+      return res.status(400).send('La descripción del preventivo es obligatoria');
+    }
+
     const destinoEsCeamse = destino_almacen_id === 'ceamse';
     const destinoAlmacenId = (!destinoEsCeamse && parseInt(destino_almacen_id)) ? parseInt(destino_almacen_id) : 1;
 
     const kmCierre = parseInt(km_actual) || 0;
 
+    // Sin ot_cerrar los flags de trabajo que hayan llegado en el body se
+    // ignoran: la OT se cierra tal como estaba, solo con el preventivo hecho.
+    const trabajos = cierraTodo
+      ? {
+          rotacion: rotacion === '1', arreglo: arreglo === '1', cambio: cambio === '1',
+          alinear: alinear === '1', balanceo: balanceo === '1', armar: armar === '1',
+          preventivo: preventivo === '1',
+        }
+      : {
+          rotacion: false, arreglo: false, cambio: false,
+          alinear: false, balanceo: false, armar: false, preventivo: true,
+        };
+
     await sql`UPDATE ots SET
       estado = 1,
-      factura = ${factura||null},
-      costo = ${costo||null},
+      factura = ${cierraTodo ? (factura || null) : null},
+      costo = ${cierraTodo ? (costo || null) : null},
       km = ${kmCierre},
-      rotacion = ${rotacion === '1'},
-      arreglo  = ${arreglo  === '1'},
-      cambio   = ${cambio   === '1'},
-      alinear  = ${alinear  === '1'},
-      balanceo = ${balanceo === '1'},
-      armar    = ${armar    === '1'},
-      preventivo = ${preventivo === '1'}
+      rotacion = ${trabajos.rotacion},
+      arreglo  = ${trabajos.arreglo},
+      cambio   = ${trabajos.cambio},
+      alinear  = ${trabajos.alinear},
+      balanceo = ${trabajos.balanceo},
+      armar    = ${trabajos.armar},
+      preventivo = ${trabajos.preventivo},
+      descripcion_cierre = ${descripcion},
+      cerrado_por = ${req.user?.usuario || null}
     WHERE id = ${otIdInt}`;
 
-    const ot = await sql`SELECT unidad_id, fecha FROM ots WHERE id = ${otIdInt}`;
-    const unidad_id = ot[0]?.unidad_id;
-    const otFecha = ot[0]?.fecha || null;
+    const unidad_id = otPrevia[0].unidad_id;
+    const otFecha = otPrevia[0].fecha || null;
     if (unidad_id) {
       // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar
       // un kilometraje más reciente cargado a mano en Carga de Km.
@@ -679,11 +822,11 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
 
       // Fechas de mantenimiento: solo avanzan, para que cerrar una OT vieja no
       // haga parecer que el servicio se hizo después de lo que realmente se hizo.
-      if (otFecha && alinear === '1') {
+      if (otFecha && trabajos.alinear) {
         await sql`UPDATE micro SET ultima_alineacion = ${otFecha}
           WHERE id = ${unidad_id} AND (ultima_alineacion IS NULL OR ultima_alineacion < ${otFecha})`;
       }
-      if (otFecha && preventivo === '1') {
+      if (otFecha && trabajos.preventivo) {
         await sql`UPDATE micro SET ultimo_preventivo = ${otFecha}
           WHERE id = ${unidad_id} AND (ultimo_preventivo IS NULL OR ultimo_preventivo < ${otFecha})`;
       }
@@ -698,10 +841,13 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
     // IDs de todas las cubiertas que ENTRAN en esta OT (para detectar rotaciones)
     const incomingIds = new Set(cambios.map(c => c.cubierta_id));
 
-    // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones
+    // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones.
+    // Una cubierta que se monta deja de ser "Nueva". El CASE evita degradar a
+    // Usada las que ya son Recapadas, que tienen su propio estado.
     for (const c of cambios) {
       await sql`
-        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL
+        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL,
+          estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
         WHERE id = ${c.cubierta_id}
       `;
     }
@@ -749,7 +895,7 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
           ? (destinoEsCeamse ? 'Sale de la unidad — baja por CEAMSE' : 'Sale de la unidad al almacén')
           : 'Cambia de posición dentro de la unidad (rotación)',
       });
-      if (arreglo === '1') {
+      if (trabajos.arreglo) {
         await registrarEvento({
           cubierta_id: c.cubierta_anterior_id, tipo: 'reparacion', fecha: otFecha,
           micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
@@ -776,26 +922,62 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+/**
+ * Guarda la profundidad de dibujo medida por posición.
+ *
+ * La medición pertenece a la cubierta que el gomero tuvo en la mano, o sea la
+ * que estaba montada al abrir la OT — no la que entra por el cambio. Por eso
+ * `cubierta_id` se resuelve contra lo que hay montado hoy en esa posición.
+ */
+async function guardarMediciones(otId, unidadId, mediciones) {
+  if (!mediciones || typeof mediciones !== 'object') return;
+
+  const montadas = unidadId
+    ? await sql`SELECT id, posicion FROM cubiertas WHERE micro_id = ${unidadId} AND activo = 1 AND posicion IS NOT NULL`
+    : [];
+  const porPosicion = {};
+  for (const c of montadas) porPosicion[c.posicion] = c.id;
+
+  // Valor válido: número entre 0 y 30 mm. Cualquier otra cosa se descarta en
+  // silencio en vez de romper la carga entera de la OT.
+  const mm = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = parseFloat(v);
+    return Number.isFinite(n) && n >= 0 && n <= 30 ? Math.round(n * 10) / 10 : null;
+  };
+
+  for (const [posicion, valores] of Object.entries(mediciones)) {
+    if (!posicion || typeof posicion !== 'string' || posicion.length > 10) continue;
+    if (!valores || typeof valores !== 'object') continue;
+
+    const ext = mm(valores.ext);
+    const int = mm(valores.int);
+    if (ext === null && int === null) continue;
+
+    await sql`
+      INSERT INTO ot_mediciones (ot_id, posicion, cubierta_id, mm_ext, mm_int)
+      VALUES (${otId}, ${posicion}, ${porPosicion[posicion] || null}, ${ext}, ${int})
+      ON CONFLICT (ot_id, posicion)
+      DO UPDATE SET cubierta_id = EXCLUDED.cubierta_id, mm_ext = EXCLUDED.mm_ext, mm_int = EXCLUDED.mm_int
+    `;
+  }
+}
+
 // POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
-router.post('/nueva_ot', requireAuth, async (req, res, next) => {
+router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
   try {
-    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
+    const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura } = req.body;
     if (!fecha) return res.send('');
 
-    const parseFecha = (f) => {
-      const p = f.split('/');
-      if (p.length !== 3) return f;
-      const year = p[2].length === 2 ? '20' + p[2] : p[2];
-      return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-    };
     const fechaISO = parseFecha(fecha);
 
     const result = await sql`
-      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, solicitado_por)
+      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura, solicitado_por)
       VALUES (
         ${fechaISO}, ${parseInt(gomeria_id)||null}, ${parseInt(unidad_id)||null}, ${observaciones||null},
         ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
-        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${preventivo === '1'}, ${pinchadura === '1'}, ${req.user?.usuario || null}
+        ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${preventivo === '1'},
+        ${pinchadura === '1'}, ${rotura === '1'}, ${req.user?.usuario || null}
       )
       RETURNING id
     `;
@@ -820,6 +1002,17 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
           `;
         }
       } catch(e) { /* JSON inválido, ignorar */ }
+    }
+
+    // Profundidad de dibujo medida por el gomero, en su propio try/catch: una
+    // medición mal formada no puede tumbar la creación de la OT.
+    const medicionesJson = req.body.mediciones_json;
+    if (medicionesJson) {
+      try {
+        await guardarMediciones(ot_id, parseInt(unidad_id) || null, JSON.parse(medicionesJson));
+      } catch (e) {
+        console.error(`[mediciones] OT ${ot_id}: ${e.message}`);
+      }
     }
 
     if (pinchadura === '1') {
@@ -857,18 +1050,12 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/actualizar_ot - Editar OT existente (solo si está abierta)
-router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
+router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) => {
   try {
-    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
+    const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!otIdInt || !fecha) return res.send('');
 
-    const parseFecha = (f) => {
-      const p = f.split('/');
-      if (p.length !== 3) return f;
-      const year = p[2].length === 2 ? '20' + p[2] : p[2];
-      return `${year}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`;
-    };
     const fechaISO = parseFecha(fecha);
 
     await sql`
@@ -878,7 +1065,8 @@ router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
         rotacion = ${rotacion === '1'}, arreglo = ${arreglo === '1'}, cambio = ${cambio === '1'},
         alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'},
         preventivo = CASE WHEN ${preventivo === undefined} THEN preventivo ELSE ${preventivo === '1'} END,
-        pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END
+        pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END,
+        rotura = CASE WHEN ${rotura === undefined} THEN rotura ELSE ${rotura === '1'} END
       WHERE id = ${otIdInt} AND estado = 0
     `;
 
@@ -908,7 +1096,7 @@ router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/agregar_cubierta_ot - Agregar cubierta a OT
-router.post('/agregar_cubierta_ot', requireAuth, async (req, res, next) => {
+router.post('/agregar_cubierta_ot', requirePerm('ot_editar'), async (req, res, next) => {
   try {
     const { ot_id, cubierta_id } = req.body;
     await sql`INSERT INTO ot_cubiertas (ot_id, cubierta_id) VALUES (${parseInt(ot_id)||0}, ${parseInt(cubierta_id)||0}) ON CONFLICT DO NOTHING`;
@@ -918,7 +1106,7 @@ router.post('/agregar_cubierta_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/anular_ot
-router.post('/anular_ot', requireMaster, async (req, res, next) => {
+router.post('/anular_ot', requirePerm('ot_anular'), async (req, res, next) => {
   try {
     const { ot_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;

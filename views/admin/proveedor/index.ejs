@@ -14,11 +14,7 @@ const body = `
     <td align="center"><a href="/admin/proveedor/editar?proveedor=${p.id}">EDITAR</a></td>
   </tr>`).join('')}
 </table>
-${totalPages > 1 ? `<div class="list-pagination">
-  ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
-    p==pagina ? `<strong class="pg-current">${p}</strong>` : `<a href='?pagina=${p}'>${p}</a>`
-  ).join(' | ')}
-</div>` : ''}
+${paginacion(pagina, totalPages, p => '?pagina=' + p)}
 <a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>

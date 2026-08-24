@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
 
 const ORD_MAP = {
   1: 'c.fuego ASC', 11: 'c.fuego DESC',
@@ -12,7 +12,7 @@ const ORD_MAP = {
 };
 
 // GET /almacen - Lista de almacenes
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requirePerm('almacen_ver'), async (req, res, next) => {
   try {
     const almacenes = await sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`;
     res.render('almacen/index', { user: req.user, almacenes, currentPage: 'inicio' });
@@ -20,7 +20,7 @@ router.get('/', requireAuth, async (req, res, next) => {
 });
 
 // GET /almacen/view?id=X - Ver cubiertas de un almacén
-router.get('/view', requireAuth, async (req, res, next) => {
+router.get('/view', requirePerm('almacen_ver'), async (req, res, next) => {
   try {
     const { id, fuego = '', modelo = 0, medida = 0, estado = 0, orderby = 0 } = req.query;
 

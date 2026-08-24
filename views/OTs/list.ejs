@@ -10,6 +10,7 @@ const trabajosTooltip = (o) => {
     ['Armar',    o.armar],
     ['Preventivo', o.preventivo],
     ['Pinchadura', o.pinchadura],
+    ['Rotura',     o.rotura],
   ];
   const filas = items.map(([n, v]) =>
     '<tr><td style="color:var(--text-secondary)">' + n + ':</td><td style="padding-left:6px; color:' + (v ? '#2e7d32' : 'var(--red-bright)') + '; font-weight:bold;">' + (v ? 'SI' : 'NO') + '</td></tr>'
@@ -18,6 +19,28 @@ const trabajosTooltip = (o) => {
     + '<span class="trab-tip"><table style="border-collapse:collapse; font-size:12px;">' + filas + '</table></span>'
     + '</span>';
 };
+// Solo preventivo = preventivo tildado y ningun otro trabajo. Es la unica OT
+// que puede cerrar un gomero; el resto las cierra un administrador.
+const soloPreventivo = (o) => !!o.preventivo &&
+  !o.rotacion && !o.arreglo && !o.cambio && !o.alinear && !o.balanceo && !o.armar;
+
+const accionesAbierta = (o) => {
+  const acciones = [];
+  if (can('ot_editar')) {
+    acciones.push('<a href="/OTs/editar?ot=' + o.id + '">EDITAR</a>');
+    acciones.push('<a href="/OTs/cargar?ot=' + o.id + '">CARGAR</a>');
+  }
+  if (can('ot_cerrar') || (can('ot_cerrar_preventivo') && soloPreventivo(o))) {
+    acciones.push('<a style="cursor:pointer;" onclick="open_carga(' + o.id + ')">CERRAR</a>');
+  } else if (can('ot_cerrar_preventivo')) {
+    acciones.push('<span style="color:var(--text-muted); font-size:11px;" title="Tiene trabajos realizados: la cierra un administrador">Cierra admin</span>');
+  }
+  if (!acciones.length) acciones.push('<a href="/OTs/ver?ot=' + o.id + '">VER</a>');
+  return acciones.join(' | ');
+};
+
+const hayFiltros = !!(filtros.numero || filtros.desde || filtros.hasta)
+  || filtros.unidad > 0 || filtros.gomeria > 0 || filtros.estado !== -1;
 const body = `
 <style>
 .trab-wrap { cursor:default; color:var(--red); font-weight:bold; white-space:nowrap; }
@@ -71,6 +94,12 @@ const body = `
   white-space: nowrap;
 }
 .ot-nueva:hover { background: var(--red-bright); }
+.ot-filters-clear {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted); text-decoration: none;
+  padding: 8px 4px;
+}
+.ot-filters-clear:hover { color: var(--red); }
 
 .ot-modal {
   width: min(960px, 96vw);
@@ -119,6 +148,10 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
+$(function() {
+  $('#f_desde, #f_hasta').datepicker({ dateFormat: 'dd/mm/yy' });
+});
+
 function open_carga(id) {
   $.ajax({ type:'POST', url:'/ajax/mb_cerrar_ot', data:{ ot_id: id },
     success: function(data) {
@@ -137,9 +170,23 @@ function close_carga() {
   document.getElementById('back').style.display = 'none';
   document.getElementById('cerrar_ot').style.display = 'none';
 }
+// El formulario de cierre viene recortado para el gomero (sin trabajos, factura
+// ni destino), así que todo se lee con guardas en vez de asumir que existe.
+function _val(id) { var el = document.getElementById(id); return el ? el.value : ''; }
+function _chk(id) { var el = document.getElementById(id); return el && el.checked ? '1' : '0'; }
+
 function confirmar_cerrar(ot_id) {
-  var km = document.getElementById('km_cierre').value;
+  var km = _val('km_cierre');
   if (!km) { alert('Ingrese los km actuales'); return; }
+
+  var descEl = document.getElementById('descripcion_cierre');
+  var esPreventivo = !document.getElementById('cb_rot_cierre'); // formulario reducido
+  if (esPreventivo && descEl && !descEl.value.trim()) {
+    alert('Escribí qué se revisó en el preventivo');
+    descEl.focus();
+    return;
+  }
+
   var destinoEl = document.getElementById('destino_almacen_id');
   var destinoNombre = destinoEl ? destinoEl.options[destinoEl.selectedIndex].text : '';
   var destinoVal    = destinoEl ? destinoEl.value : '';
@@ -147,16 +194,20 @@ function confirmar_cerrar(ot_id) {
     data: {
       ot_id: ot_id,
       km_actual: km,
-      factura: document.getElementById('factura_cierre').value,
-      costo:   document.getElementById('costo_cierre').value,
-      rotacion: document.getElementById('cb_rot_cierre').checked ? '1':'0',
-      arreglo:  document.getElementById('cb_arr_cierre').checked ? '1':'0',
-      cambio:   document.getElementById('cb_cam_cierre').checked ? '1':'0',
-      alinear:  document.getElementById('cb_ali_cierre').checked ? '1':'0',
-      balanceo: document.getElementById('cb_bal_cierre').checked ? '1':'0',
-      armar:    document.getElementById('cb_arm_cierre').checked ? '1':'0',
-      preventivo: document.getElementById('cb_pre_cierre').checked ? '1':'0',
+      factura: _val('factura_cierre'),
+      costo:   _val('costo_cierre'),
+      rotacion: _chk('cb_rot_cierre'),
+      arreglo:  _chk('cb_arr_cierre'),
+      cambio:   _chk('cb_cam_cierre'),
+      alinear:  _chk('cb_ali_cierre'),
+      balanceo: _chk('cb_bal_cierre'),
+      armar:    _chk('cb_arm_cierre'),
+      preventivo: _chk('cb_pre_cierre'),
+      descripcion_cierre: descEl ? descEl.value : '',
       destino_almacen_id: destinoVal
+    },
+    error: function(xhr) {
+      alert(xhr.responseText || ('Error al cerrar la OT (' + xhr.status + ')'));
     },
     success: function(data) {
       if (data === 'ok') {
@@ -170,8 +221,10 @@ function confirmar_cerrar(ot_id) {
           'z-index:9999','box-shadow:0 6px 24px rgba(0,0,0,0.4)',
           'text-align:center','line-height:1.5','max-width:420px'
         ].join(';');
-        notif.innerHTML = '✔ OT N°' + ot_id + ' cerrada correctamente<br>' +
-          '<span style="font-weight:400;font-size:13px;">Cubiertas salientes enviadas a: <strong>' + destinoNombre + '</strong></span>';
+        notif.innerHTML = '✔ OT N°' + ot_id + ' cerrada correctamente' +
+          (destinoNombre
+            ? '<br><span style="font-weight:400;font-size:13px;">Cubiertas salientes enviadas a: <strong>' + destinoNombre + '</strong></span>'
+            : '');
         document.body.appendChild(notif);
         setTimeout(function() {
           notif.style.transition = 'opacity 0.4s';
@@ -190,6 +243,12 @@ function confirmar_cerrar(ot_id) {
 <div class="ot-modal" id="cerrar_ot"></div>
 
 <form method="get" action="/OTs/list" class="ot-filters">
+  <strong>OT N°:</strong>
+  <input type="text" name="numero" value="${e(filtros.numero || '')}" style="width:90px;" placeholder="N°" />
+  <strong>Desde:</strong>
+  <input type="text" name="desde" id="f_desde" value="${e(filtros.desde || '')}" style="width:105px;" placeholder="DD/MM/AAAA" autocomplete="off" />
+  <strong>Hasta:</strong>
+  <input type="text" name="hasta" id="f_hasta" value="${e(filtros.hasta || '')}" style="width:105px;" placeholder="DD/MM/AAAA" autocomplete="off" />
   <strong>Unidad:</strong>
   <select name="unidad">
     <option value="0">Todas</option>
@@ -207,7 +266,8 @@ function confirmar_cerrar(ot_id) {
     <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
   </select>
   <button type="submit" class="ot-filters-submit">Filtrar</button>
-  <button type="button" class="ot-nueva" onclick="location.href='/OTs/nueva'">Nueva OT</button>
+  ${hayFiltros ? '<a href="/OTs/list" class="ot-filters-clear">Limpiar</a>' : ''}
+  ${can('ot_crear') ? '<button type="button" class="ot-nueva" onclick="location.href=\'/OTs/nueva\'">Nueva OT</button>' : ''}
 </form>
 
 <table>
@@ -216,26 +276,26 @@ function confirmar_cerrar(ot_id) {
     <th>Micro</th>
     <th>Gomería</th>
     <th>Fecha</th>
+    <th>Alta</th>
     <th>Km</th>
     <th>Solicitó</th>
     <th>Trabajos</th>
     <th>Estado</th>
     <th style="width:160px;">Editar</th>
   </thead>
-  ${ots.length === 0 ? '<tr><td colspan="9" align="center">Sin órdenes de trabajo</td></tr>' :
+  ${ots.length === 0 ? '<tr><td colspan="10" align="center">Sin órdenes de trabajo</td></tr>' :
     ots.map((o, i) => `<tr class="${i%2===0?'light':'dark'}">
       <td align="center">${o.numero || o.id}</td>
       <td align="center">${o.unidad||'-'}</td>
       <td align="center">${o.gomeria_nombre||'-'}</td>
-      <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center">${fmtFecha(o.fecha)}</td>
+      <td align="center" style="font-family:var(--font-mono); font-size:11px; white-space:nowrap;">${fmtFechaHora(o.creado_en)}</td>
       <td align="center" style="font-family:var(--font-mono)">${o.km != null ? Number(o.km).toLocaleString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
       <td>${trabajosTooltip(o)}</td>
       <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>
       <td align="center">
-        ${o.estado==0
-          ? '<a href="/OTs/editar?ot='+o.id+'">EDITAR</a> | <a href="/OTs/cargar?ot='+o.id+'">CARGAR</a> | <a style="cursor:pointer;" onclick="open_carga('+o.id+')">CERRAR</a>'
-          : '<a href="/OTs/ver?ot='+o.id+'">VER</a>'}
+        ${o.estado==0 ? accionesAbierta(o) : '<a href="/OTs/ver?ot='+o.id+'">VER</a>'}
       </td>
     </tr>`).join('')
   }

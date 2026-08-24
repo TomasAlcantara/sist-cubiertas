@@ -1,18 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
 const { fichaDeCubierta } = require('../lib/cubiertaHistorial');
+const { estaAtadoAGomeria } = require('../lib/permisos');
 
 // GET /reportes
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     res.render('reportes/index', { user: req.user, currentPage: 'reportes' });
   } catch (err) { next(err); }
 });
 
 // GET /reportes/recorrido - Reporte por cubierta
-router.get('/recorrido', requireAuth, async (req, res, next) => {
+router.get('/recorrido', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     const { fuego = '' } = req.query;
     let cubiertas = [];
@@ -34,7 +35,7 @@ router.get('/recorrido', requireAuth, async (req, res, next) => {
 });
 
 // GET /reportes/historial - Historial de vida de una cubierta por número de fuego
-router.get('/historial', requireAuth, async (req, res, next) => {
+router.get('/historial', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     const fuego = (req.query.fuego || '').trim();
     const id = parseInt(req.query.id) || 0;
@@ -71,7 +72,7 @@ router.get('/historial', requireAuth, async (req, res, next) => {
 });
 
 // GET /reportes/estados - Reporte de estados
-router.get('/estados', requireAuth, async (req, res, next) => {
+router.get('/estados', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     const resumen = await sql`
       SELECT
@@ -94,14 +95,14 @@ router.get('/estados', requireAuth, async (req, res, next) => {
 });
 
 // GET /reportes/reporte_unidad - Reporte por interno
-router.get('/reporte_unidad', requireAuth, async (req, res, next) => {
+router.get('/reporte_unidad', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     const { unidad = 0 } = req.query;
     const unidades = await sql`SELECT * FROM micro WHERE activo = 1 ORDER BY unidad`;
     let cubiertas = [];
     if (parseInt(unidad) > 0) {
       cubiertas = await sql`
-        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida
+        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida, m.presion
         FROM cubiertas c
         LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
         LEFT JOIN medidas m ON c.medida_id = m.id
@@ -114,10 +115,10 @@ router.get('/reporte_unidad', requireAuth, async (req, res, next) => {
 });
 
 // GET /reportes/reporte_gomeria - Reporte por gomería
-router.get('/reporte_gomeria', requireAuth, async (req, res, next) => {
+router.get('/reporte_gomeria', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
-    // Gomería users are locked to their own gomería
-    const isGomeria = parseInt(req.user.tipo) === 0;
+    // Un usuario atado a una gomería queda fijado a la suya
+    const isGomeria = estaAtadoAGomeria(req.user);
     const gomeria = isGomeria
       ? parseInt(req.user.gomeria_id) || 0
       : parseInt(req.query.gomeria) || 0;
@@ -139,7 +140,7 @@ router.get('/reporte_gomeria', requireAuth, async (req, res, next) => {
 });
 
 // GET /reportes/cubierta_proveedor - Reporte por proveedor
-router.get('/cubierta_proveedor', requireAuth, async (req, res, next) => {
+router.get('/cubierta_proveedor', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     const { proveedor = 0 } = req.query;
     const proveedores = await sql`SELECT * FROM proveedor ORDER BY proveedor`;

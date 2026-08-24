@@ -28,7 +28,8 @@ const body = `
 
 <!-- ═══════════════════════════════════════════ -->
 <h2>2. Menú Principal</h2>
-<p>Desde la pantalla de inicio tenés acceso a los 6 módulos principales:</p>
+<p>Desde la pantalla de inicio tenés acceso a los módulos principales. Vas a ver
+solo los que tu usuario tenga habilitados:</p>
 <table>
   <thead><th>Botón</th><th>¿Para qué sirve?</th></thead>
   <tr class="light"><td><strong>Almacenes</strong></td><td>Ver el stock de cubiertas en cada depósito</td></tr>
@@ -37,6 +38,7 @@ const body = `
   <tr class="dark"><td><strong>Carga de Km</strong></td><td>Actualizar los kilómetros de cada unidad</td></tr>
   <tr class="light"><td><strong>Cubiertas</strong></td><td>Listado completo de todas las cubiertas</td></tr>
   <tr class="dark"><td><strong>Recapadoras</strong></td><td>Ver OTs de recapado por recapadora</td></tr>
+  <tr class="light"><td><strong>Presiones</strong></td><td>Tabla de presión de inflado por medida y profundidad mínima</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -79,9 +81,38 @@ const body = `
 <h3>Crear una nueva OT</h3>
 <div class="paso">
   <strong>Paso 1:</strong> Hacé click en <strong>Nueva OT</strong>.<br/>
-  <strong>Paso 2:</strong> Completá el número de OT, recapadora y fecha.<br/>
-  <strong>Paso 3:</strong> Hacé click en <strong>Guardar</strong>.
+  <strong>Paso 2:</strong> Elegí la <strong>unidad</strong>, la <strong>gomería</strong> y la fecha de solicitud.
+  Al elegir la unidad aparece el esquema con las cubiertas que tiene montadas.<br/>
+  <strong>Paso 3:</strong> Marcá los <strong>trabajos a realizar</strong> (al menos uno).<br/>
+  <strong>Paso 4:</strong> Contestá las dos preguntas de <strong>Motivo</strong>: si fue pinchadura y si fue rotura.
+  Las dos son obligatorias.<br/>
+  <strong>Paso 5:</strong> Cargá la <strong>profundidad en mm</strong> de cada rueda en los dos casilleros de abajo
+  de cada cubierta (ver más abajo).<br/>
+  <strong>Paso 6:</strong> Si hay cambio de cubiertas, asignalas en el esquema.<br/>
+  <strong>Paso 7:</strong> Hacé click en <strong>Generar</strong>.
 </div>
+
+<h3>Medir la profundidad de dibujo</h3>
+<p>Cada rueda del esquema tiene dos casilleros abajo de todo:</p>
+<table>
+  <thead><th>Casillero</th><th>Qué se mide</th></thead>
+  <tr class="light"><td><strong>ext</strong></td><td>Profundidad del hombro <strong>exterior</strong> de esa cubierta, en mm</td></tr>
+  <tr class="dark"><td><strong>int</strong></td><td>Profundidad del hombro <strong>interior</strong> de la <em>misma</em> cubierta, en mm</td></tr>
+</table>
+<div class="tip">
+  Son los dos hombros de una misma cubierta, no dos cubiertas distintas.
+  Una diferencia grande entre ambos suele ser síntoma de desalineación, y el sistema
+  lo marca como <strong>"Revisar alineación"</strong> en la vista de la OT.
+</div>
+<div class="warn">
+  Si un valor queda por debajo del mínimo (configurable en Administrar → Configuración,
+  por defecto <strong>4 mm</strong>) el casillero se pinta en rojo y aparece un aviso.
+  <strong>No impide guardar la OT</strong>: la idea es justamente dejar asentada la cubierta gastada.
+</div>
+
+<h3>Buscar OTs</h3>
+<p>En el listado podés filtrar por <strong>número de OT</strong>, por <strong>rango de fechas</strong>
+(Desde / Hasta), por unidad, gomería y estado. El botón <strong>Limpiar</strong> vuelve al listado completo.</p>
 
 <h3>Cerrar una OT</h3>
 <div class="paso">
@@ -151,7 +182,7 @@ const body = `
 
 <!-- ═══════════════════════════════════════════ -->
 <h2>10. Administración</h2>
-<div class="warn">Esta sección es solo para usuarios con perfil <strong>Master Bus</strong>.</div>
+<div class="warn">Esta sección es solo para usuarios con el permiso de <strong>Administración</strong>.</div>
 
 <h3>Administración General</h3>
 <table>
@@ -161,6 +192,7 @@ const body = `
   <tr class="light"><td><strong>Gomerías</strong></td><td>Agregar o editar gomerías</td></tr>
   <tr class="dark"><td><strong>Recapadoras</strong></td><td>Agregar o editar recapadoras</td></tr>
   <tr class="light"><td><strong>Anular OT</strong></td><td>Eliminar una OT abierta del sistema</td></tr>
+  <tr class="dark"><td><strong>Configuración</strong></td><td>Profundidad mínima y máxima de dibujo, e intervalos de alineación y preventivo</td></tr>
 </table>
 
 <h3>Administración de Unidades</h3>
@@ -168,7 +200,7 @@ const body = `
   <thead><th>Sección</th><th>¿Qué permite?</th></thead>
   <tr class="light"><td><strong>Modelos de Cubiertas</strong></td><td>Agregar marcas y modelos de cubiertas</td></tr>
   <tr class="dark"><td><strong>Unidades</strong></td><td>Agregar o editar los vehículos/internos. Desde VER se puede colocar y quitar cubiertas en cada posición</td></tr>
-  <tr class="light"><td><strong>Medidas</strong></td><td>Agregar medidas de cubiertas (ej: 295/80R22.5)</td></tr>
+  <tr class="light"><td><strong>Medidas</strong></td><td>Agregar medidas de cubiertas (ej: 295/80R22.5) y su presión de inflado en PSI</td></tr>
   <tr class="dark"><td><strong>Proveedores</strong></td><td>Agregar proveedores con teléfono y mail</td></tr>
 </table>
 
@@ -190,11 +222,25 @@ const body = `
 <div class="paso">
   <strong>Paso 1:</strong> Ir a Administrar → Usuarios → <strong>Nuevo Usuario</strong>.<br/>
   <strong>Paso 2:</strong> Completá usuario y contraseña.<br/>
-  <strong>Paso 3:</strong> Seleccioná el tipo:<br/>
-  &nbsp;&nbsp;• <strong>Master Bus</strong>: acceso completo a todo el sistema.<br/>
-  &nbsp;&nbsp;• <strong>Gomería</strong>: acceso limitado, debe asociarse a una gomería.<br/>
-  <strong>Paso 4:</strong> Hacé click en <strong>Guardar</strong>.
+  <strong>Paso 3:</strong> Elegí los permisos. Lo más rápido es usar un preset y después ajustar:<br/>
+  &nbsp;&nbsp;• <strong>Preset Gomero</strong>: abre y carga OTs, cierra preventivos, ve cubiertas y mantenimiento. No crea cubiertas ni cierra OTs con trabajos.<br/>
+  &nbsp;&nbsp;• <strong>Preset Consulta</strong>: solo mira, no modifica nada.<br/>
+  &nbsp;&nbsp;• <strong>Preset Admin</strong>: todo el sistema.<br/>
+  <strong>Paso 4:</strong> Si el usuario es de una gomería puntual, seleccionala en <strong>Gomería</strong>:
+  queda limitado a ver esa y no las demás.<br/>
+  <strong>Paso 5:</strong> Hacé click en <strong>Guardar</strong>.
 </div>
+<div class="tip">
+  El campo <strong>Tipo</strong> (Gomería / Master Bus) quedó solo como etiqueta.
+  Lo que un usuario puede hacer lo definen los permisos, no el tipo.
+</div>
+
+<h3>¿Quién puede cerrar cada OT?</h3>
+<table>
+  <thead><th>OT</th><th>Gomero</th><th>Administrador</th></thead>
+  <tr class="light"><td>Solo <strong>Preventivo</strong></td><td>Sí, escribiendo la descripción de lo revisado</td><td>Sí</td></tr>
+  <tr class="dark"><td>Con cualquier otro trabajo</td><td>No — ve "Cierra admin"</td><td>Sí</td></tr>
+</table>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2>11. Preguntas Frecuentes</h2>

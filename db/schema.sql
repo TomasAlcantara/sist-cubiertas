@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   mail VARCHAR(100),
   avisa SMALLINT DEFAULT 0,       -- 0=NO, 1=SI (aviso por mail al cerrar OT)
   gomeria_id INTEGER,
+  permisos TEXT,                  -- CSV de slugs (ver lib/permisos.js). NULL = se deduce de `tipo`
   activo SMALLINT DEFAULT 1
 );
 
@@ -52,7 +53,8 @@ CREATE TABLE IF NOT EXISTS marcas_ruedas (
 
 CREATE TABLE IF NOT EXISTS medidas (
   id SERIAL PRIMARY KEY,
-  medida VARCHAR(50) NOT NULL
+  medida VARCHAR(50) NOT NULL,
+  presion INTEGER                  -- presión de inflado obligatoria, en PSI
 );
 
 CREATE TABLE IF NOT EXISTS proveedor (
@@ -101,6 +103,10 @@ CREATE TABLE IF NOT EXISTS ots (
   armar BOOLEAN DEFAULT FALSE,
   preventivo BOOLEAN DEFAULT FALSE,
   pinchadura BOOLEAN DEFAULT FALSE,
+  rotura BOOLEAN DEFAULT FALSE,
+  creado_en TIMESTAMPTZ DEFAULT NOW(),  -- fecha/hora real de alta (fecha = fecha de solicitud)
+  descripcion_cierre TEXT,              -- lo que escribe el gomero al cerrar un preventivo
+  cerrado_por VARCHAR(100),
   observaciones TEXT
 );
 
@@ -110,6 +116,18 @@ CREATE TABLE IF NOT EXISTS ot_cubiertas (
   posicion VARCHAR(10),            -- ddi, ddd, tie, tii, tdi, tde, cie, cii, cdi, cde, ra
   cubierta_anterior_id INTEGER REFERENCES cubiertas(id),
   PRIMARY KEY (ot_id, cubierta_id)
+);
+
+-- Profundidad de dibujo medida por el gomero al abrir la OT, por posición del
+-- esquema. mm_ext/mm_int son los dos hombros de la MISMA cubierta: la diferencia
+-- entre ambos es lo que delata una desalineación.
+CREATE TABLE IF NOT EXISTS ot_mediciones (
+  ot_id       INTEGER NOT NULL REFERENCES ots(id) ON DELETE CASCADE,
+  posicion    VARCHAR(10) NOT NULL,
+  cubierta_id INTEGER REFERENCES cubiertas(id),
+  mm_ext      NUMERIC(4,1),
+  mm_int      NUMERIC(4,1),
+  PRIMARY KEY (ot_id, posicion)
 );
 
 -- Historial de vida de cada cubierta. Se llena solo al cerrar OTs.
@@ -136,6 +154,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_cub_ev_unico
 -- Config clave/valor (credenciales de mail, intervalos de mantenimiento, etc.).
 -- Mail: node db/set_mail_config.js
 -- Intervalos: dias_alineacion (default 180) y dias_preventivo (default 45)
+-- Milimetros: mm_min (default 4) y mm_max (default 20)
 CREATE TABLE IF NOT EXISTS config (
   clave TEXT PRIMARY KEY,
   valor TEXT

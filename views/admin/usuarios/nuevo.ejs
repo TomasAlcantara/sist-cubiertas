@@ -6,18 +6,16 @@ function guardar_datos() {
   var u = document.getElementById('usuario').value;
   var p = document.getElementById('password').value;
   if (!u || !p) { alert('Complete usuario y contraseña'); return; }
+  var permisos = permisos_marcados();
+  if (!permisos) { alert('Seleccione al menos un permiso'); return; }
   $.ajax({ type:'POST', url:'/ajax/save_usuario',
     data: { usuario: u, password: p, tipo: document.getElementById('tipo').value,
             nombre: document.getElementById('nombre').value, mail: document.getElementById('mail').value,
-            avisa: document.getElementById('avisa').value, gomeria: document.getElementById('gomeria').value },
-    success: function(data) { if(data) { alert(data); location.href='/admin/usuarios'; } else alert('Error al guardar'); }
+            avisa: document.getElementById('avisa').value, gomeria: document.getElementById('gomeria').value,
+            permisos: permisos },
+    success: function(data) { if(data) { alert(data); location.href='/admin/usuarios'; } else alert('Error al guardar'); },
+    error: function(xhr) { alert(xhr.responseText || 'Error al guardar'); }
   });
-}
-function diplay_me(obj) {
-  var isGomeria = obj.value == 0;
-  document.getElementById('pnombre').style.display  = isGomeria ? 'none' : '';
-  document.getElementById('pavisa').style.display   = isGomeria ? 'none' : '';
-  document.getElementById('pgomeria').style.display = isGomeria ? '' : 'none';
 }
 </script>
 <div class="form-card">
@@ -32,29 +30,35 @@ function diplay_me(obj) {
   </div>
   <div class="field">
     <label for="tipo">Tipo</label>
-    <select id="tipo" onchange="diplay_me(this)">
+    <select id="tipo">
       <option value="0">Gomeria</option>
       <option value="1">Master Bus</option>
     </select>
+    <p class="field-hint">Solo una etiqueta. Lo que el usuario puede hacer lo definen los permisos de abajo.</p>
   </div>
-  <div id="pnombre" class="field" style="display:none;">
+  <div class="field">
     <label for="nombre">Nombre</label>
     <input type="text" id="nombre" class="text" />
   </div>
-  <div class="field" id="pmail">
+  <div class="field">
     <label for="mail">Mail</label>
     <input type="text" id="mail" class="text" />
   </div>
-  <div id="pavisa" class="field" style="display:none;">
+  <div class="field">
     <label for="avisa">Avisar por mail</label>
     <select id="avisa"><option value="0">NO</option><option value="1">SI</option></select>
   </div>
-  <div id="pgomeria" class="field">
+  <div class="field">
     <label for="gomeria">Gomería</label>
     <select id="gomeria">
-      <option value="0">Seleccione...</option>
-      ${gomerias.map(g=>`<option value="${g.id}">${g.nombre}</option>`).join('')}
+      <option value="0">Ninguna (ve todas)</option>
+      ${gomerias.map(g=>`<option value="${g.id}">${e(g.nombre)}</option>`).join('')}
     </select>
+    <p class="field-hint">Si se elige una, el usuario queda limitado a ver esa gomería.</p>
+  </div>
+  <div class="field">
+    <label>Permisos</label>
+    ${gridPermisos(PRESETS_PERM.gomero)}
   </div>
   <div class="form-actions">
     <button class="btn-primary" onclick="guardar_datos()">Guardar</button>

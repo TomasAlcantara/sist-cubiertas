@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
 
 // Intervalos acordados con taller: alineación 2 veces al año, preventivo cada 45 días.
 // Se guardan en la tabla config para poder cambiarlos sin tocar el código.
@@ -18,7 +18,7 @@ async function intervalos() {
 }
 
 // GET /mantenimiento
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requirePerm('mantenimiento_ver'), async (req, res, next) => {
   try {
     const cfg = await intervalos();
 

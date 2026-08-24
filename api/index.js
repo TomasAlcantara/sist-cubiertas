@@ -45,6 +45,50 @@ app.set('views', path.join(__dirname, '../views'));
 app.locals.e = (str) => String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 app.locals.ej = (val) => JSON.stringify(val);
 
+// Formato de fecha/hora argentino (el runtime de Vercel está en UTC)
+const { fmtFecha, fmtFechaHora } = require('../lib/fechas');
+app.locals.fmtFecha = fmtFecha;
+app.locals.fmtFechaHora = fmtFechaHora;
+
+/**
+ * Paginador agrupado: primera, última y ±2 alrededor de la actual, con "…" en
+ * los saltos. Con miles de cubiertas listar todas las hojas es ilegible.
+ */
+app.locals.paginacion = (pagina, totalPages, href) => {
+  const total = parseInt(totalPages) || 0;
+  if (total <= 1) return '';
+  const actual = Math.min(Math.max(parseInt(pagina) || 1, 1), total);
+
+  const mostrar = new Set([1, total]);
+  for (let p = actual - 2; p <= actual + 2; p++) if (p >= 1 && p <= total) mostrar.add(p);
+
+  const paginas = [...mostrar].sort((a, b) => a - b);
+  let html = '<div class="list-pagination">';
+  if (actual > 1) html += `<a href="${href(actual - 1)}" class="pg-nav">&laquo;</a>`;
+  let previa = 0;
+  for (const p of paginas) {
+    if (previa && p - previa > 1) html += '<span class="pg-gap">…</span>';
+    html += p === actual
+      ? `<strong class="pg-current">${p}</strong>`
+      : `<a href="${href(p)}">${p}</a>`;
+    previa = p;
+  }
+  if (actual < total) html += `<a href="${href(actual + 1)}" class="pg-nav">&raquo;</a>`;
+  return html + '</div>';
+};
+
+// `can(permiso)` para que las vistas escondan lo que el usuario no puede usar.
+// Esconder el botón es cosmético: la autorización real vive en requirePerm().
+const { tienePermiso, gridPermisosHtml, permisosDe, PRESETS } = require('../lib/permisos');
+app.locals.gridPermisos = gridPermisosHtml;
+app.locals.permisosDe = permisosDe;
+app.locals.PRESETS_PERM = PRESETS;
+app.locals.nombrePreset = require('../lib/permisos').nombrePreset;
+app.use((req, res, next) => {
+  res.locals.can = (...slugs) => tienePermiso(req.user, slugs);
+  next();
+});
+
 // Middleware
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
@@ -62,6 +106,7 @@ app.use('/cubiertas', require('../routes/cubiertas'));
 app.use('/recapadoras', require('../routes/recapadoras'));
 app.use('/reportes', require('../routes/reportes'));
 app.use('/mantenimiento', require('../routes/mantenimiento'));
+app.use('/presiones', require('../routes/presiones'));
 app.use('/admin', require('../routes/admin'));
 app.use('/ajax', require('../routes/ajax'));
 
