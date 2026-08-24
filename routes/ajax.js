@@ -6,7 +6,7 @@ const { sql, sanitizeFuego } = require('../db');
 const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth');
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
-const { sanitizarPermisos } = require('../lib/permisos');
+const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
 const { parseFecha } = require('../lib/fechas');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -435,7 +435,11 @@ router.post('/colocar_rueda', requirePerm('cubiertas_mover'), async (req, res, n
     if (existing.length) {
       await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL WHERE id = ${existing[0].id}`;
     }
-    await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL WHERE id = ${parseInt(id) || 0}`;
+    // Al montarse deja de ser "Nueva". Con CASE y no con estado = 2 a secas:
+    // una Recapada que se monta sigue siendo Recapada, no baja a Usada.
+    await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL,
+      estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
+      WHERE id = ${parseInt(id) || 0}`;
     res.send('OK');
   } catch (err) { next(err); }
 });
@@ -460,6 +464,24 @@ router.post('/almacenar_ruedas', requirePerm('cubiertas_mover'), async (req, res
   } catch (err) { next(err); }
 });
 
+/**
+ * Una OT es "solo preventivo" cuando tiene el preventivo marcado y ningun otro
+ * trabajo. Solo esas puede cerrarlas un gomero, y con descripcion obligatoria;
+ * las que tienen trabajo real las cierra un administrador.
+ */
+const TRABAJOS_REALES = ['rotacion', 'arreglo', 'cambio', 'alinear', 'balanceo', 'armar'];
+
+function esSoloPreventivo(ot) {
+  if (!ot || !ot.preventivo) return false;
+  return TRABAJOS_REALES.every(t => !ot[t]);
+}
+
+/** Quien no tiene ot_cerrar solo llega hasta los preventivos. */
+function puedeCerrar(user, ot) {
+  if (tienePermiso(user, 'ot_cerrar')) return true;
+  return tienePermiso(user, 'ot_cerrar_preventivo') && esSoloPreventivo(ot);
+}
+
 // POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
 const posNombreCierre = (p) => ({
   ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
@@ -483,6 +505,20 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
     ]);
     if (!rows.length) return res.send('');
     const ot = rows[0];
+
+    if (!puedeCerrar(req.user, ot)) {
+      return res.send(`<div style="padding:22px; text-align:center;">
+        <p style="font-size:14px; margin:0 0 6px 0;"><strong>Esta OT la cierra un administrador</strong></p>
+        <p style="font-size:12.5px; color:#888; margin:0 0 16px 0;">
+          Solo se pueden cerrar desde gomería las OTs que son únicamente de Preventivo.
+        </p>
+        <input type="button" value="Cerrar" onclick="close_carga();" style="width:100px;font-size:13px;" />
+      </div>`);
+    }
+
+    // El gomero cierra un preventivo: no hay trabajos que tildar, ni factura,
+    // ni cubiertas salientes que mandar a ningún lado. Solo km y descripción.
+    const cierreReducido = !tienePermiso(req.user, 'ot_cerrar');
 
     // Cubiertas de la OT (entrantes) con sus salientes
     const [otCubiertas, unitTires] = await Promise.all([
@@ -595,6 +631,26 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
 
         <!-- Columna izquierda: formulario -->
         <div style="flex:1; min-width:240px;">
+          ${cierreReducido ? `
+          <p style="margin:0 0 10px 0; padding:8px 10px; background:rgba(46,125,50,0.12); border-left:3px solid #2e7d32; font-size:12.5px;">
+            Cierre de <strong>Preventivo</strong>. Detallá abajo qué se revisó y si quedó todo OK.
+          </p>
+
+          <p style="margin:0 0 3px 0;"><strong>Km Actuales:</strong></p>
+          <input type="number" id="km_cierre" value="${ot.km_actual||''}" style="width:150px;" placeholder="km" />
+
+          <p style="margin:10px 0 3px 0;"><strong>Fecha:</strong></p>
+          <input type="text" id="fecha_cierre" style="width:140px;" placeholder="DD/MM/AAAA" />
+
+          <p style="margin:10px 0 3px 0;"><strong>Descripción del preventivo:</strong> <span style="color:#c00;">*</span></p>
+          <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:90px; resize:vertical;"
+                    placeholder="Ej: se revisó presión en las 6 posiciones, todo OK"></textarea>
+
+          <div style="margin-top:18px; display:flex; gap:10px;">
+            <input type="button" value="Cerrar Preventivo" onclick="confirmar_cerrar(${otIdInt})" style="width:150px;font-size:13px;" />
+            <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
+          </div>
+          ` : `
           <p style="margin:0 0 5px 0;"><strong>Tareas a Realizar:</strong></p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; margin-bottom:12px; font-size:12px;">
             <span>Rotación: ${siNo(ot.rotacion)}</span>
@@ -637,10 +693,15 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
             <option value="ceamse">CEAMSE (dar de baja)</option>
           </select>
 
+          <p style="margin:10px 0 3px 0;"><strong>Descripción del cierre:</strong></p>
+          <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:60px; resize:vertical;"
+                    placeholder="Opcional">${escapeHtml(ot.descripcion_cierre || '')}</textarea>
+
           <div style="margin-top:18px; display:flex; gap:10px;">
             <input type="button" value="Cerrar OT" onclick="confirmar_cerrar(${otIdInt})" style="width:120px;font-size:13px;" />
             <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
           </div>
+          `}
         </div>
 
         <!-- Columna derecha: diagrama visual del micro -->
@@ -661,31 +722,66 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
 // POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
 router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), async (req, res, next) => {
   try {
-    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, destino_almacen_id } = req.body;
+    const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, destino_almacen_id, descripcion_cierre } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!km_actual || !otIdInt) return res.status(400).send('Datos requeridos');
+
+    // La OT se relee de la base antes de nada: el formulario recortado que ve el
+    // gomero es cosmetico, y confiar en lo que llega en el body dejaria que un
+    // POST armado a mano cerrara cualquier OT.
+    const otPrevia = await sql`SELECT * FROM ots WHERE id = ${otIdInt}`;
+    if (!otPrevia.length) return res.status(404).send('OT inexistente');
+    if (otPrevia[0].estado == 1) return res.status(400).send('La OT ya está cerrada');
+
+    const soloPreventivo = esSoloPreventivo(otPrevia[0]);
+    const cierraTodo = tienePermiso(req.user, 'ot_cerrar');
+    if (!cierraTodo) {
+      if (!tienePermiso(req.user, 'ot_cerrar_preventivo') || !soloPreventivo) {
+        return res.status(403).send('Solo un administrador puede cerrar OTs con trabajos realizados');
+      }
+    }
+
+    const descripcion = String(descripcion_cierre || '').trim() || null;
+    if (!cierraTodo && !descripcion) {
+      return res.status(400).send('La descripción del preventivo es obligatoria');
+    }
+
     const destinoEsCeamse = destino_almacen_id === 'ceamse';
     const destinoAlmacenId = (!destinoEsCeamse && parseInt(destino_almacen_id)) ? parseInt(destino_almacen_id) : 1;
 
     const kmCierre = parseInt(km_actual) || 0;
 
+    // Sin ot_cerrar los flags de trabajo que hayan llegado en el body se
+    // ignoran: la OT se cierra tal como estaba, solo con el preventivo hecho.
+    const trabajos = cierraTodo
+      ? {
+          rotacion: rotacion === '1', arreglo: arreglo === '1', cambio: cambio === '1',
+          alinear: alinear === '1', balanceo: balanceo === '1', armar: armar === '1',
+          preventivo: preventivo === '1',
+        }
+      : {
+          rotacion: false, arreglo: false, cambio: false,
+          alinear: false, balanceo: false, armar: false, preventivo: true,
+        };
+
     await sql`UPDATE ots SET
       estado = 1,
-      factura = ${factura||null},
-      costo = ${costo||null},
+      factura = ${cierraTodo ? (factura || null) : null},
+      costo = ${cierraTodo ? (costo || null) : null},
       km = ${kmCierre},
-      rotacion = ${rotacion === '1'},
-      arreglo  = ${arreglo  === '1'},
-      cambio   = ${cambio   === '1'},
-      alinear  = ${alinear  === '1'},
-      balanceo = ${balanceo === '1'},
-      armar    = ${armar    === '1'},
-      preventivo = ${preventivo === '1'}
+      rotacion = ${trabajos.rotacion},
+      arreglo  = ${trabajos.arreglo},
+      cambio   = ${trabajos.cambio},
+      alinear  = ${trabajos.alinear},
+      balanceo = ${trabajos.balanceo},
+      armar    = ${trabajos.armar},
+      preventivo = ${trabajos.preventivo},
+      descripcion_cierre = ${descripcion},
+      cerrado_por = ${req.user?.usuario || null}
     WHERE id = ${otIdInt}`;
 
-    const ot = await sql`SELECT unidad_id, fecha FROM ots WHERE id = ${otIdInt}`;
-    const unidad_id = ot[0]?.unidad_id;
-    const otFecha = ot[0]?.fecha || null;
+    const unidad_id = otPrevia[0].unidad_id;
+    const otFecha = otPrevia[0].fecha || null;
     if (unidad_id) {
       // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar
       // un kilometraje más reciente cargado a mano en Carga de Km.
@@ -694,11 +790,11 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
 
       // Fechas de mantenimiento: solo avanzan, para que cerrar una OT vieja no
       // haga parecer que el servicio se hizo después de lo que realmente se hizo.
-      if (otFecha && alinear === '1') {
+      if (otFecha && trabajos.alinear) {
         await sql`UPDATE micro SET ultima_alineacion = ${otFecha}
           WHERE id = ${unidad_id} AND (ultima_alineacion IS NULL OR ultima_alineacion < ${otFecha})`;
       }
-      if (otFecha && preventivo === '1') {
+      if (otFecha && trabajos.preventivo) {
         await sql`UPDATE micro SET ultimo_preventivo = ${otFecha}
           WHERE id = ${unidad_id} AND (ultimo_preventivo IS NULL OR ultimo_preventivo < ${otFecha})`;
       }
@@ -713,10 +809,13 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
     // IDs de todas las cubiertas que ENTRAN en esta OT (para detectar rotaciones)
     const incomingIds = new Set(cambios.map(c => c.cubierta_id));
 
-    // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones
+    // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones.
+    // Una cubierta que se monta deja de ser "Nueva". El CASE evita degradar a
+    // Usada las que ya son Recapadas, que tienen su propio estado.
     for (const c of cambios) {
       await sql`
-        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL
+        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL,
+          estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
         WHERE id = ${c.cubierta_id}
       `;
     }
@@ -764,7 +863,7 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
           ? (destinoEsCeamse ? 'Sale de la unidad — baja por CEAMSE' : 'Sale de la unidad al almacén')
           : 'Cambia de posición dentro de la unidad (rotación)',
       });
-      if (arreglo === '1') {
+      if (trabajos.arreglo) {
         await registrarEvento({
           cubierta_id: c.cubierta_anterior_id, tipo: 'reparacion', fecha: otFecha,
           micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,

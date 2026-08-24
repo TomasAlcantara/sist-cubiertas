@@ -416,3 +416,127 @@ describe('paginacion — helper de hojas agrupadas', () => {
     expect(html).not.toContain(">7</a>");
   });
 });
+
+// ─── Cierre segregado: gomero vs administrador ────────────────
+describe('POST /ajax/confirmar_cerrar_ot — quién puede cerrar qué', () => {
+  const OT_SOLO_PREVENTIVO = {
+    id: 1, estado: 0, unidad_id: 5, fecha: '2026-08-20',
+    preventivo: true, rotacion: false, arreglo: false, cambio: false,
+    alinear: false, balanceo: false, armar: false,
+  };
+  const OT_CON_TRABAJOS = { ...OT_SOLO_PREVENTIVO, cambio: true };
+
+  // La primera query de confirmar_cerrar_ot es el SELECT de la OT
+  const conOT = (ot) => {
+    sql.mockReset();
+    sql.mockImplementation((q) => {
+      const txt = Array.isArray(q) ? q.join(' ? ') : String(q);
+      if (txt.includes('SELECT * FROM ots')) return Promise.resolve([ot]);
+      return Promise.resolve([]);
+    });
+  };
+
+  const tokenGomero = () => makeToken(0, 'ot_ver,ot_cerrar_preventivo');
+  const tokenAdmin = () => makeToken(1, 'ot_ver,ot_cerrar');
+
+  test('gomero + OT con trabajos → 403', async () => {
+    conOT(OT_CON_TRABAJOS);
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenGomero()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000, descripcion_cierre: 'algo' });
+    expect(res.status).toBe(403);
+    // Y no llegó a tocar la OT
+    expect(sql.mock.calls.some(c => String(c[0]).includes('UPDATE ots'))).toBe(false);
+  });
+
+  test('gomero + OT solo preventivo + descripción → cierra', async () => {
+    conOT(OT_SOLO_PREVENTIVO);
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenGomero()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000, descripcion_cierre: 'Presiones revisadas, todo OK' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('ok');
+  });
+
+  test('gomero sin descripción → 400', async () => {
+    conOT(OT_SOLO_PREVENTIVO);
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenGomero()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000, descripcion_cierre: '   ' });
+    expect(res.status).toBe(400);
+  });
+
+  test('gomero no puede colar trabajos por el body', async () => {
+    conOT(OT_SOLO_PREVENTIVO);
+    await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenGomero()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000, descripcion_cierre: 'ok',
+              cambio: '1', alinear: '1', armar: '1', factura: 'FALSA-1', costo: '99999' });
+
+    const update = sql.mock.calls.find(c => String(c[0]).includes('UPDATE ots'));
+    const params = update.slice(1);
+    // Los flags se ignoran: solo queda el preventivo en true
+    expect(params.filter(v => v === true)).toEqual([true]);
+    // Y ni factura ni costo se guardan
+    expect(params).not.toContain('FALSA-1');
+    expect(params).not.toContain('99999');
+  });
+
+  test('admin cierra OT con trabajos y sus flags valen', async () => {
+    conOT(OT_CON_TRABAJOS);
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenAdmin()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000, cambio: '1', alinear: '1', factura: 'A-001' });
+    expect(res.status).toBe(200);
+    const update = sql.mock.calls.find(c => String(c[0]).includes('UPDATE ots'));
+    expect(update.slice(1)).toContain('A-001');
+  });
+
+  test('OT ya cerrada → 400 (no se re-cierra)', async () => {
+    conOT({ ...OT_SOLO_PREVENTIVO, estado: 1 });
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenAdmin()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000 });
+    expect(res.status).toBe(400);
+  });
+
+  test('OT inexistente → 404', async () => {
+    conOT(undefined);
+    sql.mockResolvedValue([]);
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenAdmin()}`)
+      .type('form')
+      .send({ ot_id: 999, km_actual: 250000 });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ─── Nueva → Usada al montarse ────────────────────────────────
+describe('Cubierta Nueva pasa a Usada al montarse', () => {
+  test('colocar_rueda degrada Nueva pero respeta Recapada', async () => {
+    sql.mockResolvedValue([]);
+    await request(app)
+      .post('/ajax/colocar_rueda')
+      .set('Cookie', `token=${makeToken(1, 'cubiertas_mover')}`)
+      .type('form')
+      .send({ id: 3, unidad: 5, pos: 'ddi' });
+
+    const update = sql.mock.calls
+      .map(c => (Array.isArray(c[0]) ? c[0].join(' ? ') : String(c[0])))
+      .find(q => q.includes('UPDATE cubiertas SET micro_id'));
+    expect(update).toContain('CASE WHEN estado = 1 THEN 2 ELSE estado END');
+  });
+});
