@@ -61,16 +61,24 @@ function normalizarMedida(m) {
     const medidas = await sql`SELECT id, medida, presion FROM medidas ORDER BY medida`;
     const sinPresion = [];
     let cargadas = 0;
+    let respetadas = 0;
     for (const m of medidas) {
       const psi = PRESIONES[normalizarMedida(m.medida)];
-      if (psi) {
-        await sql`UPDATE medidas SET presion = ${psi} WHERE id = ${m.id}`;
-        cargadas++;
-      } else if (m.presion == null) {
-        sinPresion.push(m.medida);
+      if (!psi) {
+        if (m.presion == null) sinPresion.push(m.medida);
+        continue;
       }
+      // Solo se completa lo que está vacío: si alguien ya ajustó la presión a
+      // mano, volver a correr esta migración no se la pisa.
+      if (m.presion != null) {
+        if (m.presion !== psi) respetadas++;
+        continue;
+      }
+      await sql`UPDATE medidas SET presion = ${psi} WHERE id = ${m.id} AND presion IS NULL`;
+      cargadas++;
     }
     console.log(`OK: presión cargada en ${cargadas} de ${medidas.length} medidas`);
+    if (respetadas) console.log(`   (${respetadas} ya tenían una presión distinta cargada a mano: se respetaron)`);
     if (sinPresion.length) {
       console.log('\nMedidas SIN presión — cargarlas a mano en Admin > Medidas:');
       sinPresion.forEach(m => console.log('  · ' + m));
