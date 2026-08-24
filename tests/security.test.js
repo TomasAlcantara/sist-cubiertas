@@ -241,3 +241,95 @@ describe('POST /cubiertas/nuevo — validación de inputs', () => {
     expect(res.headers['location']).toMatch(/error=/);
   });
 });
+
+// ─── AJAX: save_config con whitelist de claves ────────────────
+describe('POST /ajax/save_config — whitelist de parámetros', () => {
+  // La tabla `config` guarda también las credenciales de Gmail: aceptar una
+  // clave arbitraria dejaría pisarlas desde la web.
+  test('clave de credenciales de mail → 400 y no toca la DB', async () => {
+    const { sql } = require('../db');
+    sql.mockClear();
+    const res = await request(app)
+      .post('/ajax/save_config')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ mail_pass: 'robada' });
+    expect(res.status).toBe(400);
+    expect(sql).not.toHaveBeenCalled();
+  });
+
+  test('clave inventada → 400', async () => {
+    const res = await request(app)
+      .post('/ajax/save_config')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ cualquier_cosa: '1' });
+    expect(res.status).toBe(400);
+  });
+
+  test('valor fuera de rango → 400', async () => {
+    const res = await request(app)
+      .post('/ajax/save_config')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ mm_min: 9999 });
+    expect(res.status).toBe(400);
+  });
+
+  test('valor no numérico → 400', async () => {
+    const res = await request(app)
+      .post('/ajax/save_config')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ dias_preventivo: 'DROP TABLE config' });
+    expect(res.status).toBe(400);
+  });
+
+  test('claves válidas se guardan', async () => {
+    const { sql } = require('../db');
+    sql.mockClear();
+    const res = await request(app)
+      .post('/ajax/save_config')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ mm_min: 5, dias_preventivo: 30 });
+    expect(res.status).toBe(200);
+    expect(sql).toHaveBeenCalledTimes(2);
+  });
+
+  test('sin permiso de administración → 403', async () => {
+    const res = await request(app)
+      .post('/ajax/save_config')
+      .set('Cookie', `token=${makeToken({ tipo: 0 })}`)
+      .type('form')
+      .send({ mm_min: 5 });
+    expect(res.status).toBe(403);
+  });
+});
+
+// ─── AJAX: save_medida valida la presión ──────────────────────
+describe('POST /ajax/save_medida — presión', () => {
+  test('presión vacía se guarda como null, no como 0', async () => {
+    const { sql } = require('../db');
+    sql.mockClear();
+    await request(app)
+      .post('/ajax/save_medida')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ medida: '295/80R22.5', presion: '' });
+    const params = sql.mock.calls[0].slice(1);
+    expect(params).toContain(null);
+    expect(params).not.toContain(0);
+  });
+
+  test('presión absurda se descarta en vez de guardarse', async () => {
+    const { sql } = require('../db');
+    sql.mockClear();
+    await request(app)
+      .post('/ajax/save_medida')
+      .set('Cookie', `token=${makeToken()}`)
+      .type('form')
+      .send({ medida: '295/80R22.5', presion: '99999' });
+    expect(sql.mock.calls[0].slice(1)).toContain(null);
+  });
+});

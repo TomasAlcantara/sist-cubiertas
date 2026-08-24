@@ -102,7 +102,7 @@ router.get('/reporte_unidad', requirePerm('reportes_ver'), async (req, res, next
     let cubiertas = [];
     if (parseInt(unidad) > 0) {
       cubiertas = await sql`
-        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida
+        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida, m.presion
         FROM cubiertas c
         LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
         LEFT JOIN medidas m ON c.medida_id = m.id

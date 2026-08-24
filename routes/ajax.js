@@ -8,6 +8,7 @@ const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
 const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
 const { parseFecha } = require('../lib/fechas');
+const { CONFIG_EDITABLE } = require('../lib/config');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -258,14 +259,45 @@ router.post('/save_recapadora', requireMaster, async (req, res, next) => {
 // POST /ajax/save_medida
 router.post('/save_medida', requireMaster, async (req, res, next) => {
   try {
-    const { id, medida } = req.body;
+    const { id, medida, presion } = req.body;
+    // Vacío = sin dato, no cero: una presión 0 no existe y ensuciaría la tabla.
+    const psi = presion === '' || presion == null ? null : parseInt(presion);
+    const psiVal = Number.isFinite(psi) && psi > 0 && psi <= 200 ? psi : null;
     if (id) {
-      await sql`UPDATE medidas SET medida=${medida} WHERE id=${parseInt(id)}`;
+      await sql`UPDATE medidas SET medida=${medida}, presion=${psiVal} WHERE id=${parseInt(id)}`;
       res.send('Medida actualizada correctamente');
     } else {
-      await sql`INSERT INTO medidas (medida) VALUES (${medida})`;
+      await sql`INSERT INTO medidas (medida, presion) VALUES (${medida}, ${psiVal})`;
       res.send('Medida creada correctamente');
     }
+  } catch (err) { next(err); }
+});
+
+// POST /ajax/save_config - Guardar parámetros de la pantalla de configuración
+router.post('/save_config', requireMaster, async (req, res, next) => {
+  try {
+    const guardadas = [];
+    for (const [clave, valor] of Object.entries(req.body)) {
+      // Whitelist estricta: la tabla config guarda también las credenciales de
+      // Gmail, y aceptar una clave arbitraria las dejaría pisar desde la web.
+      const campo = Object.prototype.hasOwnProperty.call(CONFIG_EDITABLE, clave)
+        ? CONFIG_EDITABLE[clave]
+        : null;
+      if (!campo) return res.status(400).send(`Parámetro no permitido: ${clave}`);
+
+      const n = parseInt(valor);
+      if (!Number.isFinite(n) || n < campo.min || n > campo.max) {
+        return res.status(400).send(`${campo.label}: debe estar entre ${campo.min} y ${campo.max}`);
+      }
+
+      await sql`
+        INSERT INTO config (clave, valor) VALUES (${clave}, ${String(n)})
+        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
+      `;
+      guardadas.push(campo.label);
+    }
+    if (!guardadas.length) return res.status(400).send('Nada para guardar');
+    res.send('Configuración guardada');
   } catch (err) { next(err); }
 });
 
