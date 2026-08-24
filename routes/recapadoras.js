@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
 
 // GET /recapadoras
-router.get('/', requireAuth, async (req, res) => {
+router.get('/', requirePerm('gomerias_ver'), async (req, res) => {
   const { recapadora = 0, estado = -1 } = req.query;
   const recapadoras = await sql`SELECT * FROM recapadora WHERE activo = 1 ORDER BY nombre`;
 

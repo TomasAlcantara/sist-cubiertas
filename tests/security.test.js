@@ -132,16 +132,38 @@ describe('POST /ajax/inactive — whitelist de tabla', () => {
   });
 });
 
-// ─── AJAX: anular OT solo para Master ─────────────────────────
-describe('POST /ajax/anular_ot — solo tipo Master', () => {
-  test('usuario tipo Gomería → redirige (sin acceso)', async () => {
+// ─── AJAX: anular OT exige el permiso ot_anular ───────────────
+describe('POST /ajax/anular_ot — exige permiso ot_anular', () => {
+  // Un POST AJAX denegado devuelve 403, no un 302: si redirigiera, el $.ajax
+  // seguiría el redirect y el front recibiría el HTML de la home como si
+  // la operación hubiera salido bien.
+  test('usuario gomería (sin ot_anular) → 403', async () => {
     const tokenGomeria = makeToken({ tipo: 0 });
     const res = await request(app)
       .post('/ajax/anular_ot')
       .set('Cookie', `token=${tokenGomeria}`)
       .type('form')
       .send({ ot_id: 1 });
+    expect(res.status).toBe(403);
+  });
+
+  test('usuario con ot_anular explícito → pasa', async () => {
+    const token = makeToken({ tipo: 0, permisos: 'ot_ver,ot_anular' });
+    const res = await request(app)
+      .post('/ajax/anular_ot')
+      .set('Cookie', `token=${token}`)
+      .type('form')
+      .send({ ot_id: 1 });
+    expect(res.status).toBe(200);
+  });
+
+  test('GET denegado en navegación → redirige a la home', async () => {
+    const tokenGomeria = makeToken({ tipo: 0 });
+    const res = await request(app)
+      .get('/admin')
+      .set('Cookie', `token=${tokenGomeria}`);
     expect(res.status).toBe(302);
+    expect(res.headers['location']).toBe('/');
   });
 });
 

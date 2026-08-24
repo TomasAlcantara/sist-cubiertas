@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
 
 // GET /OTs/list
-router.get('/list', requireAuth, async (req, res, next) => {
+router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
   try {
     const { gomeria = 0, unidad = 0, estado = -1 } = req.query;
 
@@ -31,7 +31,7 @@ router.get('/list', requireAuth, async (req, res, next) => {
 });
 
 // GET /OTs/nueva
-router.get('/nueva', requireAuth, async (req, res, next) => {
+router.get('/nueva', requirePerm('ot_crear'), async (req, res, next) => {
   try {
     const [gomerias, unidades, almacenes, modelos, medidas] = await Promise.all([
       sql`SELECT * FROM gomeria WHERE activo = 1 ORDER BY nombre`,
@@ -45,7 +45,7 @@ router.get('/nueva', requireAuth, async (req, res, next) => {
 });
 
 // GET /OTs/ver?ot=X
-router.get('/ver', requireAuth, async (req, res, next) => {
+router.get('/ver', requirePerm('ot_ver'), async (req, res, next) => {
   try {
     const { ot } = req.query;
     const rows = await sql`
@@ -78,7 +78,7 @@ router.get('/ver', requireAuth, async (req, res, next) => {
 });
 
 // GET /OTs/cargar?ot=X — Vista dedicada para asignar cubiertas al diagrama
-router.get('/cargar', requireAuth, async (req, res, next) => {
+router.get('/cargar', requirePerm('ot_editar'), async (req, res, next) => {
   try {
     const { ot } = req.query;
     const rows = await sql`
@@ -108,7 +108,7 @@ router.get('/cargar', requireAuth, async (req, res, next) => {
 });
 
 // GET /OTs/editar?ot=X
-router.get('/editar', requireAuth, async (req, res, next) => {
+router.get('/editar', requirePerm('ot_editar'), async (req, res, next) => {
   try {
     const { ot } = req.query;
     const rows = await sql`

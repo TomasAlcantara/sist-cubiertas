@@ -47,13 +47,22 @@
       <li class="<%= currentPage === 'inicio' ? 'active' : '' %>">
         <a href="/">Inicio</a>
       </li>
+      <% if (can('reportes_ver')) { %>
       <li class="<%= currentPage === 'reportes' ? 'active' : '' %>">
         <a href="/reportes">Reportes</a>
       </li>
+      <% } %>
+      <% if (can('mantenimiento_ver')) { %>
       <li class="<%= currentPage === 'mantenimiento' ? 'active' : '' %>">
         <a href="/mantenimiento">Mantenimiento</a>
       </li>
-      <% if (user.tipo === 1) { %>
+      <% } %>
+      <% if (can('cubiertas_ver')) { %>
+      <li class="<%= currentPage === 'presiones' ? 'active' : '' %>">
+        <a href="/presiones">Presiones</a>
+      </li>
+      <% } %>
+      <% if (can('admin')) { %>
       <li class="<%= currentPage === 'admin' ? 'active' : '' %>">
         <a href="/admin">Administrar</a>
       </li>

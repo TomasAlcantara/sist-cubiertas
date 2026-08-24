@@ -528,6 +528,15 @@ p.error-msg {
 .field select,
 .field textarea { display: block; width: 100%; }
 
+.field-hint {
+  margin: 2px 0 0 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -745,7 +754,25 @@ p.error-msg {
   font-family: var(--font-mono);
   font-size: 12px;
 }
-.list-pagination .pg-current { color: var(--red); font-weight: 700; }
+.list-pagination a,
+.list-pagination .pg-current,
+.list-pagination .pg-gap {
+  display: inline-block;
+  min-width: 26px;
+  padding: 4px 7px;
+  margin: 0 1px;
+  border-radius: var(--radius);
+}
+.list-pagination a { border: 1px solid var(--border); text-decoration: none; }
+.list-pagination a:hover { background: var(--bg-hover); border-color: var(--red); }
+.list-pagination .pg-current {
+  color: #fff;
+  background: var(--red);
+  border: 1px solid var(--red);
+  font-weight: 700;
+}
+.list-pagination .pg-gap { color: var(--text-muted); border: none; min-width: 0; }
+.list-pagination .pg-nav { font-weight: 700; }
 
 .list-active-filter {
   display: inline-flex;

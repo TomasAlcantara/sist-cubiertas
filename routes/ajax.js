@@ -3,9 +3,10 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego } = require('../db');
-const { requireAuth, requireMaster } = require('../middleware/auth');
+const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth');
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
+const { sanitizarPermisos } = require('../lib/permisos');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -24,7 +25,7 @@ function escapeHtml(str) {
 }
 
 // POST /ajax/inactive - Activar/desactivar registro
-router.post('/inactive', requireAuth, async (req, res, next) => {
+router.post('/inactive', requireMaster, async (req, res, next) => {
   try {
     const { id, active, table } = req.body;
     const allowed = ['usuarios', 'almacen', 'gomeria', 'recapadora', 'micro', 'marcas_ruedas', 'cubiertas'];
@@ -42,7 +43,7 @@ router.post('/change_filter', requireAuth, (req, res) => {
 });
 
 // POST /ajax/cargar_km - Cargar km individual
-router.post('/cargar_km', requireAuth, async (req, res, next) => {
+router.post('/cargar_km', requirePerm('km_cargar'), async (req, res, next) => {
   try {
     const { id, km } = req.body;
     await sql`UPDATE micro SET km_actual = ${parseInt(km) || 0} WHERE id = ${parseInt(id) || 0}`;
@@ -51,7 +52,7 @@ router.post('/cargar_km', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/carga_masiva_km - Carga masiva de km
-router.post('/carga_masiva_km', requireAuth, async (req, res, next) => {
+router.post('/carga_masiva_km', requirePerm('km_cargar'), async (req, res, next) => {
   try {
     const updates = [];
     for (const key in req.body) {
@@ -67,7 +68,7 @@ router.post('/carga_masiva_km', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/mover_cubierta - Mover cubierta a otro almacén
-router.post('/mover_cubierta', requireAuth, async (req, res, next) => {
+router.post('/mover_cubierta', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { cubierta, almacen } = req.body;
     const cubId = parseInt(cubierta) || 0;
@@ -88,7 +89,7 @@ router.post('/mover_cubierta', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/nuevo_estado - Cambiar estado de cubierta
-router.post('/nuevo_estado', requireAuth, async (req, res, next) => {
+router.post('/nuevo_estado', requirePerm('cubiertas_editar'), async (req, res, next) => {
   try {
     const { r_id, estado } = req.body;
     const cubId = parseInt(r_id) || 0;
@@ -128,18 +129,29 @@ router.post('/save_usuario', requireMaster, saveUsuarioValidators, async (req, r
     return res.status(400).send(msg);
   }
   try {
-    const { id, usuario, password, tipo, nombre, mail, avisa, gomeria } = req.body;
+    const { id, usuario, password, tipo, nombre, mail, avisa, gomeria, permisos } = req.body;
     const hash = password ? await bcrypt.hash(password, 10) : null;
+
+    // Nunca guardar el CSV crudo: solo slugs que existan en el catálogo.
+    const permisosCsv = sanitizarPermisos(permisos).join(',');
+    if (!permisosCsv) return res.status(400).send('Seleccione al menos un permiso válido');
+
+    // Quitarse a uno mismo el permiso de administrar deja el sistema sin acceso
+    // a la administración si es el único admin. Se bloquea de entrada.
+    if (id && parseInt(id) === parseInt(req.user.id) && !permisosCsv.split(',').includes('admin')) {
+      return res.status(400).send('No podés quitarte a vos mismo el permiso de Administración');
+    }
+
     if (id) {
       if (hash) {
-        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, password=${hash}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null} WHERE id=${parseInt(id)}`;
+        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, password=${hash}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null}, permisos=${permisosCsv} WHERE id=${parseInt(id)}`;
       } else {
-        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null} WHERE id=${parseInt(id)}`;
+        await sql`UPDATE usuarios SET usuario=${usuario.trim()}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null}, permisos=${permisosCsv} WHERE id=${parseInt(id)}`;
       }
       res.send('Usuario actualizado correctamente');
     } else {
       if (!hash) return res.status(400).send('Contraseña requerida');
-      await sql`INSERT INTO usuarios (usuario, password, tipo, nombre, mail, avisa, gomeria_id) VALUES (${usuario.trim()},${hash},${parseInt(tipo)},${nombre||null},${mail||null},${parseInt(avisa)||0},${parseInt(gomeria)||null})`;
+      await sql`INSERT INTO usuarios (usuario, password, tipo, nombre, mail, avisa, gomeria_id, permisos) VALUES (${usuario.trim()},${hash},${parseInt(tipo)},${nombre||null},${mail||null},${parseInt(avisa)||0},${parseInt(gomeria)||null},${permisosCsv})`;
       res.send('Usuario creado correctamente');
     }
   } catch (err) { next(err); }
@@ -257,7 +269,7 @@ router.post('/save_medida', requireMaster, async (req, res, next) => {
 });
 
 // POST /ajax/listar_ruedas - Listar cubiertas para selección en micro u OT
-router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
+router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
     const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos, orden = 'asc' } = req.body;
     const orderDir = orden === 'desc' ? 'DESC' : 'ASC';
@@ -380,7 +392,7 @@ router.post('/listar_ruedas', requireAuth, async (req, res, next) => {
 });
 
 // GET /ajax/ultimo_fuego - Sugerir el siguiente número de fuego (basado en la última cubierta creada)
-router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
+router.get('/ultimo_fuego', requirePerm('cubiertas_crear'), async (req, res, next) => {
   try {
     const [row] = await sql`
       SELECT fuego FROM cubiertas WHERE activo = 1 ORDER BY id DESC LIMIT 1
@@ -394,7 +406,7 @@ router.get('/ultimo_fuego', requireAuth, async (req, res, next) => {
 });
 
 // GET /ajax/cubiertas_unidad - Obtener cubiertas actuales de un micro por posición
-router.get('/cubiertas_unidad', requireAuth, async (req, res, next) => {
+router.get('/cubiertas_unidad', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
     const { unidad_id } = req.query;
     if (!unidad_id) return res.json({ tipo_unidad: 1, cubiertas: [] });
@@ -415,7 +427,7 @@ router.get('/cubiertas_unidad', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/colocar_rueda - Colocar cubierta en posición de micro
-router.post('/colocar_rueda', requireAuth, async (req, res, next) => {
+router.post('/colocar_rueda', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { id, unidad, pos } = req.body;
     const existing = await sql`SELECT id FROM cubiertas WHERE micro_id = ${parseInt(unidad) || 0} AND posicion = ${pos} AND activo = 1`;
@@ -428,7 +440,7 @@ router.post('/colocar_rueda', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/almacenar_rueda - Guardar cubierta en almacén desde micro
-router.post('/almacenar_rueda', requireAuth, async (req, res, next) => {
+router.post('/almacenar_rueda', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { r_id, almacen_id } = req.body;
     await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen_id) || null}, micro_id = NULL, posicion = NULL, gomeria_id = NULL WHERE id = ${parseInt(r_id) || 0}`;
@@ -437,7 +449,7 @@ router.post('/almacenar_rueda', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/almacenar_ruedas - Guardar múltiples cubiertas en almacén
-router.post('/almacenar_ruedas', requireAuth, async (req, res, next) => {
+router.post('/almacenar_ruedas', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { almacen_id, cubiertas_ids } = req.body;
     if (!cubiertas_ids) return res.send('ok');
@@ -454,7 +466,7 @@ const posNombreCierre = (p) => ({
   cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2'
 })[p] || p;
 
-router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
+router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), async (req, res, next) => {
   try {
     const { ot_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
@@ -644,7 +656,7 @@ router.post('/mb_cerrar_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/confirmar_cerrar_ot - Ejecuta el cierre de OT y mueve cubiertas
-router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
+router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), async (req, res, next) => {
   try {
     const { ot_id, km_actual, factura, costo, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, destino_almacen_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
@@ -777,7 +789,7 @@ router.post('/confirmar_cerrar_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
-router.post('/nueva_ot', requireAuth, async (req, res, next) => {
+router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
   try {
     const { fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
     if (!fecha) return res.send('');
@@ -857,7 +869,7 @@ router.post('/nueva_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/actualizar_ot - Editar OT existente (solo si está abierta)
-router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
+router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) => {
   try {
     const { ot_id, fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
@@ -908,7 +920,7 @@ router.post('/actualizar_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/agregar_cubierta_ot - Agregar cubierta a OT
-router.post('/agregar_cubierta_ot', requireAuth, async (req, res, next) => {
+router.post('/agregar_cubierta_ot', requirePerm('ot_editar'), async (req, res, next) => {
   try {
     const { ot_id, cubierta_id } = req.body;
     await sql`INSERT INTO ot_cubiertas (ot_id, cubierta_id) VALUES (${parseInt(ot_id)||0}, ${parseInt(cubierta_id)||0}) ON CONFLICT DO NOTHING`;
@@ -918,7 +930,7 @@ router.post('/agregar_cubierta_ot', requireAuth, async (req, res, next) => {
 });
 
 // POST /ajax/anular_ot
-router.post('/anular_ot', requireMaster, async (req, res, next) => {
+router.post('/anular_ot', requirePerm('ot_anular'), async (req, res, next) => {
   try {
     const { ot_id } = req.body;
     const otIdInt = parseInt(ot_id) || 0;

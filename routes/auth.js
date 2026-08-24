@@ -5,6 +5,7 @@ const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
 const { sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
+const { permisosDe } = require('../lib/permisos');
 
 // Máximo 10 intentos de login por IP cada 15 minutos
 const loginLimiter = rateLimit({
@@ -46,8 +47,14 @@ router.post('/login', loginLimiter, async (req, res) => {
     if (!valid) {
       return res.render('login', { error: 'Usuario o contraseña incorrectos' });
     }
+    // Los permisos viajan resueltos en el token: así un usuario viejo sin la
+    // columna cargada entra con los que le corresponden por su `tipo`.
     const token = jwt.sign(
-      { id: user.id, usuario: user.usuario, tipo: user.tipo, nombre: user.nombre, gomeria_id: user.gomeria_id || null },
+      {
+        id: user.id, usuario: user.usuario, tipo: user.tipo, nombre: user.nombre,
+        gomeria_id: user.gomeria_id || null,
+        permisos: permisosDe(user).join(','),
+      },
       process.env.JWT_SECRET,
       { expiresIn: '2h' }
     );

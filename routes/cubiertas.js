@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego, nextFuego } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
 
 const PER_PAGE = 25;
@@ -17,7 +17,7 @@ const ORD_MAP = {
 };
 
 // GET /cubiertas
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
     const { fuego = '', modelo = 0, estado = 0, proveedor = 0, orderby = 0, pagina = 1 } = req.query;
     const offset = (parseInt(pagina) - 1) * PER_PAGE;
@@ -73,7 +73,7 @@ router.get('/', requireAuth, async (req, res, next) => {
 });
 
 // GET /cubiertas/nuevo
-router.get('/nuevo', requireAuth, async (req, res, next) => {
+router.get('/nuevo', requirePerm('cubiertas_crear'), async (req, res, next) => {
   try {
     const { error = '' } = req.query;
     const [modelos, medidas, almacenes, proveedores] = await Promise.all([
@@ -103,7 +103,7 @@ const nuevaCubiertaValidators = [
     .isInt({ min: 1, max: 200 }).withMessage('Cantidad debe ser entre 1 y 200'),
 ];
 
-router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, next) => {
+router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     const msg = errors.array().map(e => e.msg).join(' | ');
@@ -187,7 +187,7 @@ router.post('/nuevo', requireAuth, nuevaCubiertaValidators, async (req, res, nex
 });
 
 // GET /cubiertas/editar?id=X
-router.get('/editar', requireAuth, async (req, res, next) => {
+router.get('/editar', requirePerm('cubiertas_editar'), async (req, res, next) => {
   try {
     const { id } = req.query;
     if (!id) return res.redirect('/cubiertas');
@@ -207,7 +207,7 @@ router.get('/editar', requireAuth, async (req, res, next) => {
 });
 
 // POST /cubiertas/editar
-router.post('/editar', requireAuth, async (req, res, next) => {
+router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) => {
   try {
     const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
     if (!id || !fuego) return res.redirect('/cubiertas');

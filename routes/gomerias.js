@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { sql } = require('../db');
-const { requireAuth } = require('../middleware/auth');
+const { requirePerm } = require('../middleware/auth');
+const { estaAtadoAGomeria } = require('../lib/permisos');
 
 const ORD_MAP = {
   1: 'c.fuego ASC', 11: 'c.fuego DESC',
@@ -12,7 +13,7 @@ const ORD_MAP = {
 };
 
 // GET /gomerias - Lista de gomerías
-router.get('/', requireAuth, async (req, res, next) => {
+router.get('/', requirePerm('gomerias_ver'), async (req, res, next) => {
   try {
     const gomerias = await sql`SELECT * FROM gomeria WHERE activo = 1 ORDER BY nombre`;
     res.render('gomerias/index', { user: req.user, gomerias, currentPage: 'inicio' });
@@ -20,15 +21,15 @@ router.get('/', requireAuth, async (req, res, next) => {
 });
 
 // GET /gomerias/view?id=X - Ver cubiertas de una gomería
-router.get('/view', requireAuth, async (req, res, next) => {
+router.get('/view', requirePerm('gomerias_ver'), async (req, res, next) => {
   try {
     const { id, fuego = '', modelo = 0, medida = 0, estado = 0, orderby = 0 } = req.query;
 
     const gomeria = await sql`SELECT * FROM gomeria WHERE id = ${parseInt(id) || 0}`;
     if (!gomeria.length) return res.redirect('/gomerias');
 
-    // Gomería users can only view their own gomería
-    if (parseInt(req.user.tipo) === 0 && parseInt(req.user.gomeria_id) !== parseInt(id)) {
+    // Un usuario atado a una gomería solo ve la suya
+    if (estaAtadoAGomeria(req.user) && parseInt(req.user.gomeria_id) !== parseInt(id)) {
       return res.redirect('/gomerias');
     }
 

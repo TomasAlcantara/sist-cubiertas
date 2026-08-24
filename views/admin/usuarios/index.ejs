@@ -1,5 +1,17 @@
 <%
 const currentPage = 'admin';
+// Resumen legible de permisos: si coinciden con un preset se muestra su nombre,
+// si no, la cantidad. Los usuarios anteriores al cambio se marcan aparte.
+const NOMBRE_PRESET = { admin: 'Admin', gomero: 'Gomero', consulta: 'Consulta' };
+const resumenPermisos = (u) => {
+  const heredado = u.permisos == null || String(u.permisos).trim() === '';
+  const lista = permisosDe(u);
+  const preset = nombrePreset(lista);
+  const txt = preset ? NOMBRE_PRESET[preset] : lista.length + ' permisos';
+  return heredado
+    ? '<span style="color:var(--text-muted);" title="Sin permisos propios: heredados de su tipo">' + txt + ' (heredado)</span>'
+    : txt + ' <span style="color:var(--text-muted);">(' + lista.length + ')</span>';
+};
 const body = `
 <div class="list-head">
   <h2>Usuarios</h2>
@@ -11,12 +23,13 @@ const body = `
 </div>
 <table>
   <thead>
-    <th>ID</th><th>Usuario</th><th>Tipo</th><th style="width:150px;">Editar</th>
+    <th>ID</th><th>Usuario</th><th>Tipo</th><th>Permisos</th><th style="width:150px;">Editar</th>
   </thead>
   ${usuarios.map((u,i)=>`<tr class="${i%2===0?'light':'dark'}">
     <td align="center">${u.id}</td>
     <td>${u.usuario}</td>
     <td align="center">${u.tipo==1?'Master Bus':'Gomeria'}</td>
+    <td align="center">${resumenPermisos(u)}</td>
     <td align="center">
       <a href="/admin/usuarios/editar?usuario=${u.id}">EDITAR</a> |
       <a style="cursor:pointer;" onclick="active(${u.id}, ${u.activo==1?0:1}, 'usuarios')">${u.activo==1?'BAJA':'ALTA'}</a>

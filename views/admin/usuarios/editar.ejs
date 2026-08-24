@@ -1,8 +1,13 @@
 <%
 const currentPage = 'admin';
+// Un usuario viejo sin la columna cargada muestra los permisos que hoy tiene de
+// hecho (deducidos de su `tipo`), no una grilla vacía.
+const permisosActuales = permisosDe(usuario);
 const body = `
 <script>
 function guardar_datos() {
+  var permisos = permisos_marcados();
+  if (!permisos) { alert('Seleccione al menos un permiso'); return; }
   $.ajax({ type:'POST', url:'/ajax/save_usuario',
     data: { id: ${usuario.id}, usuario: document.getElementById('usuario').value,
             password: document.getElementById('password').value,
@@ -10,15 +15,11 @@ function guardar_datos() {
             nombre: document.getElementById('nombre').value,
             mail: document.getElementById('mail').value,
             avisa: document.getElementById('avisa').value,
-            gomeria: document.getElementById('gomeria').value },
-    success: function(data) { if(data) { alert(data); location.href='/admin/usuarios'; } else alert('Error'); }
+            gomeria: document.getElementById('gomeria').value,
+            permisos: permisos },
+    success: function(data) { if(data) { alert(data); location.href='/admin/usuarios'; } else alert('Error'); },
+    error: function(xhr) { alert(xhr.responseText || 'Error al guardar'); }
   });
-}
-function diplay_me(obj) {
-  var isGomeria = obj.value == 0;
-  document.getElementById('pnombre').style.display  = isGomeria ? 'none' : '';
-  document.getElementById('pavisa').style.display   = isGomeria ? 'none' : '';
-  document.getElementById('pgomeria').style.display = isGomeria ? '' : 'none';
 }
 </script>
 <div class="form-card">
@@ -33,32 +34,41 @@ function diplay_me(obj) {
   </div>
   <div class="field">
     <label for="tipo">Tipo</label>
-    <select id="tipo" onchange="diplay_me(this)">
+    <select id="tipo">
       <option value="0" ${usuario.tipo==0?'selected':''}>Gomeria</option>
       <option value="1" ${usuario.tipo==1?'selected':''}>Master Bus</option>
     </select>
+    <p class="field-hint">Solo una etiqueta. Lo que el usuario puede hacer lo definen los permisos de abajo.</p>
   </div>
-  <div id="pnombre" class="field" style="${usuario.tipo==1?'':'display:none;'}">
+  <div class="field">
     <label for="nombre">Nombre</label>
     <input type="text" id="nombre" class="text" value="${e(usuario.nombre||'')}" />
   </div>
-  <div class="field" id="pmail">
+  <div class="field">
     <label for="mail">Mail</label>
     <input type="text" id="mail" class="text" value="${e(usuario.mail||'')}" />
   </div>
-  <div id="pavisa" class="field" style="${usuario.tipo==1?'':'display:none;'}">
+  <div class="field">
     <label for="avisa">Avisar por mail</label>
     <select id="avisa">
       <option value="0" ${usuario.avisa==0?'selected':''}>NO</option>
       <option value="1" ${usuario.avisa==1?'selected':''}>SI</option>
     </select>
   </div>
-  <div id="pgomeria" class="field" style="${usuario.tipo==0?'':'display:none;'}">
+  <div class="field">
     <label for="gomeria">Gomería</label>
     <select id="gomeria">
-      <option value="0">Seleccione...</option>
-      ${gomerias.map(g=>`<option value="${g.id}" ${g.id==usuario.gomeria_id?'selected':''}>${g.nombre}</option>`).join('')}
+      <option value="0">Ninguna (ve todas)</option>
+      ${gomerias.map(g=>`<option value="${g.id}" ${g.id==usuario.gomeria_id?'selected':''}>${e(g.nombre)}</option>`).join('')}
     </select>
+    <p class="field-hint">Si se elige una, el usuario queda limitado a ver esa gomería.</p>
+  </div>
+  <div class="field">
+    <label>Permisos</label>
+    ${usuario.permisos == null || String(usuario.permisos).trim() === ''
+      ? '<p class="field-hint" style="color:var(--red);">Usuario anterior al sistema de permisos: se muestran los que tiene hoy por su tipo. Al guardar quedan fijados.</p>'
+      : ''}
+    ${gridPermisos(permisosActuales)}
   </div>
   <div class="form-actions">
     <button class="btn-primary" onclick="guardar_datos()">Guardar</button>
