@@ -344,3 +344,75 @@ describe('POST /ajax/nueva_ot — mediciones de profundidad', () => {
     expect(insertsMediciones().length).toBe(0);
   });
 });
+
+// ─── Filtros del listado de OTs ───────────────────────────────
+describe('GET /OTs/list — filtros por fecha y número', () => {
+  const ultimaQueryOts = () =>
+    sql.mock.calls.map(c => (Array.isArray(c[0]) ? c[0].join(' ? ') : String(c[0])))
+      .find(q => q.includes('FROM ots'));
+
+  test('rango de fechas se aplica', async () => {
+    const res = await request(app)
+      .get('/OTs/list?desde=01/08/2026&hasta=20/08/2026')
+      .set('Cookie', `token=${makeToken()}`);
+    expect(res.status).toBe(200);
+    const q = ultimaQueryOts();
+    expect(q).toContain('o.fecha >=');
+    expect(q).toContain('o.fecha <=');
+    // Las fechas se mandan como parámetros ISO, no interpoladas
+    const call = sql.mock.calls.find(c => Array.isArray(c[0]) && c[0].join(' ').includes('FROM ots'));
+    expect(call.slice(1)).toContain('2026-08-01');
+    expect(call.slice(1)).toContain('2026-08-20');
+  });
+
+  test('fecha con formato inválido no rompe ni filtra', async () => {
+    const res = await request(app)
+      .get('/OTs/list?desde=' + encodeURIComponent("'; DROP TABLE ots; --"))
+      .set('Cookie', `token=${makeToken()}`);
+    expect(res.status).toBe(200);
+    const call = sql.mock.calls.find(c => Array.isArray(c[0]) && c[0].join(' ').includes('FROM ots'));
+    // Queda en '' → el filtro se desactiva solo
+    expect(call.slice(1)).toContain('');
+    expect(call.slice(1)).not.toContain("'; DROP TABLE ots; --");
+  });
+
+  test('búsqueda por número cubre numero e id', async () => {
+    const res = await request(app)
+      .get('/OTs/list?numero=1042')
+      .set('Cookie', `token=${makeToken()}`);
+    expect(res.status).toBe(200);
+    const q = ultimaQueryOts();
+    expect(q).toContain('o.numero ILIKE');
+    expect(q).toContain('CAST(o.id AS TEXT)');
+  });
+});
+
+// ─── Paginador agrupado ───────────────────────────────────────
+describe('paginacion — helper de hojas agrupadas', () => {
+  const pag = app.locals.paginacion;
+  const href = p => '?pagina=' + p;
+  const nums = h => (h.match(/>(\d+)</g) || []).map(m => parseInt(m.slice(1, -1)));
+
+  test('una sola hoja no dibuja paginador', () => {
+    expect(pag(1, 1, href)).toBe('');
+    expect(pag(1, 0, href)).toBe('');
+  });
+
+  test('con muchas hojas muestra primera, última y ±2', () => {
+    expect(nums(pag(7, 120, href))).toEqual([1, 5, 6, 7, 8, 9, 120]);
+  });
+
+  test('sin saltos innecesarios cerca del inicio', () => {
+    expect(pag(1, 3, href)).not.toContain('pg-gap');
+  });
+
+  test('página fuera de rango se acota al total', () => {
+    expect(nums(pag(999, 10, href))).toEqual([1, 8, 9, 10]);
+  });
+
+  test('la actual se marca y no es link', () => {
+    const html = pag(7, 120, href);
+    expect(html).toContain('<strong class="pg-current">7</strong>');
+    expect(html).not.toContain(">7</a>");
+  });
+});

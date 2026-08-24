@@ -26,11 +26,10 @@ const body = `
     </td>
   </tr>`).join('')}
 </table>
-${totalPages > 1 ? `<div class="list-pagination">
-  ${Array.from({length:totalPages},(_,i)=>i+1).map(p =>
-    p==pagina ? `<strong class="pg-current">${p}</strong>` : `<a href='?marca=${filtros.marca}&modelo=${filtros.modelo}&pagina=${p}'>${p}</a>`
-  ).join(' | ')}
-</div>` : ''}
+${paginacion(pagina, totalPages, p =>
+      '?marca=' + encodeURIComponent(filtros.marca || '') +
+      '&modelo=' + encodeURIComponent(filtros.modelo || '') +
+      '&pagina=' + p)}
 <a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>

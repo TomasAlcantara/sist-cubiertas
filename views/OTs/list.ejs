@@ -19,6 +19,8 @@ const trabajosTooltip = (o) => {
     + '<span class="trab-tip"><table style="border-collapse:collapse; font-size:12px;">' + filas + '</table></span>'
     + '</span>';
 };
+const hayFiltros = !!(filtros.numero || filtros.desde || filtros.hasta)
+  || filtros.unidad > 0 || filtros.gomeria > 0 || filtros.estado !== -1;
 const body = `
 <style>
 .trab-wrap { cursor:default; color:var(--red); font-weight:bold; white-space:nowrap; }
@@ -72,6 +74,12 @@ const body = `
   white-space: nowrap;
 }
 .ot-nueva:hover { background: var(--red-bright); }
+.ot-filters-clear {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted); text-decoration: none;
+  padding: 8px 4px;
+}
+.ot-filters-clear:hover { color: var(--red); }
 
 .ot-modal {
   width: min(960px, 96vw);
@@ -118,6 +126,10 @@ document.addEventListener('DOMContentLoaded', function() {
       tip.style.display = 'none';
     });
   });
+});
+
+$(function() {
+  $('#f_desde, #f_hasta').datepicker({ dateFormat: 'dd/mm/yy' });
 });
 
 function open_carga(id) {
@@ -191,6 +203,12 @@ function confirmar_cerrar(ot_id) {
 <div class="ot-modal" id="cerrar_ot"></div>
 
 <form method="get" action="/OTs/list" class="ot-filters">
+  <strong>OT N°:</strong>
+  <input type="text" name="numero" value="${e(filtros.numero || '')}" style="width:90px;" placeholder="N°" />
+  <strong>Desde:</strong>
+  <input type="text" name="desde" id="f_desde" value="${e(filtros.desde || '')}" style="width:105px;" placeholder="DD/MM/AAAA" autocomplete="off" />
+  <strong>Hasta:</strong>
+  <input type="text" name="hasta" id="f_hasta" value="${e(filtros.hasta || '')}" style="width:105px;" placeholder="DD/MM/AAAA" autocomplete="off" />
   <strong>Unidad:</strong>
   <select name="unidad">
     <option value="0">Todas</option>
@@ -208,7 +226,8 @@ function confirmar_cerrar(ot_id) {
     <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
   </select>
   <button type="submit" class="ot-filters-submit">Filtrar</button>
-  <button type="button" class="ot-nueva" onclick="location.href='/OTs/nueva'">Nueva OT</button>
+  ${hayFiltros ? '<a href="/OTs/list" class="ot-filters-clear">Limpiar</a>' : ''}
+  ${can('ot_crear') ? '<button type="button" class="ot-nueva" onclick="location.href=\'/OTs/nueva\'">Nueva OT</button>' : ''}
 </form>
 
 <table>

@@ -3,11 +3,18 @@ const router = express.Router();
 const { sql } = require('../db');
 const { requirePerm } = require('../middleware/auth');
 const { leerConfigInt, MM_DEFAULTS } = require('../lib/config');
+const { parseFecha } = require('../lib/fechas');
 
 // GET /OTs/list
 router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
   try {
-    const { gomeria = 0, unidad = 0, estado = -1 } = req.query;
+    const { gomeria = 0, unidad = 0, estado = -1, numero = '', desde = '', hasta = '' } = req.query;
+
+    // Las fechas llegan del datepicker en DD/MM/AAAA; si vienen vacías o mal
+    // formadas quedan en '' y el filtro se desactiva solo.
+    const desdeISO = /^\d{2}\/\d{2}\/\d{2,4}$/.test(desde) ? parseFecha(desde) : '';
+    const hastaISO = /^\d{2}\/\d{2}\/\d{2,4}$/.test(hasta) ? parseFecha(hasta) : '';
+    const nro = String(numero).trim();
 
     const [gomerias, unidades, ots] = await Promise.all([
       sql`SELECT * FROM gomeria WHERE activo = 1 ORDER BY nombre`,
@@ -20,13 +27,21 @@ router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
         WHERE (${parseInt(gomeria)} = 0 OR o.gomeria_id = ${parseInt(gomeria)})
           AND (${parseInt(unidad)} = 0 OR o.unidad_id = ${parseInt(unidad)})
           AND (${parseInt(estado)} = -1 OR o.estado = ${parseInt(estado)})
+          -- La lista muestra el numero o, si no tiene, el id: buscar por numero
+          -- tiene que encontrar tambien las OTs sin numero cargado, que son mayoria.
+          AND (${nro} = '' OR o.numero ILIKE ${'%' + nro + '%'} OR CAST(o.id AS TEXT) = ${nro})
+          AND (${desdeISO} = '' OR o.fecha >= ${desdeISO || null}::date)
+          AND (${hastaISO} = '' OR o.fecha <= ${hastaISO || null}::date)
         ORDER BY o.fecha DESC, o.id DESC
       `,
     ]);
 
     res.render('OTs/list', {
-      user: req.user, ots, gomerias, unidades,
-      currentPage: 'inicio', filtros: { gomeria: parseInt(gomeria), unidad: parseInt(unidad), estado: parseInt(estado) }
+      user: req.user, ots, gomerias, unidades, currentPage: 'inicio',
+      filtros: {
+        gomeria: parseInt(gomeria), unidad: parseInt(unidad), estado: parseInt(estado),
+        numero: nro, desde: String(desde).trim(), hasta: String(hasta).trim(),
+      },
     });
   } catch (err) { next(err); }
 });
