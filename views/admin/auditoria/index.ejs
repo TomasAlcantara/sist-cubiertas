@@ -1,0 +1,124 @@
+<%
+const currentPage = 'admin';
+
+const COLOR = {
+  crear: '#2e7d32', editar: '#1565c0', cerrar: '#00695c', anular: '#c62828',
+  restaurar: '#6a1b9a', baja: '#c62828', alta: '#2e7d32',
+  login: '#546e7a', login_fallido: '#e65100',
+  mover: '#00838f', colocar: '#00838f', almacenar: '#00838f',
+};
+
+// Los cambios vienen como array de {campo,antes,despues} o como objeto suelto
+// (el caso de anular, que guarda una copia entera de la OT).
+const renderCambios = (c) => {
+  if (!c) return '';
+  if (Array.isArray(c)) {
+    if (!c.length) return '';
+    return '<table class="aud-diff">' + c.map(x =>
+      '<tr><td class="aud-campo">' + e(x.campo) + '</td>' +
+      '<td class="aud-antes">' + (x.antes === null || x.antes === undefined ? '—' : e(x.antes)) + '</td>' +
+      '<td class="aud-flecha">→</td>' +
+      '<td class="aud-despues">' + (x.despues === null || x.despues === undefined ? '—' : e(x.despues)) + '</td></tr>'
+    ).join('') + '</table>';
+  }
+  return '<pre class="aud-json">' + e(JSON.stringify(c, null, 1)) + '</pre>';
+};
+
+const body = `
+<style>
+.aud-filtros { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:1rem; }
+.aud-filtros strong { font-family:var(--font-mono); font-size:10px; letter-spacing:0.12em;
+  text-transform:uppercase; color:var(--text-muted); white-space:nowrap; }
+.aud-filtros select, .aud-filtros input { width:auto; }
+
+.aud-tabla { width:100%; border-collapse:collapse; }
+.aud-tabla th { text-align:left; }
+.aud-fila td { border-bottom:1px solid var(--border); padding:9px 10px; vertical-align:top; }
+.aud-fecha { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); white-space:nowrap; }
+.aud-usuario { font-family:var(--font-mono); font-size:12px; font-weight:600; white-space:nowrap; }
+.aud-badge { display:inline-block; padding:2px 8px; border-radius:999px; font-family:var(--font-mono);
+  font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:#fff; white-space:nowrap; }
+.aud-desc { font-size:13px; line-height:1.45; }
+.aud-ip { font-family:var(--font-mono); font-size:10px; color:var(--text-muted); }
+
+.aud-diff { margin-top:6px; border-collapse:collapse; font-size:11.5px; }
+.aud-diff td { padding:1px 8px 1px 0; border:none; }
+.aud-campo   { font-family:var(--font-mono); color:var(--text-muted); white-space:nowrap; }
+.aud-antes   { color:#c62828; text-decoration:line-through; }
+.aud-flecha  { color:var(--text-muted); }
+.aud-despues { color:#2e7d32; font-weight:600; }
+.aud-json { margin:6px 0 0 0; padding:8px; background:var(--bg-surface); border:1px solid var(--border);
+  border-radius:var(--radius); font-size:11px; max-height:220px; overflow:auto; white-space:pre-wrap; }
+.aud-vacio { text-align:center; color:var(--text-muted); padding:26px; }
+.aud-total { font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-bottom:8px; }
+</style>
+
+<div class="list-head"><h2>Registro de Actividad</h2></div>
+
+<form method="get" action="/admin/auditoria" class="aud-filtros">
+  <strong>Usuario:</strong>
+  <select name="usuario">
+    <option value="">Todos</option>
+    ${usuarios.map(u => `<option value="${e(u.usuario)}" ${u.usuario === filtros.usuario ? 'selected' : ''}>${e(u.usuario)}</option>`).join('')}
+  </select>
+  <strong>Qué:</strong>
+  <select name="entidad">
+    <option value="">Todo</option>
+    ${Object.entries(ENTIDADES).map(([k, v]) => `<option value="${k}" ${k === filtros.entidad ? 'selected' : ''}>${e(v)}</option>`).join('')}
+  </select>
+  <strong>Acción:</strong>
+  <select name="accion">
+    <option value="">Todas</option>
+    ${Object.entries(ACCIONES).map(([k, v]) => `<option value="${k}" ${k === filtros.accion ? 'selected' : ''}>${e(v)}</option>`).join('')}
+  </select>
+  <strong>Desde:</strong>
+  <input type="text" name="desde" id="a_desde" value="${e(filtros.desde)}" style="width:100px;" placeholder="DD/MM/AAAA" autocomplete="off" />
+  <strong>Hasta:</strong>
+  <input type="text" name="hasta" id="a_hasta" value="${e(filtros.hasta)}" style="width:100px;" placeholder="DD/MM/AAAA" autocomplete="off" />
+  <strong>Buscar:</strong>
+  <input type="text" name="q" value="${e(filtros.q)}" style="width:130px;" placeholder="texto libre" />
+  <button type="submit" class="btn-filter">Filtrar</button>
+  <a href="/admin/auditoria" class="ot-filters-clear">Limpiar</a>
+</form>
+
+<div class="aud-total">${total.toLocaleString('es-AR')} movimiento(s)</div>
+
+<table class="aud-tabla">
+  <thead>
+    <th style="width:130px;">Fecha</th>
+    <th style="width:110px;">Usuario</th>
+    <th style="width:90px;">Acción</th>
+    <th>Detalle</th>
+  </thead>
+  <tbody>
+    ${movs.length === 0
+      ? '<tr><td colspan="4" class="aud-vacio">Sin movimientos para estos filtros</td></tr>'
+      : movs.map(m => `<tr class="aud-fila">
+          <td class="aud-fecha">${fmtFechaHora(m.fecha)}</td>
+          <td class="aud-usuario">${e(m.usuario || '—')}${m.ip ? '<div class="aud-ip">' + e(m.ip) + '</div>' : ''}</td>
+          <td><span class="aud-badge" style="background:${COLOR[m.accion] || '#546e7a'}">${e(ACCIONES[m.accion] || m.accion)}</span></td>
+          <td>
+            <div class="aud-desc">${e(m.descripcion || (ENTIDADES[m.entidad] || m.entidad))}</div>
+            ${renderCambios(m.cambios)}
+          </td>
+        </tr>`).join('')}
+  </tbody>
+</table>
+
+${paginacion(pagina, totalPages, p =>
+  '?usuario=' + encodeURIComponent(filtros.usuario) +
+  '&entidad=' + encodeURIComponent(filtros.entidad) +
+  '&accion='  + encodeURIComponent(filtros.accion) +
+  '&desde='   + encodeURIComponent(filtros.desde) +
+  '&hasta='   + encodeURIComponent(filtros.hasta) +
+  '&q='       + encodeURIComponent(filtros.q) +
+  '&pagina='  + p)}
+
+<a href="/admin" class="list-back">&laquo; Volver</a>
+
+<script>
+$(function() { $('#a_desde, #a_hasta').datepicker({ dateFormat: 'dd/mm/yy' }); });
+</script>
+`;
+%>
+<%- include('../../layout', { body, user, currentPage }) %>

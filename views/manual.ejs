@@ -191,9 +191,40 @@ solo los que tu usuario tenga habilitados:</p>
   <tr class="dark"><td><strong>Almacenes</strong></td><td>Agregar o editar depósitos</td></tr>
   <tr class="light"><td><strong>Gomerías</strong></td><td>Agregar o editar gomerías</td></tr>
   <tr class="dark"><td><strong>Recapadoras</strong></td><td>Agregar o editar recapadoras</td></tr>
-  <tr class="light"><td><strong>Anular OT</strong></td><td>Eliminar una OT abierta del sistema</td></tr>
+  <tr class="light"><td><strong>Anular OT</strong></td><td>Dar de baja una OT abierta (queda registrada, se puede restaurar)</td></tr>
   <tr class="dark"><td><strong>Configuración</strong></td><td>Profundidad mínima y máxima de dibujo, e intervalos de alineación y preventivo</td></tr>
+  <tr class="light"><td><strong>Registro de Actividad</strong></td><td>Log de todo lo que se hace en el sistema: quién, cuándo y qué cambió</td></tr>
 </table>
+
+<h3>Registro de Actividad</h3>
+<p>Cada movimiento que modifica datos queda asentado con el usuario que lo hizo, la fecha
+y hora, la IP y el detalle de qué cambió (valor anterior → valor nuevo).</p>
+<table>
+  <thead><th>Se registra</th><th>Ejemplos</th></thead>
+  <tr class="light"><td><strong>OTs</strong></td><td>Crear, editar, cerrar, anular, restaurar</td></tr>
+  <tr class="dark"><td><strong>Cubiertas</strong></td><td>Crear, editar, mover, colocar, almacenar, cambiar estado</td></tr>
+  <tr class="light"><td><strong>Kilometraje</strong></td><td>Carga individual y carga masiva</td></tr>
+  <tr class="dark"><td><strong>Usuarios</strong></td><td>Alta, edición, cambios de permisos, baja</td></tr>
+  <tr class="light"><td><strong>Accesos</strong></td><td>Ingresos al sistema e intentos fallidos</td></tr>
+  <tr class="dark"><td><strong>Configuración y ABMs</strong></td><td>Parámetros, gomerías, almacenes, medidas, modelos, proveedores</td></tr>
+</table>
+<div class="tip">
+  Se puede filtrar por usuario, tipo de movimiento, rango de fechas y texto libre.
+  Las contraseñas <strong>nunca</strong> se guardan en el registro: cuando alguien
+  cambia una, queda asentado que la cambió, no cuál puso.
+</div>
+
+<h3>Anular una OT</h3>
+<div class="paso">
+  <strong>Paso 1:</strong> Ir a Administrar → <strong>Anular OT</strong>.<br/>
+  <strong>Paso 2:</strong> Hacé click en <strong>ANULAR</strong> en la OT que corresponda.<br/>
+  <strong>Paso 3:</strong> Escribí el <strong>motivo</strong> — es obligatorio y queda registrado con tu usuario.
+</div>
+<div class="tip">
+  Anular no borra la OT: queda marcada como <strong>ANULADA</strong>, sigue siendo consultable
+  y se puede <strong>restaurar</strong> desde la misma pantalla. En el listado de OTs
+  aparece sólo si tildás <strong>Ver anuladas</strong>.
+</div>
 
 <h3>Administración de Unidades</h3>
 <table>
@@ -252,7 +283,9 @@ solo los que tu usuario tenga habilitados:</p>
 <p>La columna <strong>Ubicación</strong> en el listado de Cubiertas muestra si está en un almacén, gomería o unidad.</p>
 
 <h3>¿Qué pasa si me equivoco al cerrar una OT?</h3>
-<p>Contactá al administrador del sistema para que use <strong>Administrar → Anular OT</strong>. Las OTs cerradas no se pueden reabrir.</p>
+<p>El cierre no se puede deshacer desde la pantalla de OTs. Un administrador puede anularla
+desde Administrar → Anular OT y volver a cargarla. Todo queda en el
+<strong>Registro de Actividad</strong>: quién la cerró, con qué km y qué se modificó.</p>
 
 <h3>¿Puedo dar de baja un almacén o gomería?</h3>
 <p>Sí, desde <strong>Administrar → Almacenes/Gomerías</strong>, el botón <strong>BAJA</strong> lo desactiva sin borrarlo. Para reactivarlo usá <strong>ALTA</strong>.</p>

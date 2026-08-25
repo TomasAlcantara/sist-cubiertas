@@ -107,8 +107,15 @@ CREATE TABLE IF NOT EXISTS ots (
   creado_en TIMESTAMPTZ DEFAULT NOW(),  -- fecha/hora real de alta (fecha = fecha de solicitud)
   descripcion_cierre TEXT,              -- lo que escribe el gomero al cerrar un preventivo
   cerrado_por VARCHAR(100),
+  -- Anular es baja lógica: la OT se marca, no se borra, para que quede
+  -- constancia de que existió y de quién la dio de baja.
+  anulada BOOLEAN NOT NULL DEFAULT FALSE,
+  anulada_por VARCHAR(50),
+  anulada_en TIMESTAMPTZ,
+  motivo_anulacion TEXT,
   observaciones TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_ots_anulada ON ots (anulada) WHERE anulada = FALSE;
 
 CREATE TABLE IF NOT EXISTS ot_cubiertas (
   ot_id INTEGER REFERENCES ots(id) ON DELETE CASCADE,
@@ -159,6 +166,27 @@ CREATE TABLE IF NOT EXISTS config (
   clave TEXT PRIMARY KEY,
   valor TEXT
 );
+
+-- Log de auditoría: quién hizo qué, cuándo y qué cambió.
+-- `usuario` guarda una copia del nombre además del id: si el usuario se da de
+-- baja o se renombra, el log tiene que seguir siendo legible.
+-- `cambios` es un array JSON de {campo, antes, despues}. Los campos sensibles
+-- (password, tokens, credenciales de mail) se guardan enmascarados.
+CREATE TABLE IF NOT EXISTS auditoria (
+  id          BIGSERIAL PRIMARY KEY,
+  fecha       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  usuario_id  INTEGER,
+  usuario     VARCHAR(50),
+  accion      VARCHAR(40) NOT NULL,   -- crear | editar | cerrar | anular | mover | login | ...
+  entidad     VARCHAR(30) NOT NULL,   -- ot | cubierta | usuario | config | ...
+  entidad_id  INTEGER,
+  descripcion TEXT,
+  cambios     JSONB,
+  ip          VARCHAR(45)
+);
+CREATE INDEX IF NOT EXISTS idx_aud_fecha   ON auditoria (fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_aud_entidad ON auditoria (entidad, entidad_id, fecha DESC);
+CREATE INDEX IF NOT EXISTS idx_aud_usuario ON auditoria (usuario, fecha DESC);
 
 -- Usuario admin por defecto (password: admin)
 -- El hash se genera al ejecutar db/seed.js

@@ -4,6 +4,7 @@ const { body, validationResult } = require('express-validator');
 const { sql, sanitizeFuego, nextFuego } = require('../db');
 const { requirePerm } = require('../middleware/auth');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
+const auditoria = require('../lib/auditoria');
 
 const PER_PAGE = 25;
 
@@ -182,6 +183,20 @@ router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, a
       });
     }
 
+    await auditoria.registrar({
+      req, accion: 'crear', entidad: 'cubierta',
+      entidad_id: creadas.length === 1 ? creadas[0].id : null,
+      descripcion: qty === 1
+        ? `Creó la cubierta ${fuegosNuevos[0]}`
+        : `Creó ${qty} cubiertas: ${fuegosNuevos[0]} a ${fuegosNuevos[fuegosNuevos.length - 1]}`,
+      cambios: [
+        { campo: 'fuego', antes: null, despues: fuegosNuevos.join(', ') },
+        { campo: 'estado', antes: null, despues: ({1:'Nueva',2:'Usada',3:'Recapada'})[est] || est },
+        ...(remito?.trim() ? [{ campo: 'remito', antes: null, despues: remito.trim() }] : []),
+        ...(precioVal ? [{ campo: 'precio', antes: null, despues: precioVal }] : []),
+      ],
+    });
+
     res.redirect('/cubiertas');
   } catch (err) { next(err); }
 });
@@ -212,7 +227,7 @@ router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) =
     const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
     if (!id || !fuego) return res.redirect('/cubiertas');
 
-    const previa = await sql`SELECT estado FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
+    const previa = await sql`SELECT * FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
 
     const parseFecha = (f) => {
       if (!f) return null;
@@ -243,6 +258,18 @@ router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) =
       await registrarEvento({
         cubierta_id: parseInt(id), tipo: 'recapado', fecha: new Date().toISOString().slice(0, 10),
         detalle: 'Marcada como recapada',
+      });
+    }
+
+    const [despuesCub] = await sql`SELECT * FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
+    const cambiosCub = auditoria.diff(previa[0], despuesCub,
+      ['fuego', 'modelo_id', 'medida_id', 'estado', 'almacen_id', 'km', 'proveedor_id',
+       'id_interno', 'remito', 'precio', 'fecha_remito']);
+    if (cambiosCub.length) {
+      await auditoria.registrar({
+        req, accion: 'editar', entidad: 'cubierta', entidad_id: parseInt(id) || 0,
+        descripcion: `Editó la cubierta ${fuego.trim()}`,
+        cambios: cambiosCub,
       });
     }
 

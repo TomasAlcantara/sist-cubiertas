@@ -221,16 +221,24 @@ describe('POST /ajax/anular_ot', () => {
     expect(res.status).toBe(400);
   });
 
-  test('con ot_id válido y tipo master → llama a DB', async () => {
-    sql.mockResolvedValue([]);
+  test('sin motivo → 400 (el motivo es obligatorio)', async () => {
     const res = await request(app)
       .post('/ajax/anular_ot')
       .set('Cookie', `token=${makeToken(1)}`)
       .type('form')
       .send({ ot_id: 5 });
+    expect(res.status).toBe(400);
+  });
+
+  test('con ot_id y motivo válidos → anula', async () => {
+    sql.mockResolvedValue([{ id: 5, anulada: false, unidad_id: null }]);
+    const res = await request(app)
+      .post('/ajax/anular_ot')
+      .set('Cookie', `token=${makeToken(1)}`)
+      .type('form')
+      .send({ ot_id: 5, motivo: 'duplicada' });
     expect(res.status).toBe(200);
     expect(res.text).toBe('ok');
-    expect(sql).toHaveBeenCalled();
   });
 });
 

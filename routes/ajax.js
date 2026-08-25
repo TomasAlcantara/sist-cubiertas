@@ -9,6 +9,7 @@ const { registrarEvento } = require('../lib/cubiertaHistorial');
 const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
 const { parseFecha } = require('../lib/fechas');
 const { CONFIG_EDITABLE } = require('../lib/config');
+const auditoria = require('../lib/auditoria');
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -33,6 +34,14 @@ router.post('/inactive', requireMaster, async (req, res, next) => {
     const allowed = ['usuarios', 'almacen', 'gomeria', 'recapadora', 'micro', 'marcas_ruedas', 'cubiertas'];
     if (!allowed.includes(table)) return res.status(400).send('tabla no permitida');
     await sql(`UPDATE ${table} SET activo = $1 WHERE id = $2`, [active, parseInt(id) || 0]);
+    const ENTIDAD = { usuarios: 'usuario', almacen: 'almacen', gomeria: 'gomeria',
+                      recapadora: 'recapadora', micro: 'micro', marcas_ruedas: 'modelo', cubiertas: 'cubierta' };
+    await auditoria.registrar({
+      req, accion: String(active) === '1' ? 'alta' : 'baja', entidad: ENTIDAD[table] || table,
+      entidad_id: parseInt(id) || 0,
+      descripcion: `${String(active) === '1' ? 'Dio de alta' : 'Dio de baja'} el registro #${parseInt(id) || 0} en ${table}`,
+      cambios: [{ campo: 'activo', antes: String(active) === '1' ? 'NO' : 'SI', despues: String(active) === '1' ? 'SI' : 'NO' }],
+    });
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -48,7 +57,15 @@ router.post('/change_filter', requireAuth, (req, res) => {
 router.post('/cargar_km', requirePerm('km_cargar'), async (req, res, next) => {
   try {
     const { id, km } = req.body;
-    await sql`UPDATE micro SET km_actual = ${parseInt(km) || 0} WHERE id = ${parseInt(id) || 0}`;
+    const microId = parseInt(id) || 0;
+    const kmNuevo = parseInt(km) || 0;
+    const [antes] = await sql`SELECT unidad, km_actual FROM micro WHERE id = ${microId}`;
+    await sql`UPDATE micro SET km_actual = ${kmNuevo} WHERE id = ${microId}`;
+    await auditoria.registrar({
+      req, accion: 'editar', entidad: 'km', entidad_id: microId,
+      descripcion: `Cargó km de la unidad ${antes ? antes.unidad : microId}`,
+      cambios: auditoria.diff(antes, { km_actual: kmNuevo }, ['km_actual']),
+    });
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -56,15 +73,38 @@ router.post('/cargar_km', requirePerm('km_cargar'), async (req, res, next) => {
 // POST /ajax/carga_masiva_km - Carga masiva de km
 router.post('/carga_masiva_km', requirePerm('km_cargar'), async (req, res, next) => {
   try {
-    const updates = [];
+    const pedidos = [];
     for (const key in req.body) {
-      if (key.startsWith('km_')) {
-        const id = parseInt(key.replace('km_', '')) || 0;
-        const km = parseInt(req.body[key]) || 0;
-        if (id && req.body[key]) updates.push(sql`UPDATE micro SET km_actual = ${km} WHERE id = ${id}`);
-      }
+      if (!key.startsWith('km_')) continue;
+      const id = parseInt(key.replace('km_', '')) || 0;
+      const km = parseInt(req.body[key]) || 0;
+      if (id && req.body[key]) pedidos.push({ id, km });
     }
-    await Promise.all(updates);
+    if (!pedidos.length) return res.send('ok');
+
+    const ids = pedidos.map(p => p.id);
+    const antes = await sql`SELECT id, unidad, km_actual FROM micro WHERE id = ANY(${ids})`;
+    const previo = {};
+    for (const m of antes) previo[m.id] = m;
+
+    await Promise.all(pedidos.map(p => sql`UPDATE micro SET km_actual = ${p.km} WHERE id = ${p.id}`));
+
+    // Una sola entrada para toda la tanda: 40 líneas de log por una carga masiva
+    // enterrarían el resto del historial.
+    const detalle = pedidos
+      .filter(p => !previo[p.id] || previo[p.id].km_actual !== p.km)
+      .map(p => ({
+        campo: previo[p.id] ? previo[p.id].unidad : ('unidad ' + p.id),
+        antes: previo[p.id] ? previo[p.id].km_actual : null,
+        despues: p.km,
+      }));
+    if (detalle.length) {
+      await auditoria.registrar({
+        req, accion: 'editar', entidad: 'km',
+        descripcion: `Carga masiva de km: ${detalle.length} unidad(es) modificada(s)`,
+        cambios: detalle,
+      });
+    }
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -77,6 +117,15 @@ router.post('/mover_cubierta', requirePerm('cubiertas_mover'), async (req, res, 
     // Si estaba montada, moverla a un almacén es un retiro y hay que dejarlo en el historial
     const antes = await sql`SELECT micro_id, posicion FROM cubiertas WHERE id = ${cubId}`;
     await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen) || null}, gomeria_id = NULL, micro_id = NULL, posicion = NULL WHERE id = ${cubId}`;
+    const [destino] = await sql`SELECT nombre FROM almacen WHERE id = ${parseInt(almacen) || 0}`;
+    const [cub] = await sql`SELECT fuego FROM cubiertas WHERE id = ${cubId}`;
+    await auditoria.registrar({
+      req, accion: 'mover', entidad: 'cubierta', entidad_id: cubId,
+      descripcion: `Movió la cubierta ${cub ? cub.fuego : cubId} al almacén ${destino ? destino.nombre : almacen}`,
+      cambios: [{ campo: 'ubicación', antes: antes[0] && antes[0].micro_id ? 'montada en unidad' : 'almacén/gomería',
+                  despues: destino ? destino.nombre : String(almacen) }],
+    });
+
     if (antes[0] && antes[0].micro_id) {
       const km = await sql`SELECT km_actual FROM micro WHERE id = ${antes[0].micro_id}`;
       await registrarEvento({
@@ -95,8 +144,15 @@ router.post('/nuevo_estado', requirePerm('cubiertas_editar'), async (req, res, n
   try {
     const { r_id, estado } = req.body;
     const cubId = parseInt(r_id) || 0;
-    const previa = await sql`SELECT estado FROM cubiertas WHERE id = ${cubId}`;
+    const previa = await sql`SELECT estado, fuego FROM cubiertas WHERE id = ${cubId}`;
     await sql`UPDATE cubiertas SET estado = ${parseInt(estado)} WHERE id = ${cubId}`;
+    const nombreEstado = (e) => ({ 1: 'Nueva', 2: 'Usada', 3: 'Recapada' })[e] || String(e);
+    await auditoria.registrar({
+      req, accion: 'editar', entidad: 'cubierta', entidad_id: cubId,
+      descripcion: `Cambió el estado de la cubierta ${previa[0] ? previa[0].fuego : cubId}`,
+      cambios: [{ campo: 'estado', antes: previa[0] ? nombreEstado(previa[0].estado) : null,
+                  despues: nombreEstado(parseInt(estado)) }],
+    });
     if (parseInt(estado) === 3 && previa[0] && previa[0].estado !== 3) {
       await registrarEvento({
         cubierta_id: cubId, tipo: 'recapado', fecha: new Date().toISOString().slice(0, 10),
@@ -106,6 +162,38 @@ router.post('/nuevo_estado', requirePerm('cubiertas_editar'), async (req, res, n
     res.send('ok');
   } catch (err) { next(err); }
 });
+
+/**
+ * Audita un ABM simple: relee la fila y compara contra el estado previo.
+ * Los ocho ABMs de administración tienen la misma forma, así que en vez de
+ * repetir el bloque en cada uno se centraliza acá.
+ */
+async function auditarAbm(req, { tabla, entidad, id, antes, etiqueta, campos }) {
+  const idInt = parseInt(id) || null;
+  const esNuevo = !idInt;
+  let despues = null;
+  try {
+    if (idInt) {
+      const filas = await sql(`SELECT * FROM ${tabla} WHERE id = $1`, [idInt]);
+      despues = filas[0] || null;
+    } else {
+      // Sin id conocido, la recién creada es la última: alcanza para el log.
+      const filas = await sql(`SELECT * FROM ${tabla} ORDER BY id DESC LIMIT 1`);
+      despues = filas[0] || null;
+    }
+  } catch (_) { /* si no se puede releer, se loguea igual sin el diff */ }
+
+  await auditoria.registrar({
+    req,
+    accion: esNuevo ? 'crear' : 'editar',
+    entidad,
+    entidad_id: despues ? despues.id : idInt,
+    descripcion: `${esNuevo ? 'Creó' : 'Editó'} ${etiqueta}` + (despues && despues.id ? ` #${despues.id}` : ''),
+    cambios: esNuevo
+      ? auditoria.diff(null, auditoria.snapshot(despues, campos) || {}, campos)
+      : auditoria.diff(antes, despues, campos),
+  });
+}
 
 // POST /ajax/save_usuario
 const saveUsuarioValidators = [
@@ -144,16 +232,37 @@ router.post('/save_usuario', requireMaster, saveUsuarioValidators, async (req, r
       return res.status(400).send('No podés quitarte a vos mismo el permiso de Administración');
     }
 
+    const CAMPOS_USR = ['usuario', 'tipo', 'nombre', 'mail', 'avisa', 'gomeria_id', 'permisos'];
+    const nuevoUsr = {
+      usuario: usuario.trim(), tipo: parseInt(tipo), nombre: nombre || null, mail: mail || null,
+      avisa: parseInt(avisa) || 0, gomeria_id: parseInt(gomeria) || null, permisos: permisosCsv,
+    };
+
     if (id) {
+      const [antesUsr] = await sql`SELECT * FROM usuarios WHERE id = ${parseInt(id)}`;
       if (hash) {
         await sql`UPDATE usuarios SET usuario=${usuario.trim()}, password=${hash}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null}, permisos=${permisosCsv} WHERE id=${parseInt(id)}`;
       } else {
         await sql`UPDATE usuarios SET usuario=${usuario.trim()}, tipo=${parseInt(tipo)}, nombre=${nombre||null}, mail=${mail||null}, avisa=${parseInt(avisa)||0}, gomeria_id=${parseInt(gomeria)||null}, permisos=${permisosCsv} WHERE id=${parseInt(id)}`;
       }
+      // El cambio de contraseña se deja asentado, nunca su valor.
+      const cambiosUsr = auditoria.diff(antesUsr, nuevoUsr, CAMPOS_USR);
+      if (hash) cambiosUsr.push({ campo: 'password', antes: '***', despues: '*** (cambiada)' });
+      await auditoria.registrar({
+        req, accion: 'editar', entidad: 'usuario', entidad_id: parseInt(id),
+        descripcion: `Editó el usuario ${antesUsr ? antesUsr.usuario : id}`,
+        cambios: cambiosUsr,
+      });
       res.send('Usuario actualizado correctamente');
     } else {
       if (!hash) return res.status(400).send('Contraseña requerida');
       await sql`INSERT INTO usuarios (usuario, password, tipo, nombre, mail, avisa, gomeria_id, permisos) VALUES (${usuario.trim()},${hash},${parseInt(tipo)},${nombre||null},${mail||null},${parseInt(avisa)||0},${parseInt(gomeria)||null},${permisosCsv})`;
+      const [creado] = await sql`SELECT id FROM usuarios WHERE usuario = ${usuario.trim()} ORDER BY id DESC LIMIT 1`;
+      await auditoria.registrar({
+        req, accion: 'crear', entidad: 'usuario', entidad_id: creado ? creado.id : null,
+        descripcion: `Creó el usuario ${usuario.trim()}`,
+        cambios: auditoria.diff(null, nuevoUsr, CAMPOS_USR),
+      });
       res.send('Usuario creado correctamente');
     }
   } catch (err) { next(err); }
@@ -163,12 +272,16 @@ router.post('/save_usuario', requireMaster, saveUsuarioValidators, async (req, r
 router.post('/save_micro', requireMaster, async (req, res, next) => {
   try {
     const { id, unidad, descripcion, tipo_unidad, km_actual } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM micro WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     const km = parseInt(km_actual) || 0;
     if (id) {
       await sql`UPDATE micro SET unidad=${unidad}, descripcion=${descripcion||null}, tipo_unidad=${parseInt(tipo_unidad)||1}, km_actual=${km} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'micro', entidad:'micro', id, antes: prevAbm, etiqueta:'la unidad', campos:['unidad','descripcion','tipo_unidad','km_actual','activo'] });
       res.send('Unidad actualizada correctamente');
     } else {
       await sql`INSERT INTO micro (unidad, descripcion, tipo_unidad, km_actual) VALUES (${unidad},${descripcion||null},${parseInt(tipo_unidad)||1},${km})`;
+      await auditarAbm(req, { tabla:'micro', entidad:'micro', id:null, antes:null, etiqueta:'la unidad', campos:['unidad','descripcion','tipo_unidad','km_actual'] });
       res.send('Unidad creada correctamente');
     }
   } catch (err) { next(err); }
@@ -178,11 +291,15 @@ router.post('/save_micro', requireMaster, async (req, res, next) => {
 router.post('/save_modelo', requireMaster, async (req, res, next) => {
   try {
     const { id, marca, modelo } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM marcas_ruedas WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     if (id) {
       await sql`UPDATE marcas_ruedas SET marca=${marca}, modelo=${modelo} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'marcas_ruedas', entidad:'modelo', id, antes: prevAbm, etiqueta:'el modelo', campos:['marca','modelo','activo'] });
       res.send('Modelo actualizado correctamente');
     } else {
       await sql`INSERT INTO marcas_ruedas (marca, modelo) VALUES (${marca},${modelo})`;
+      await auditarAbm(req, { tabla:'marcas_ruedas', entidad:'modelo', id:null, antes:null, etiqueta:'el modelo', campos:['marca','modelo'] });
       res.send('Modelo creado correctamente');
     }
   } catch (err) { next(err); }
@@ -192,11 +309,15 @@ router.post('/save_modelo', requireMaster, async (req, res, next) => {
 router.post('/save_proveedor', requireMaster, async (req, res, next) => {
   try {
     const { id, proveedor, tel, mail } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM proveedor WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     if (id) {
       await sql`UPDATE proveedor SET proveedor=${proveedor}, tel=${tel||'-'}, mail=${mail||'-'} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'proveedor', entidad:'proveedor', id, antes: prevAbm, etiqueta:'el proveedor', campos:['proveedor','tel','mail'] });
       res.send('Proveedor actualizado correctamente');
     } else {
       await sql`INSERT INTO proveedor (proveedor, tel, mail) VALUES (${proveedor},${tel||'-'},${mail||'-'})`;
+      await auditarAbm(req, { tabla:'proveedor', entidad:'proveedor', id:null, antes:null, etiqueta:'el proveedor', campos:['proveedor','tel','mail'] });
       res.send('Proveedor creado correctamente');
     }
   } catch (err) { next(err); }
@@ -206,6 +327,8 @@ router.post('/save_proveedor', requireMaster, async (req, res, next) => {
 router.post('/save_almacen', requireMaster, async (req, res, next) => {
   try {
     const { id, nombre, direccion, localidad, telefono, cargar_id, cargar_remito } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM almacen WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     const dir = direccion?.trim() || null;
     const loc = localidad?.trim() || null;
     const tel = telefono?.trim() || null;
@@ -213,9 +336,11 @@ router.post('/save_almacen', requireMaster, async (req, res, next) => {
     const cRem = cargar_remito === '1';
     if (id) {
       await sql`UPDATE almacen SET nombre=${nombre}, direccion=${dir}, localidad=${loc}, telefono=${tel}, cargar_id=${cId}, cargar_remito=${cRem} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'almacen', entidad:'almacen', id, antes: prevAbm, etiqueta:'el almacén', campos:['nombre','direccion','localidad','telefono','activo'] });
       res.send('Almacén actualizado correctamente');
     } else {
       await sql`INSERT INTO almacen (nombre, direccion, localidad, telefono, cargar_id, cargar_remito) VALUES (${nombre}, ${dir}, ${loc}, ${tel}, ${cId}, ${cRem})`;
+      await auditarAbm(req, { tabla:'almacen', entidad:'almacen', id:null, antes:null, etiqueta:'el almacén', campos:['nombre','direccion','localidad','telefono'] });
       res.send('Almacén creado correctamente');
     }
   } catch (err) { next(err); }
@@ -225,14 +350,18 @@ router.post('/save_almacen', requireMaster, async (req, res, next) => {
 router.post('/save_gomeria', requireMaster, async (req, res, next) => {
   try {
     const { id, nombre, direccion, localidad, telefono } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM gomeria WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     const dir = direccion?.trim() || null;
     const loc = localidad?.trim() || null;
     const tel = telefono?.trim() || null;
     if (id) {
       await sql`UPDATE gomeria SET nombre=${nombre}, direccion=${dir}, localidad=${loc}, telefono=${tel} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'gomeria', entidad:'gomeria', id, antes: prevAbm, etiqueta:'la gomería', campos:['nombre','direccion','localidad','telefono','activo'] });
       res.send('Gomería actualizada correctamente');
     } else {
       await sql`INSERT INTO gomeria (nombre, direccion, localidad, telefono) VALUES (${nombre}, ${dir}, ${loc}, ${tel})`;
+      await auditarAbm(req, { tabla:'gomeria', entidad:'gomeria', id:null, antes:null, etiqueta:'la gomería', campos:['nombre','direccion','localidad','telefono'] });
       res.send('Gomería creada correctamente');
     }
   } catch (err) { next(err); }
@@ -242,15 +371,19 @@ router.post('/save_gomeria', requireMaster, async (req, res, next) => {
 router.post('/save_recapadora', requireMaster, async (req, res, next) => {
   try {
     const { id, nombre, direccion, localidad, telefono, tipo_trabajo } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM recapadora WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     const dir = direccion?.trim() || null;
     const loc = localidad?.trim() || null;
     const tel = telefono?.trim() || null;
     const tip = tipo_trabajo?.trim() || null;
     if (id) {
       await sql`UPDATE recapadora SET nombre=${nombre}, direccion=${dir}, localidad=${loc}, telefono=${tel}, tipo_trabajo=${tip} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'recapadora', entidad:'recapadora', id, antes: prevAbm, etiqueta:'la recapadora', campos:['nombre','direccion','localidad','telefono','tipo_trabajo','activo'] });
       res.send('Recapadora actualizada correctamente');
     } else {
       await sql`INSERT INTO recapadora (nombre, direccion, localidad, telefono, tipo_trabajo) VALUES (${nombre}, ${dir}, ${loc}, ${tel}, ${tip})`;
+      await auditarAbm(req, { tabla:'recapadora', entidad:'recapadora', id:null, antes:null, etiqueta:'la recapadora', campos:['nombre','direccion','localidad','telefono','tipo_trabajo'] });
       res.send('Recapadora creada correctamente');
     }
   } catch (err) { next(err); }
@@ -260,14 +393,18 @@ router.post('/save_recapadora', requireMaster, async (req, res, next) => {
 router.post('/save_medida', requireMaster, async (req, res, next) => {
   try {
     const { id, medida, presion } = req.body;
+    // Estado previo, para que el log pueda mostrar antes -> despues
+    const prevAbm = id ? (await sql(`SELECT * FROM medidas WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
     // Vacío = sin dato, no cero: una presión 0 no existe y ensuciaría la tabla.
     const psi = presion === '' || presion == null ? null : parseInt(presion);
     const psiVal = Number.isFinite(psi) && psi > 0 && psi <= 200 ? psi : null;
     if (id) {
       await sql`UPDATE medidas SET medida=${medida}, presion=${psiVal} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'medidas', entidad:'medida', id, antes: prevAbm, etiqueta:'la medida', campos:['medida','presion'] });
       res.send('Medida actualizada correctamente');
     } else {
       await sql`INSERT INTO medidas (medida, presion) VALUES (${medida}, ${psiVal})`;
+      await auditarAbm(req, { tabla:'medidas', entidad:'medida', id:null, antes:null, etiqueta:'la medida', campos:['medida','presion'] });
       res.send('Medida creada correctamente');
     }
   } catch (err) { next(err); }
@@ -277,6 +414,7 @@ router.post('/save_medida', requireMaster, async (req, res, next) => {
 router.post('/save_config', requireMaster, async (req, res, next) => {
   try {
     const guardadas = [];
+    const cambiosCfg = [];
     for (const [clave, valor] of Object.entries(req.body)) {
       // Whitelist estricta: la tabla config guarda también las credenciales de
       // Gmail, y aceptar una clave arbitraria las dejaría pisar desde la web.
@@ -290,13 +428,24 @@ router.post('/save_config', requireMaster, async (req, res, next) => {
         return res.status(400).send(`${campo.label}: debe estar entre ${campo.min} y ${campo.max}`);
       }
 
+      const [antesCfg] = await sql`SELECT valor FROM config WHERE clave = ${clave}`;
       await sql`
         INSERT INTO config (clave, valor) VALUES (${clave}, ${String(n)})
         ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
       `;
       guardadas.push(campo.label);
+      if (!antesCfg || String(antesCfg.valor) !== String(n)) {
+        cambiosCfg.push({ campo: campo.label, antes: antesCfg ? antesCfg.valor : null, despues: String(n) });
+      }
     }
     if (!guardadas.length) return res.status(400).send('Nada para guardar');
+    if (cambiosCfg.length) {
+      await auditoria.registrar({
+        req, accion: 'editar', entidad: 'config',
+        descripcion: 'Cambió la configuración del sistema',
+        cambios: cambiosCfg,
+      });
+    }
     res.send('Configuración guardada');
   } catch (err) { next(err); }
 });
@@ -472,6 +621,18 @@ router.post('/colocar_rueda', requirePerm('cubiertas_mover'), async (req, res, n
     await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL,
       estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
       WHERE id = ${parseInt(id) || 0}`;
+
+    const [cubC] = await sql`SELECT fuego FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
+    const [uniC] = await sql`SELECT unidad FROM micro WHERE id = ${parseInt(unidad) || 0}`;
+    await auditoria.registrar({
+      req, accion: 'colocar', entidad: 'cubierta', entidad_id: parseInt(id) || 0,
+      descripcion: `Colocó la cubierta ${cubC ? cubC.fuego : id} en ${uniC ? uniC.unidad : unidad}, posición ${pos}`,
+      cambios: [
+        { campo: 'unidad', antes: null, despues: uniC ? uniC.unidad : String(unidad) },
+        { campo: 'posición', antes: null, despues: String(pos) },
+        ...(existing.length ? [{ campo: 'desplaza a', antes: null, despues: 'cubierta id ' + existing[0].id }] : []),
+      ],
+    });
     res.send('OK');
   } catch (err) { next(err); }
 });
@@ -480,7 +641,17 @@ router.post('/colocar_rueda', requirePerm('cubiertas_mover'), async (req, res, n
 router.post('/almacenar_rueda', requirePerm('cubiertas_mover'), async (req, res, next) => {
   try {
     const { r_id, almacen_id } = req.body;
-    await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen_id) || null}, micro_id = NULL, posicion = NULL, gomeria_id = NULL WHERE id = ${parseInt(r_id) || 0}`;
+    const cubIdA = parseInt(r_id) || 0;
+    const [antesA] = await sql`SELECT c.fuego, c.posicion, m.unidad FROM cubiertas c LEFT JOIN micro m ON c.micro_id = m.id WHERE c.id = ${cubIdA}`;
+    await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen_id) || null}, micro_id = NULL, posicion = NULL, gomeria_id = NULL WHERE id = ${cubIdA}`;
+    const [almA] = await sql`SELECT nombre FROM almacen WHERE id = ${parseInt(almacen_id) || 0}`;
+    await auditoria.registrar({
+      req, accion: 'almacenar', entidad: 'cubierta', entidad_id: cubIdA,
+      descripcion: `Almacenó la cubierta ${antesA ? antesA.fuego : cubIdA} en ${almA ? almA.nombre : almacen_id}`,
+      cambios: [{ campo: 'ubicación',
+                  antes: antesA && antesA.unidad ? `${antesA.unidad} (${antesA.posicion || '-'})` : null,
+                  despues: almA ? almA.nombre : String(almacen_id) }],
+    });
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -490,8 +661,16 @@ router.post('/almacenar_ruedas', requirePerm('cubiertas_mover'), async (req, res
   try {
     const { almacen_id, cubiertas_ids } = req.body;
     if (!cubiertas_ids) return res.send('ok');
-    const ids = Array.isArray(cubiertas_ids) ? cubiertas_ids : [cubiertas_ids];
-    await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen_id) || null}, gomeria_id = NULL, micro_id = NULL, posicion = NULL WHERE id = ANY(${ids.map(Number)})`;
+    const ids = (Array.isArray(cubiertas_ids) ? cubiertas_ids : [cubiertas_ids]).map(Number).filter(Boolean);
+    if (!ids.length) return res.send('ok');
+    const antesM = await sql`SELECT id, fuego FROM cubiertas WHERE id = ANY(${ids})`;
+    await sql`UPDATE cubiertas SET almacen_id = ${parseInt(almacen_id) || null}, gomeria_id = NULL, micro_id = NULL, posicion = NULL WHERE id = ANY(${ids})`;
+    const [almM] = await sql`SELECT nombre FROM almacen WHERE id = ${parseInt(almacen_id) || 0}`;
+    await auditoria.registrar({
+      req, accion: 'almacenar', entidad: 'cubierta',
+      descripcion: `Almacenó ${ids.length} cubierta(s) en ${almM ? almM.nombre : almacen_id}`,
+      cambios: [{ campo: 'cubiertas', antes: null, despues: antesM.map(c => c.fuego || c.id).join(', ') }],
+    });
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -537,6 +716,13 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
     ]);
     if (!rows.length) return res.send('');
     const ot = rows[0];
+
+    if (ot.anulada) {
+      return res.send(`<div style="padding:22px; text-align:center;">
+        <p style="font-size:14px; margin:0 0 16px 0;"><strong>Esta OT está anulada</strong></p>
+        <input type="button" value="Cerrar" onclick="close_carga();" style="width:100px;font-size:13px;" />
+      </div>`);
+    }
 
     if (!puedeCerrar(req.user, ot)) {
       return res.send(`<div style="padding:22px; text-align:center;">
@@ -764,6 +950,7 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
     const otPrevia = await sql`SELECT * FROM ots WHERE id = ${otIdInt}`;
     if (!otPrevia.length) return res.status(404).send('OT inexistente');
     if (otPrevia[0].estado == 1) return res.status(400).send('La OT ya está cerrada');
+    if (otPrevia[0].anulada) return res.status(400).send('La OT está anulada');
 
     const soloPreventivo = esSoloPreventivo(otPrevia[0]);
     const cierraTodo = tienePermiso(req.user, 'ot_cerrar');
@@ -918,6 +1105,19 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
       });
     }
 
+    const [uni] = unidad_id ? await sql`SELECT unidad FROM micro WHERE id = ${unidad_id}` : [null];
+    await auditoria.registrar({
+      req, accion: 'cerrar', entidad: 'ot', entidad_id: otIdInt,
+      descripcion: `Cerró la OT N° ${otIdInt}` + (uni ? ` — Interno ${uni.unidad}` : '')
+        + (cierraTodo ? '' : ' (preventivo)'),
+      cambios: [
+        { campo: 'estado', antes: 'Pendiente', despues: 'Cerrada' },
+        ...auditoria.diff(otPrevia[0], { km: kmCierre, ...trabajos, descripcion_cierre: descripcion },
+          ['km', ...TRABAJOS_REALES, 'preventivo', 'descripcion_cierre']),
+        ...(cambios.length ? [{ campo: 'cubiertas', antes: null, despues: cambios.length + ' posición(es) modificada(s)' }] : []),
+      ],
+    });
+
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -1045,6 +1245,23 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
       }
     }
 
+    const [uniNueva] = parseInt(unidad_id)
+      ? await sql`SELECT unidad FROM micro WHERE id = ${parseInt(unidad_id)}`
+      : [null];
+    const tareas = ['rotacion','arreglo','cambio','alinear','balanceo','armar','preventivo']
+      .filter(t => req.body[t] === '1');
+    await auditoria.registrar({
+      req, accion: 'crear', entidad: 'ot', entidad_id: ot_id,
+      descripcion: `Creó la OT N° ${ot_id}` + (uniNueva ? ` — Interno ${uniNueva.unidad}` : ''),
+      cambios: [
+        { campo: 'fecha', antes: null, despues: fechaISO },
+        { campo: 'trabajos', antes: null, despues: tareas.join(', ') || '(ninguno)' },
+        { campo: 'pinchadura', antes: null, despues: pinchadura === '1' ? 'SI' : 'NO' },
+        { campo: 'rotura', antes: null, despues: rotura === '1' ? 'SI' : 'NO' },
+        ...(observaciones ? [{ campo: 'observaciones', antes: null, despues: observaciones }] : []),
+      ],
+    });
+
     res.send(ot_id.toString());
   } catch (err) { next(err); }
 });
@@ -1057,6 +1274,9 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
     if (!otIdInt || !fecha) return res.send('');
 
     const fechaISO = parseFecha(fecha);
+
+    const antesOt = await sql`SELECT * FROM ots WHERE id = ${otIdInt}`;
+    if (antesOt.length && antesOt[0].anulada) return res.status(400).send('La OT está anulada');
 
     await sql`
       UPDATE ots SET
@@ -1091,6 +1311,21 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
       } catch(e) { /* JSON inválido, ignorar */ }
     }
 
+    const despuesOt = {
+      fecha: fechaISO, gomeria_id: parseInt(gomeria_id) || null, unidad_id: parseInt(unidad_id) || null,
+      observaciones: observaciones || null,
+      rotacion: rotacion === '1', arreglo: arreglo === '1', cambio: cambio === '1',
+      alinear: alinear === '1', balanceo: balanceo === '1', armar: armar === '1',
+    };
+    const cambiosOt = auditoria.diff(antesOt[0], despuesOt, Object.keys(despuesOt));
+    if (cambiosOt.length) {
+      await auditoria.registrar({
+        req, accion: 'editar', entidad: 'ot', entidad_id: otIdInt,
+        descripcion: `Editó la OT N° ${otIdInt}`,
+        cambios: cambiosOt,
+      });
+    }
+
     res.send(ot_id.toString());
   } catch (err) { next(err); }
 });
@@ -1105,14 +1340,78 @@ router.post('/agregar_cubierta_ot', requirePerm('ot_editar'), async (req, res, n
   } catch (err) { next(err); }
 });
 
-// POST /ajax/anular_ot
+// POST /ajax/anular_ot — baja lógica
+// Antes hacía DELETE: la OT desaparecía sin dejar constancia de que existió, de
+// qué tenía adentro ni de quién la borró. Ahora se marca y se puede restaurar.
 router.post('/anular_ot', requirePerm('ot_anular'), async (req, res, next) => {
   try {
-    const { ot_id } = req.body;
+    const { ot_id, motivo } = req.body;
     const otIdInt = parseInt(ot_id) || 0;
     if (!otIdInt) return res.status(400).send('ID requerido');
-    await sql`DELETE FROM ot_cubiertas WHERE ot_id = ${otIdInt}`;
-    await sql`DELETE FROM ots WHERE id = ${otIdInt}`;
+
+    const motivoTxt = String(motivo || '').trim();
+    if (!motivoTxt) return res.status(400).send('Indicá el motivo de la anulación');
+
+    const previa = await sql`SELECT * FROM ots WHERE id = ${otIdInt}`;
+    if (!previa.length) return res.status(404).send('OT inexistente');
+    if (previa[0].anulada) return res.status(400).send('La OT ya está anulada');
+
+    const cubs = await sql`
+      SELECT oc.posicion, c.fuego
+      FROM ot_cubiertas oc LEFT JOIN cubiertas c ON oc.cubierta_id = c.id
+      WHERE oc.ot_id = ${otIdInt}`;
+
+    await sql`
+      UPDATE ots SET
+        anulada = TRUE,
+        anulada_por = ${req.user?.usuario || null},
+        anulada_en = NOW(),
+        motivo_anulacion = ${motivoTxt}
+      WHERE id = ${otIdInt}`;
+
+    const [unidad] = previa[0].unidad_id
+      ? await sql`SELECT unidad FROM micro WHERE id = ${previa[0].unidad_id}`
+      : [null];
+
+    await auditoria.registrar({
+      req, accion: 'anular', entidad: 'ot', entidad_id: otIdInt,
+      descripcion: `Anuló la OT N° ${otIdInt}` + (unidad ? ` — Interno ${unidad.unidad}` : '') + ` — Motivo: ${motivoTxt}`,
+      cambios: {
+        motivo: motivoTxt,
+        // Copia de lo que tenía, para poder reconstruirla aunque después se purgue
+        copia: auditoria.snapshot(previa[0], [
+          'numero', 'fecha', 'estado', 'unidad_id', 'gomeria_id', 'km', 'factura', 'costo',
+          'rotacion', 'arreglo', 'cambio', 'alinear', 'balanceo', 'armar', 'preventivo',
+          'pinchadura', 'rotura', 'observaciones', 'solicitado_por',
+        ]),
+        cubiertas: cubs.map(c => `${c.posicion || '-'}: ${c.fuego || 'S/N'}`),
+      },
+    });
+
+    res.send('ok');
+  } catch (err) { next(err); }
+});
+
+// POST /ajax/restaurar_ot — deshace una anulación
+router.post('/restaurar_ot', requirePerm('ot_anular'), async (req, res, next) => {
+  try {
+    const otIdInt = parseInt(req.body.ot_id) || 0;
+    if (!otIdInt) return res.status(400).send('ID requerido');
+
+    const previa = await sql`SELECT id, anulada, motivo_anulacion FROM ots WHERE id = ${otIdInt}`;
+    if (!previa.length) return res.status(404).send('OT inexistente');
+    if (!previa[0].anulada) return res.status(400).send('La OT no está anulada');
+
+    await sql`
+      UPDATE ots SET anulada = FALSE, anulada_por = NULL, anulada_en = NULL, motivo_anulacion = NULL
+      WHERE id = ${otIdInt}`;
+
+    await auditoria.registrar({
+      req, accion: 'restaurar', entidad: 'ot', entidad_id: otIdInt,
+      descripcion: `Restauró la OT N° ${otIdInt}, que estaba anulada`,
+      cambios: [{ campo: 'anulada', antes: 'SI', despues: 'NO' }],
+    });
+
     res.send('ok');
   } catch (err) { next(err); }
 });
