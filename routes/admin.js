@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const { sql } = require('../db');
 const { requireMaster } = require('../middleware/auth');
 const { leerConfigInt, CONFIG_EDITABLE } = require('../lib/config');
+const { ACCIONES, ENTIDADES } = require('../lib/auditoria');
+const { parseFecha } = require('../lib/fechas');
 
 const PER_PAGE = 25;
 
@@ -243,15 +245,64 @@ router.get('/config', requireMaster, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── AUDITORIA ──────────────────────────────────────────────
+const AUD_PER_PAGE = 60;
+
+router.get('/auditoria', requireMaster, async (req, res, next) => {
+  try {
+    const { usuario = '', entidad = '', accion = '', desde = '', hasta = '', q = '', pagina = 1 } = req.query;
+    const pag = Math.max(parseInt(pagina) || 1, 1);
+    const offset = (pag - 1) * AUD_PER_PAGE;
+
+    const fmt = /^\d{2}\/\d{2}\/\d{2,4}$/;
+    const desdeISO = fmt.test(desde) ? parseFecha(desde) : '';
+    const hastaISO = fmt.test(hasta) ? parseFecha(hasta) : '';
+    const texto = String(q).trim();
+
+    // El filtro de fecha se compara contra el día local, no contra el UTC crudo:
+    // si no, un movimiento de las 22:00 cae en el día siguiente.
+    const cond = `
+      WHERE ($1 = '' OR a.usuario = $1)
+        AND ($2 = '' OR a.entidad = $2)
+        AND ($3 = '' OR a.accion = $3)
+        AND ($4 = '' OR (a.fecha AT TIME ZONE 'America/Argentina/Buenos_Aires')::date >= $4::date)
+        AND ($5 = '' OR (a.fecha AT TIME ZONE 'America/Argentina/Buenos_Aires')::date <= $5::date)
+        AND ($6 = '' OR a.descripcion ILIKE $7 OR a.cambios::text ILIKE $7)`;
+    const params = [usuario, entidad, accion, desdeISO, hastaISO, texto, '%' + texto + '%'];
+
+    const [movs, countRows, usuarios] = await Promise.all([
+      sql(`SELECT a.* FROM auditoria a ${cond} ORDER BY a.fecha DESC, a.id DESC LIMIT $8 OFFSET $9`,
+          [...params, AUD_PER_PAGE, offset]),
+      sql(`SELECT COUNT(*) AS total FROM auditoria a ${cond}`, params),
+      sql`SELECT DISTINCT usuario FROM auditoria WHERE usuario IS NOT NULL ORDER BY usuario`,
+    ]);
+
+    const total = parseInt(countRows[0].total) || 0;
+    res.render('admin/auditoria/index', {
+      user: req.user, movs, usuarios, ACCIONES, ENTIDADES,
+      currentPage: 'admin', pagina: pag, totalPages: Math.ceil(total / AUD_PER_PAGE), total,
+      filtros: { usuario, entidad, accion, desde: String(desde).trim(), hasta: String(hasta).trim(), q: texto },
+    });
+  } catch (err) { next(err); }
+});
+
 // ─── ANULAR OT ──────────────────────────────────────────────
 router.get('/anulaOT', requireMaster, async (req, res, next) => {
   try {
-    const ots = await sql`
-      SELECT o.*, r.nombre AS recapadora_nombre FROM ots o
-      LEFT JOIN recapadora r ON o.recapadora_id = r.id
-      WHERE o.estado = 0 ORDER BY o.fecha DESC, o.id DESC
-    `;
-    res.render('admin/anulaOT/index', { user: req.user, ots, currentPage: 'admin' });
+    const [ots, anuladas] = await Promise.all([
+      sql`
+        SELECT o.*, r.nombre AS recapadora_nombre, m.unidad FROM ots o
+        LEFT JOIN recapadora r ON o.recapadora_id = r.id
+        LEFT JOIN micro m ON o.unidad_id = m.id
+        WHERE o.estado = 0 AND o.anulada = FALSE ORDER BY o.fecha DESC, o.id DESC
+      `,
+      sql`
+        SELECT o.*, m.unidad FROM ots o
+        LEFT JOIN micro m ON o.unidad_id = m.id
+        WHERE o.anulada = TRUE ORDER BY o.anulada_en DESC NULLS LAST, o.id DESC LIMIT 100
+      `,
+    ]);
+    res.render('admin/anulaOT/index', { user: req.user, ots, anuladas, currentPage: 'admin' });
   } catch (err) { next(err); }
 });
 

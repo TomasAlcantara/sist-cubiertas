@@ -278,6 +278,14 @@ window.addEventListener('DOMContentLoaded', function() {
   <button class="btn-ghost" onclick="window.print()">Imprimir</button>
 </div>
 
+${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px solid var(--red-bright);
+  border-left:4px solid var(--red-bright); border-radius:var(--radius); background:rgba(198,40,40,0.08);">
+  <strong style="color:var(--red-bright); font-family:var(--font-display); letter-spacing:0.06em;">OT ANULADA</strong>
+  <div style="font-size:12.5px; margin-top:4px; color:var(--text-secondary);">
+    Anulada por <strong>${e(ot.anulada_por || '-')}</strong> el ${fmtFechaHora(ot.anulada_en)}${ot.motivo_anulacion ? ' — ' + e(ot.motivo_anulacion) : ''}
+  </div>
+</div>` : ''}
+
 <div class="ver-wrap">
 
   <!-- Diagrama -->

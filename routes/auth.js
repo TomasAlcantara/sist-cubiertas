@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 const { sql } = require('../db');
 const { requireAuth } = require('../middleware/auth');
 const { permisosDe } = require('../lib/permisos');
+const auditoria = require('../lib/auditoria');
 
 // Máximo 10 intentos de login por IP cada 15 minutos
 const loginLimiter = rateLimit({
@@ -40,11 +41,22 @@ router.post('/login', loginLimiter, async (req, res) => {
       SELECT * FROM usuarios WHERE usuario = ${usr} AND activo = 1
     `;
     if (!rows.length) {
+      // Se registra el nombre tecleado, nunca la contraseña.
+      await auditoria.registrar({
+        req, usuario: { usuario: String(usr || '').slice(0, 50) },
+        accion: 'login_fallido', entidad: 'sesion',
+        descripcion: `Intento de acceso con un usuario inexistente o inactivo: ${String(usr || '').slice(0, 50)}`,
+      });
       return res.render('login', { error: 'Usuario o contraseña incorrectos' });
     }
     const user = rows[0];
     const valid = await bcrypt.compare(pass, user.password);
     if (!valid) {
+      await auditoria.registrar({
+        req, usuario: { id: user.id, usuario: user.usuario },
+        accion: 'login_fallido', entidad: 'sesion', entidad_id: user.id,
+        descripcion: 'Contraseña incorrecta',
+      });
       return res.render('login', { error: 'Usuario o contraseña incorrectos' });
     }
     // Los permisos viajan resueltos en el token: así un usuario viejo sin la
@@ -65,6 +77,12 @@ router.post('/login', loginLimiter, async (req, res) => {
       sameSite: isProd ? 'Strict' : 'Lax',
       maxAge: 2 * 60 * 60 * 1000,
     });
+    await auditoria.registrar({
+      req, usuario: { id: user.id, usuario: user.usuario },
+      accion: 'login', entidad: 'sesion', entidad_id: user.id,
+      descripcion: 'Ingresó al sistema',
+    });
+
     res.redirect('/');
   } catch (e) {
     console.error(e);

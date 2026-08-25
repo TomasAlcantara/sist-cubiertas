@@ -147,13 +147,15 @@ describe('POST /ajax/anular_ot — exige permiso ot_anular', () => {
     expect(res.status).toBe(403);
   });
 
-  test('usuario con ot_anular explícito → pasa', async () => {
+  test('usuario con ot_anular explícito → pasa el permiso', async () => {
+    const { sql } = require('../db');
+    sql.mockResolvedValue([{ id: 1, anulada: false, unidad_id: null }]);
     const token = makeToken({ tipo: 0, permisos: 'ot_ver,ot_anular' });
     const res = await request(app)
       .post('/ajax/anular_ot')
       .set('Cookie', `token=${token}`)
       .type('form')
-      .send({ ot_id: 1 });
+      .send({ ot_id: 1, motivo: 'prueba' });
     expect(res.status).toBe(200);
   });
 
@@ -294,7 +296,8 @@ describe('POST /ajax/save_config — whitelist de parámetros', () => {
       .type('form')
       .send({ mm_min: 5, dias_preventivo: 30 });
     expect(res.status).toBe(200);
-    expect(sql).toHaveBeenCalledTimes(2);
+    const upserts = sql.mock.calls.filter(c => String(c[0]).includes('INSERT INTO config'));
+    expect(upserts.length).toBe(2);
   });
 
   test('sin permiso de administración → 403', async () => {

@@ -8,6 +8,14 @@ const path = require('path');
 const app = express();
 const isProd = process.env.NODE_ENV === 'production';
 
+// Vercel entrega las requests a través de su edge, así que la IP de conexión es
+// siempre interna y la del cliente viaja en X-Forwarded-For. Sin esto el rate
+// limiter agrupa a todo el mundo bajo la misma IP: diez intentos fallidos de
+// login de una persona bloqueaban a los demás. Se confía en UN solo salto (el
+// proxy de Vercel), no en toda la cadena, para que nadie pueda falsear su IP
+// mandando el header a mano.
+app.set('trust proxy', 1);
+
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: {

@@ -12,7 +12,8 @@ router.get('/', requirePerm('gomerias_ver'), async (req, res) => {
     SELECT o.*, r.nombre AS recapadora_nombre
     FROM ots o
     LEFT JOIN recapadora r ON o.recapadora_id = r.id
-    WHERE (${parseInt(recapadora)} = 0 OR o.recapadora_id = ${parseInt(recapadora)})
+    WHERE o.anulada = FALSE
+      AND (${parseInt(recapadora)} = 0 OR o.recapadora_id = ${parseInt(recapadora)})
       AND (${parseInt(estado)} = -1 OR o.estado = ${parseInt(estado)})
     ORDER BY o.fecha DESC, o.id DESC
   `;

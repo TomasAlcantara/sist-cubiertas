@@ -8,7 +8,8 @@ const { parseFecha } = require('../lib/fechas');
 // GET /OTs/list
 router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
   try {
-    const { gomeria = 0, unidad = 0, estado = -1, numero = '', desde = '', hasta = '' } = req.query;
+    const { gomeria = 0, unidad = 0, estado = -1, numero = '', desde = '', hasta = '', anuladas = '' } = req.query;
+    const verAnuladas = anuladas === '1';
 
     // Las fechas llegan del datepicker en DD/MM/AAAA; si vienen vacías o mal
     // formadas quedan en '' y el filtro se desactiva solo.
@@ -24,7 +25,8 @@ router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
         FROM ots o
         LEFT JOIN gomeria g ON o.gomeria_id = g.id
         LEFT JOIN micro m ON o.unidad_id = m.id
-        WHERE (${parseInt(gomeria)} = 0 OR o.gomeria_id = ${parseInt(gomeria)})
+        WHERE (${verAnuladas} OR o.anulada = FALSE)
+          AND (${parseInt(gomeria)} = 0 OR o.gomeria_id = ${parseInt(gomeria)})
           AND (${parseInt(unidad)} = 0 OR o.unidad_id = ${parseInt(unidad)})
           AND (${parseInt(estado)} = -1 OR o.estado = ${parseInt(estado)})
           -- La lista muestra el numero o, si no tiene, el id: buscar por numero
@@ -41,6 +43,7 @@ router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
       filtros: {
         gomeria: parseInt(gomeria), unidad: parseInt(unidad), estado: parseInt(estado),
         numero: nro, desde: String(desde).trim(), hasta: String(hasta).trim(),
+        anuladas: verAnuladas,
       },
     });
   } catch (err) { next(err); }
@@ -117,7 +120,7 @@ router.get('/cargar', requirePerm('ot_editar'), async (req, res, next) => {
       WHERE o.id = ${parseInt(ot) || 0}
     `;
     if (!rows.length) return res.redirect('/OTs/list');
-    if (rows[0].estado == 1) return res.redirect('/OTs/ver?ot=' + parseInt(ot));
+    if (rows[0].anulada || rows[0].estado == 1) return res.redirect('/OTs/ver?ot=' + parseInt(ot));
 
     const [almacenes, modelos, medidas, ot_cubiertas, unitTires] = await Promise.all([
       sql`SELECT * FROM almacen WHERE activo = 1 ORDER BY nombre`,
@@ -147,7 +150,7 @@ router.get('/editar', requirePerm('ot_editar'), async (req, res, next) => {
       WHERE o.id = ${parseInt(ot) || 0}
     `;
     if (!rows.length) return res.redirect('/OTs/list');
-    if (rows[0].estado == 1) return res.redirect('/OTs/ver?ot=' + parseInt(ot));
+    if (rows[0].anulada || rows[0].estado == 1) return res.redirect('/OTs/ver?ot=' + parseInt(ot));
 
     const [gomerias, unidades, almacenes, modelos, medidas, ot_cubiertas] = await Promise.all([
       sql`SELECT * FROM gomeria WHERE activo = 1 ORDER BY nombre`,

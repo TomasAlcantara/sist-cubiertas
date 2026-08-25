@@ -3,9 +3,19 @@ const currentPage = 'admin';
 const body = `
 <script>
 function anular(id) {
-  if (!confirm('¿Confirma que desea anular la OT N° ' + id + '?')) return;
-  $.ajax({ type:'POST', url:'/ajax/anular_ot', data:{ ot_id: id },
-    success: function() { alert('OT anulada correctamente'); location.reload(); }
+  var motivo = prompt('Motivo de la anulación de la OT N° ' + id + ':\\n(queda registrado con tu usuario)');
+  if (motivo === null) return;
+  if (!motivo.trim()) { alert('El motivo es obligatorio'); return; }
+  $.ajax({ type:'POST', url:'/ajax/anular_ot', data:{ ot_id: id, motivo: motivo.trim() },
+    success: function() { alert('OT anulada correctamente'); location.reload(); },
+    error: function(xhr) { alert(xhr.responseText || 'Error al anular'); }
+  });
+}
+function restaurar(id) {
+  if (!confirm('¿Restaurar la OT N° ' + id + '? Vuelve a aparecer en el listado.')) return;
+  $.ajax({ type:'POST', url:'/ajax/restaurar_ot', data:{ ot_id: id },
+    success: function() { alert('OT restaurada'); location.reload(); },
+    error: function(xhr) { alert(xhr.responseText || 'Error al restaurar'); }
   });
 }
 </script>
@@ -13,17 +23,44 @@ function anular(id) {
 <div class="list-head">
   <h2>Anular OT</h2>
 </div>
+
+<p style="font-size:12px; color:var(--text-muted); margin-bottom:12px;">
+  Anular no borra la OT: queda marcada y se puede restaurar. Todo movimiento queda
+  en el <a href="/admin/auditoria">registro de actividad</a>.
+</p>
+
 <table>
-  <thead><th>OT Número</th><th>Recapadora</th><th>Fecha</th><th style="width:100px;">Anular</th></thead>
-  ${ots.length === 0 ? '<tr><td colspan="4" align="center">Sin OTs abiertas</td></tr>' :
+  <thead><th>OT N°</th><th>Interno</th><th>Recapadora</th><th>Fecha</th><th style="width:100px;">Anular</th></thead>
+  ${ots.length === 0 ? '<tr><td colspan="5" align="center">Sin OTs abiertas</td></tr>' :
     ots.map((o,i)=>`<tr class="${i%2===0?'light':'dark'}">
       <td align="center">${o.numero||o.id}</td>
-      <td align="center">${o.recapadora_nombre||'-'}</td>
-      <td align="center">${o.fecha ? new Date(o.fecha).toLocaleDateString('es-AR') : '-'}</td>
+      <td align="center">${e(o.unidad||'-')}</td>
+      <td align="center">${e(o.recapadora_nombre||'-')}</td>
+      <td align="center">${fmtFecha(o.fecha)}</td>
       <td align="center"><a style="cursor:pointer; color:var(--red-bright);" onclick="anular(${o.id})">ANULAR</a></td>
     </tr>`).join('')
   }
 </table>
+
+${anuladas.length ? `
+<h3 style="margin-top:2rem;">OTs anuladas</h3>
+<table>
+  <thead><th>OT N°</th><th>Interno</th><th>Fecha</th><th>Anulada por</th><th>Motivo</th><th style="width:150px;"></th></thead>
+  ${anuladas.map((o,i)=>`<tr class="${i%2===0?'light':'dark'}">
+    <td align="center">${o.numero||o.id}</td>
+    <td align="center">${e(o.unidad||'-')}</td>
+    <td align="center">${fmtFecha(o.fecha)}</td>
+    <td align="center" style="font-family:var(--font-mono); font-size:11px;">
+      ${e(o.anulada_por||'-')}<div style="color:var(--text-muted);">${fmtFechaHora(o.anulada_en)}</div>
+    </td>
+    <td style="font-size:12px;">${e(o.motivo_anulacion||'-')}</td>
+    <td align="center">
+      <a href="/OTs/ver?ot=${o.id}">VER</a> |
+      <a style="cursor:pointer;" onclick="restaurar(${o.id})">RESTAURAR</a>
+    </td>
+  </tr>`).join('')}
+</table>` : ''}
+
 <a href="/admin" class="list-back">&laquo; Volver</a>
 `;
 %>

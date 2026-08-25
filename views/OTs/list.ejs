@@ -39,7 +39,7 @@ const accionesAbierta = (o) => {
   return acciones.join(' | ');
 };
 
-const hayFiltros = !!(filtros.numero || filtros.desde || filtros.hasta)
+const hayFiltros = !!(filtros.numero || filtros.desde || filtros.hasta || filtros.anuladas)
   || filtros.unidad > 0 || filtros.gomeria > 0 || filtros.estado !== -1;
 const body = `
 <style>
@@ -265,6 +265,9 @@ function confirmar_cerrar(ot_id) {
     <option value="0" ${filtros.estado==0?'selected':''}>Pendiente</option>
     <option value="1" ${filtros.estado==1?'selected':''}>Cerrada</option>
   </select>
+  <label style="display:inline-flex; align-items:center; gap:5px; font-size:12px; white-space:nowrap;">
+    <input type="checkbox" name="anuladas" value="1" ${filtros.anuladas ? 'checked' : ''} /> Ver anuladas
+  </label>
   <button type="submit" class="ot-filters-submit">Filtrar</button>
   ${hayFiltros ? '<a href="/OTs/list" class="ot-filters-clear">Limpiar</a>' : ''}
   ${can('ot_crear') ? '<button type="button" class="ot-nueva" onclick="location.href=\'/OTs/nueva\'">Nueva OT</button>' : ''}
@@ -293,9 +296,12 @@ function confirmar_cerrar(ot_id) {
       <td align="center" style="font-family:var(--font-mono)">${o.km != null ? Number(o.km).toLocaleString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
       <td>${trabajosTooltip(o)}</td>
-      <td align="center"><strong>${o.estado==0?'Pendiente':'Cerrada'}</strong></td>
+      <td align="center">${o.anulada
+        ? '<strong style="color:var(--red-bright);" title="Anulada por ' + e(o.anulada_por||'-') + (o.motivo_anulacion ? ' — ' + e(o.motivo_anulacion) : '') + '">ANULADA</strong>'
+        : '<strong>' + (o.estado==0?'Pendiente':'Cerrada') + '</strong>'}</td>
       <td align="center">
-        ${o.estado==0 ? accionesAbierta(o) : '<a href="/OTs/ver?ot='+o.id+'">VER</a>'}
+        ${o.anulada ? '<a href="/OTs/ver?ot='+o.id+'">VER</a>'
+    : (o.estado==0 ? accionesAbierta(o) : '<a href="/OTs/ver?ot='+o.id+'">VER</a>')}
       </td>
     </tr>`).join('')
   }
