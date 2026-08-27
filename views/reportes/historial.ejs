@@ -5,7 +5,6 @@ const esc = (v) => v == null ? '' : String(v)
   .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
   .replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 
-const estadoNombre = (e) => e==1 ? 'Nueva' : e==2 ? 'Usada' : e==3 ? 'Recapada' : '-';
 const posNombre = (p) => ({
   ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
   tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
@@ -37,12 +36,11 @@ if (coincidencias.length) {
     ${coincidencias.length} cubiertas coinciden con "${esc(fuego)}". Elegí una:
   </p>
   <table>
-    <thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Ubicación</th><th></th></thead>
+    <thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Ubicación</th><th></th></thead>
     ${coincidencias.map((c,i) => `<tr class="${i%2===0?'light':'dark'}">
       <td align="center" style="font-family:var(--font-mono)">${esc(c.fuego)}</td>
       <td align="center">${esc(c.marca||'')} ${esc(c.modelo_nombre||'')}</td>
       <td align="center" style="font-family:var(--font-mono)">${esc(c.medida||'-')}</td>
-      <td align="center">${estadoNombre(c.estado)}</td>
       <td align="center">${ubicacion(c)}</td>
       <td align="center"><a href="/reportes/historial?id=${c.id}">VER HISTORIAL</a></td>
     </tr>`).join('')}
@@ -63,7 +61,7 @@ if (coincidencias.length) {
     <div>
       <div class="ficha-fuego">${esc(c.fuego || '-')}</div>
       <div class="ficha-sub">
-        ${esc(c.marca||'')} ${esc(c.modelo_nombre||'')} · ${esc(c.medida||'sin medida')} · ${estadoNombre(c.estado)}
+        ${esc(c.marca||'')} ${esc(c.modelo_nombre||'')} · ${esc(c.medida||'sin medida')}
       </div>
     </div>
     <div class="ficha-ubic">

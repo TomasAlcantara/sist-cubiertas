@@ -1,5 +1,4 @@
 <%
-const estadoNombre = (est) => est == 1 ? 'Nueva' : est == 2 ? 'Usada' : 'Recapada';
 const currentPage = 'inicio';
 const body = `
 <script>
@@ -7,7 +6,7 @@ function orderby(id) {
   var ob = ${filtros.orderby};
   if (id == ob) id += 10;
   var fuego = ${ej(filtros.fuego)};
-  location.href = '?id=${gomeria.id}&fuego=' + encodeURIComponent(fuego) + '&modelo=${filtros.modelo}&medida=${filtros.medida}&estado=${filtros.estado}&orderby=' + id;
+  location.href = '?id=${gomeria.id}&fuego=' + encodeURIComponent(fuego) + '&modelo=${filtros.modelo}&medida=${filtros.medida}&orderby=' + id;
 }
 function show_almacenes(cubierta_id) {
   document.getElementById('back').style.display = 'block';
@@ -20,13 +19,6 @@ function close_almacenes() {
 }
 function mover_cubierta(almacen) {
   $.ajax({ type:'POST', url:'/ajax/mover_cubierta', data:{ cubierta: document.getElementById('cubierta_id').value, almacen: almacen }, success: function(){ location.reload(); } });
-}
-function cambiar_estado(id, estadoActual) {
-  var opts = ['', 'Nueva', 'Usada', 'Recapada'];
-  var msg = 'Estado actual: ' + opts[estadoActual] + '\\nElegir nuevo estado:\\n1 = Nueva\\n2 = Usada\\n3 = Recapada';
-  var val = prompt(msg);
-  if (!val || val < 1 || val > 3) return;
-  $.ajax({ type:'POST', url:'/ajax/nuevo_estado', data:{ r_id: id, estado: val }, success: function(){ location.reload(); } });
 }
 </script>
 
@@ -61,13 +53,6 @@ function cambiar_estado(id, estadoActual) {
     <option value="0">Todas</option>
     ${medidas.map(m => '<option value="' + m.id + '"' + (m.id == filtros.medida ? ' selected' : '') + '>' + m.medida + '</option>').join('')}
   </select>
-  <strong>Estado:</strong>
-  <select name="estado">
-    <option value="0">Todos</option>
-    <option value="1"` + (filtros.estado==1?' selected':'') + `>Nueva</option>
-    <option value="2"` + (filtros.estado==2?' selected':'') + `>Usada</option>
-    <option value="3"` + (filtros.estado==3?' selected':'') + `>Recapada</option>
-  </select>
   <button type="submit" class="btn-filter">Filtrar</button>
 </form>
 
@@ -76,21 +61,18 @@ function cambiar_estado(id, estadoActual) {
     <th onclick="orderby(1)" style="cursor:pointer;">Fuego</th>
     <th onclick="orderby(2)" style="cursor:pointer;">Modelo</th>
     <th onclick="orderby(3)" style="cursor:pointer;">Medida</th>
-    <th onclick="orderby(4)" style="cursor:pointer;">Estado</th>
     <th onclick="orderby(5)" style="cursor:pointer;">Km</th>
     <th style="width:160px;">Editar</th>
   </thead>
-  ${cubiertas.length === 0 ? '<tr><td colspan="6" align="center">Sin cubiertas</td></tr>' :
+  ${cubiertas.length === 0 ? '<tr><td colspan="5" align="center">Sin cubiertas</td></tr>' :
     cubiertas.map((c, i) => '<tr class="' + (i%2===0?'light':'dark') + '">'
       + '<td align="center">' + (c.fuego||'-') + '</td>'
       + '<td align="center">' + (c.marca||'') + ' ' + (c.modelo_nombre||'') + '</td>'
       + '<td align="center">' + (c.medida||'-') + '</td>'
-      + '<td align="center">' + estadoNombre(c.estado) + '</td>'
       + '<td align="center">' + (c.km||0) + '</td>'
       + '<td align="center">'
         + '<a href="/cubiertas/editar?id=' + c.id + '">ALTA</a>'
         + ' | <a style="cursor:pointer;" onclick="show_almacenes(' + c.id + ')">MOVER</a>'
-        + ' | <a style="cursor:pointer;" onclick="cambiar_estado(' + c.id + ',' + c.estado + ')">ESTADO</a>'
       + '</td>'
     + '</tr>').join('')
   }

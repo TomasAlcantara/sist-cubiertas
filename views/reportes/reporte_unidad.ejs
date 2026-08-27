@@ -1,5 +1,4 @@
 <%
-const estadoNombre = (e) => e==1?'Nueva':e==2?'Usada':'Recapada';
 const currentPage = 'reportes';
 const body = `
 <div class="list-head">
@@ -17,14 +16,12 @@ const body = `
 
 ${cubiertas.length > 0 ? `
 <table>
-  <thead><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Presión</th><th>Estado</th><th>Km</th></thead>
+  <thead><th>Posición</th><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Km</th></thead>
   ${cubiertas.map((c,i)=>`<tr class="${i%2===0?'light':'dark'}">
     <td align="center">${c.posicion||'-'}</td>
     <td align="center">${c.fuego||'-'}</td>
     <td align="center">${c.marca||''} ${c.modelo_nombre||''}</td>
     <td align="center">${c.medida||'-'}</td>
-    <td align="center" style="font-family:var(--font-mono)">${c.presion != null ? c.presion + ' psi' : '-'}</td>
-    <td align="center">${estadoNombre(c.estado)}</td>
     <td align="center">${c.km||0}</td>
   </tr>`).join('')}
 </table>` : unidad > 0 ? '<p style="color:var(--text-muted); margin-top:10px;">Sin cubiertas para esta unidad.</p>' : ''}

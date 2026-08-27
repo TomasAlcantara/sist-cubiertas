@@ -1,6 +1,6 @@
 <%
 const currentPage = 'inicio';
-const hoy = new Date().toLocaleDateString('es-AR');
+const hoy = hoyAR();   // hoy en Argentina: el runtime de Vercel esta en UTC y despues de las 21 adelantaba un dia
 const body = `
 <style>
 #back { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:98; }
@@ -9,7 +9,7 @@ const body = `
 #rueda_list td, #rueda_list th { padding:3px 6px; border:1px solid #ddd; font-size:12px; }
 .bus-row { display:flex; align-items:center; justify-content:center; }
 .rueda {
-  width:72px; height:136px; background:#111; border:2px solid #444;
+  width:72px; height:102px; background:#111; border:2px solid #444;
   display:inline-flex; align-items:stretch; cursor:grab; margin:2px;
   flex-direction:column; overflow:hidden;
 }
@@ -34,28 +34,6 @@ const body = `
   background:#1a1a1a; color:#444;
 }
 .rueda-in.con-valor { background:#1a3a8a; color:#fff; }
-.rueda-mm {
-  display:flex; border-top:1px solid #000; background:#141414;
-  flex:0 0 34px;
-}
-.rueda-mm input {
-  width:50%; min-width:0; height:100%; box-sizing:border-box;
-  background:#141414; border:none; color:#bbb; text-align:center;
-  font-family:'IBM Plex Mono',monospace; font-size:11px; font-weight:600;
-  padding:0; -moz-appearance:textfield;
-}
-.rueda-mm input::-webkit-outer-spin-button,
-.rueda-mm input::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
-.rueda-mm input:first-child { border-right:1px solid #000; }
-.rueda-mm input:focus { outline:1px solid #1a3a8a; background:#0e1730; color:#fff; }
-.rueda-mm input.gastada { background:#5a1010; color:#fff; }
-.rueda-mm input::placeholder { color:#3a3a3a; font-size:9px; }
-.mm-leyenda { font-size:11px; color:#666; margin:0 0 8px 0; }
-.mm-alerta {
-  display:none; margin:8px auto 0; max-width:460px; padding:8px 12px;
-  border:1px solid #c62828; border-radius:4px; background:rgba(198,40,40,0.10);
-  color:#c62828; font-size:12px; font-weight:600; text-align:center;
-}
 .bus-top-bot { background:#fff; border:2px solid #333; width:200px; height:16px; }
 .bus-side { background:#fff; border-left:2px solid #333; border-right:2px solid #333; width:200px; }
 .bus-axle { background:#ddd; border-left:2px solid #333; border-right:2px solid #333; width:200px; height:24px; }
@@ -68,9 +46,6 @@ const body = `
 var cambios_ot = {};
 var current_pos = '';
 var unidadActual = {};
-var MM_MIN = ${cfg.mm_min};
-var MM_MAX = ${cfg.mm_max};
-
 var LAYOUTS = {
   1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 },
   2: { del:['ddi','ddd'], tr1:['cie','cii','cdi','cde'], tr2:['tie','tde'], aux:['ra','ra2'], bodyH:80 },
@@ -92,45 +67,7 @@ function mkRueda(pos) {
     'ondrop="dDrop(event,\\''+pos+'\\');">'+
     '<span class="'+outCls+'" id="fn-out-'+pos+'">'+outTxt+'</span>'+
     '<span class="rueda-in" id="fn-in-'+pos+'">+</span>'+
-    // Los inputs frenan el click: el div padre abre el modal de cubiertas y sin
-    // esto cada tecleo lo dispararia.
-    '<span class="rueda-mm">'+
-      '<input type="number" step="0.5" min="0" max="'+MM_MAX+'" id="mm-ext-'+pos+'" '+
-        'placeholder="ext" title="Profundidad hombro exterior (mm)" '+
-        'onclick="event.stopPropagation();" onblur="chequear_mm(this);" />'+
-      '<input type="number" step="0.5" min="0" max="'+MM_MAX+'" id="mm-int-'+pos+'" '+
-        'placeholder="int" title="Profundidad hombro interior (mm)" '+
-        'onclick="event.stopPropagation();" onblur="chequear_mm(this);" />'+
-    '</span>'+
     '</div>';
-}
-
-// Marca en rojo lo que esta por debajo del minimo del taller. Avisa, no bloquea:
-// el sentido del campo es justamente dejar asentada la cubierta gastada.
-function chequear_mm(input) {
-  var v = parseFloat(input.value);
-  var gastada = input.value !== '' && !isNaN(v) && v < MM_MIN;
-  input.classList.toggle('gastada', gastada);
-  var alerta = document.getElementById('mm-alerta');
-  if (alerta) {
-    var hay = document.querySelectorAll('.rueda-mm input.gastada').length;
-    alerta.style.display = hay ? 'block' : 'none';
-    if (hay) alerta.innerHTML = '\u26a0 ' + hay + ' medici\u00f3n(es) por debajo del m\u00ednimo de ' + MM_MIN + ' mm';
-  }
-}
-
-// { pos: {ext, int} } — solo las posiciones donde el gomero cargo algo
-function juntar_mediciones() {
-  var out = {};
-  document.querySelectorAll('.rueda-mm input').forEach(function(inp) {
-    var m = inp.id.match(/^mm-(ext|int)-(.+)$/);
-    if (!m || inp.value === '') return;
-    var v = parseFloat(inp.value);
-    if (isNaN(v) || v < 0 || v > MM_MAX) return;
-    if (!out[m[2]]) out[m[2]] = {};
-    out[m[2]][m[1]] = v;
-  });
-  return out;
 }
 
 function renderDiagrama(tipo) {
@@ -217,7 +154,7 @@ function filtrar_ot() {
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
-            estado:document.getElementById('f_estado').value, orden:document.getElementById('f_orden').value,
+            orden:document.getElementById('f_orden').value,
             modo:'ot', unidad_id:uid },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
@@ -328,8 +265,7 @@ function guardar_ot() {
             preventivo: document.getElementById('cb_preventivo').checked ? '1':'0',
             pinchadura: pinchaduraSel.value,
             rotura: roturaSel.value,
-            cambios_ot_json: JSON.stringify(cambios_ot),
-            mediciones_json: JSON.stringify(juntar_mediciones()) },
+            cambios_ot_json: JSON.stringify(cambios_ot) },
     success: function(id) {
       if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al crear la OT');
@@ -379,13 +315,6 @@ $(function() {
     <select id="f_medida">
       <option value="0">Todas</option>
       ${medidas.map(m => `<option value="${m.id}">${m.medida}</option>`).join('')}
-    </select>
-    <strong style="margin-left:8px;">Estado:</strong>
-    <select id="f_estado">
-      <option value="0">Todos</option>
-      <option value="1">Nueva</option>
-      <option value="2">Usada</option>
-      <option value="3">Recapada</option>
     </select>
     <input type="button" value="Filtrar" onclick="filtrar_ot()" style="margin-left:10px; width:75px;" />
   </form>
@@ -469,11 +398,9 @@ $(function() {
   <strong>Cambio de cubiertas:</strong>
   <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar entre posiciones &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para cambiar desde almacén</p>
   <p style="font-size:11px; color:#666; margin:0 0 8px 0;">En cada rueda: arriba la cubierta actual, abajo la que entra.</p>
-  <p class="mm-leyenda">Abajo de todo, la profundidad medida en mm: <strong>ext</strong> = hombro exterior, <strong>int</strong> = hombro interior. Mínimo aceptable: ${cfg.mm_min} mm.</p>
   <div id="diagrama-wrap" style="text-align:center;">
     <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>
   </div>
-  <div id="mm-alerta" class="mm-alerta"></div>
 </div>
 
 <!-- Botones finales -->

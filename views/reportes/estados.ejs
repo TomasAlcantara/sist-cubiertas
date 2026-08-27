@@ -1,27 +1,39 @@
 <%
 const currentPage = 'reportes';
+const UBIC_LABEL = {
+  unidad:     'Montadas en unidad',
+  almacen:    'En almacén',
+  gomeria:    'En gomería',
+  sin_ubicar: 'Sin ubicar',
+};
 const body = `
 <div class="list-head">
-  <h2>Reporte de Estados</h2>
+  <h2>Reporte de Ubicación</h2>
 </div>
 
 <table style="max-width:400px;">
-  <thead><th>Estado</th><th>Cantidad</th></thead>
-  <tr class="light"><td>Nuevas</td><td align="center">${resumen.nuevas||0}</td></tr>
-  <tr class="dark"><td>Usadas</td><td align="center">${resumen.usadas||0}</td></tr>
-  <tr class="light"><td>Recapadas</td><td align="center">${resumen.recapadas||0}</td></tr>
+  <thead><th>Ubicación</th><th>Cantidad</th></thead>
+  <tr class="light"><td>Montadas en unidad</td><td align="center">${resumen.en_unidad||0}</td></tr>
+  <tr class="dark"><td>En almacén</td><td align="center">${resumen.en_almacen||0}</td></tr>
+  <tr class="light"><td>En gomería</td><td align="center">${resumen.en_gomeria||0}</td></tr>
+  <tr class="dark"><td>Sin ubicar</td><td align="center">${resumen.sin_ubicar||0}</td></tr>
   <tr class="sdark"><td><strong>Total</strong></td><td align="center"><strong>${resumen.total||0}</strong></td></tr>
 </table>
 
 <h3 style="margin:20px 0 10px 0;">Por Modelo</h3>
 <table>
-  <thead><th>Marca</th><th>Modelo</th><th>Estado</th><th>Cantidad</th></thead>
+  <thead><th>Marca</th><th>Modelo</th><th>Ubicación</th><th>Cantidad</th></thead>
   ${porModelo.map((r,i) => `<tr class="${i%2===0?'light':'dark'}">
-    <td>${r.marca||'-'}</td><td>${r.modelo||'-'}</td>
-    <td>${r.estado==1?'Nueva':r.estado==2?'Usada':'Recapada'}</td>
+    <td>${e(r.marca||'-')}</td><td>${e(r.modelo||'-')}</td>
+    <td>${UBIC_LABEL[r.ubicacion] || r.ubicacion}</td>
     <td align="center">${r.cantidad}</td>
   </tr>`).join('')}
 </table>
+
+<p style="font-size:12px; color:var(--text-muted); margin-top:10px;">
+  La vida de cada cubierta (colocaciones, retiros, reparaciones, recapados y km
+  acumulados) se consulta en <a href="/reportes/historial">Historial por Fuego</a>.
+</p>
 
 <a href="/reportes" class="list-back">&laquo; Volver</a>
 `;

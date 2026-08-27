@@ -1,5 +1,4 @@
 <%
-const estadoNombre = (e) => e == 1 ? 'Nueva' : e == 2 ? 'Usada' : 'Recapada';
 const posNombre = (p) => ({
   ddi:'Del. Izq.', ddd:'Del. Der.',
   tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
@@ -10,6 +9,12 @@ const posNombre = (p) => ({
 })[p] || p;
 
 const currentPage = 'inicio';
+
+// Ingreso = alta de la OT, salida = cierre. La demora sale de las dos: si
+// alguna no tiene hora real guardada (OT vieja) no se muestra.
+const abierta = ot.estado == 0 && !ot.anulada;
+const salida = ot.cerrado_en ? fmtFechaHora(ot.cerrado_en) : (abierta ? 'En curso' : 'Sin dato');
+const demora = abierta ? fmtDuracion(ot.creado_en, new Date()) : fmtDuracion(ot.creado_en, ot.cerrado_en);
 
 const trabajos = [];
 if (ot.rotacion) trabajos.push('Rotación');
@@ -33,18 +38,6 @@ const tipoUnidad = ot.tipo_unidad || 3;
 const motivos = [];
 if (ot.pinchadura) motivos.push('PINCHADURA');
 if (ot.rotura)     motivos.push('ROTURA');
-
-// Profundidad medida al abrir la OT, por posición
-const medMap = {};
-(mediciones || []).forEach(m => { if (m.posicion) medMap[m.posicion] = m; });
-const mmNum = (v) => (v === null || v === undefined ? null : Number(v));
-const bajoMinimo = (m) => {
-  if (!m) return false;
-  const vals = [mmNum(m.mm_ext), mmNum(m.mm_int)].filter(v => v !== null);
-  return vals.some(v => v < cfg.mm_min);
-};
-const fmtMm = (v) => (v === null || v === undefined ? '-' : Number(v).toFixed(1));
-const hayMediciones = (mediciones || []).length > 0;
 
 const body = `
 <style>
@@ -121,9 +114,7 @@ const body = `
     position: relative;
     cursor: default;
   }
-  .rueda-ver.ocupada-nueva  { border-color: #2e7d32; background: rgba(46,125,50,0.07); }
-  .rueda-ver.ocupada-usada  { border-color: #888;    background: rgba(0,0,0,0.04); }
-  .rueda-ver.ocupada-recap  { border-color: #e67e22; background: rgba(230,126,34,0.07); }
+  .rueda-ver.ocupada        { border-color: #888; background: rgba(0,0,0,0.04); }
   .rueda-ver.vacia          { border-style: dashed; opacity: 0.45; }
 
   .rueda-fuego {
@@ -170,10 +161,8 @@ const body = `
     border: 2px solid;
     flex-shrink: 0;
   }
-  .leyenda-dot.nueva { border-color: #2e7d32; background: rgba(46,125,50,0.12); }
-  .leyenda-dot.usada { border-color: #888;    background: rgba(0,0,0,0.06); }
-  .leyenda-dot.recap { border-color: #e67e22; background: rgba(230,126,34,0.12); }
-  .leyenda-dot.vacia { border-color: var(--border-strong); border-style: dashed; background: transparent; }
+  .leyenda-dot.ocupada { border-color: #888; background: rgba(0,0,0,0.06); }
+  .leyenda-dot.vacia   { border-color: var(--border-strong); border-style: dashed; background: transparent; }
 
   /* ── Detail table ── */
   .ver-section-title {
@@ -204,18 +193,11 @@ var POS_LABELS = {
   ra:'Aux.1', ra2:'Aux.2'
 };
 
-function estadoClass(e) {
-  if (e == 1) return 'ocupada-nueva';
-  if (e == 2) return 'ocupada-usada';
-  if (e == 3) return 'ocupada-recap';
-  return '';
-}
-
 function mkRuedaVer(pos) {
   // Prioridad: cubierta de la OT > cubierta actual de la unidad > vacía
   var c   = CUBIERTA_MAP[pos] || UNIT_MAP[pos] || null;
   var isOT = !!CUBIERTA_MAP[pos];
-  var cls = 'rueda-ver ' + (c ? estadoClass(c.estado) : 'vacia') + (isOT ? ' ot-cambiada' : '');
+  var cls = 'rueda-ver ' + (c ? 'ocupada' : 'vacia') + (isOT ? ' ot-cambiada' : '');
   var fuego = c
     ? '<span class="rueda-fuego">' + (c.fuego || '-') + '</span>'
     : '<span class="rueda-fuego empty">·</span>';
@@ -293,9 +275,7 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
     <div class="diagrama-title">Esquema de cubiertas</div>
     <div id="diagrama-ver"></div>
     <div class="leyenda">
-      <div class="leyenda-item"><div class="leyenda-dot nueva"></div> Nueva</div>
-      <div class="leyenda-item"><div class="leyenda-dot usada"></div> Usada</div>
-      <div class="leyenda-item"><div class="leyenda-dot recap"></div> Recapada</div>
+      <div class="leyenda-item"><div class="leyenda-dot ocupada"></div> Con cubierta</div>
       <div class="leyenda-item"><div class="leyenda-dot vacia"></div> Vacía</div>
     </div>
   </div>
@@ -307,7 +287,9 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
       <div class="ver-meta-item"><strong>Estado</strong>${ot.estado == 0 ? 'Pendiente' : 'Cerrada'}</div>
       <div class="ver-meta-item"><strong>Gomería</strong>${ot.gomeria_nombre || '-'}</div>
       <div class="ver-meta-item"><strong>Fecha de solicitud</strong>${fmtFecha(ot.fecha)}</div>
-      <div class="ver-meta-item"><strong>Alta en el sistema</strong>${fmtFechaHora(ot.creado_en)}</div>
+      <div class="ver-meta-item"><strong>Ingreso</strong>${fmtFechaHora(ot.creado_en)}</div>
+      <div class="ver-meta-item"><strong>Salida</strong>${salida}</div>
+      ${demora ? '<div class="ver-meta-item"><strong>' + (abierta ? 'Abierta hace' : 'Duración') + '</strong>' + demora + '</div>' : ''}
       <div class="ver-meta-item"><strong>Km de la unidad</strong>${ot.km != null ? Number(ot.km).toLocaleString('es-AR') + ' km' : '-'}</div>
       ${ot.cerrado_por ? '<div class="ver-meta-item"><strong>Cerrada por</strong>' + e(ot.cerrado_por) + '</div>' : ''}
       ${trabajos.length ? '<div class="ver-meta-item" style="grid-column:1/-1"><strong>Trabajos</strong>' + trabajos.join(' · ') + '</div>' : ''}
@@ -326,57 +308,22 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
           <th>Fuego</th>
           <th>Modelo</th>
           <th>Medida</th>
-          <th>Presión</th>
-          <th>Estado</th>
           <th>Km</th>
         </tr>
       </thead>
       <tbody>
         ${cubiertas.length === 0
-          ? '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
+          ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
           : cubiertas.map((c, i) => `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
               <td>${c.posicion ? posNombre(c.posicion) : '-'}</td>
               <td style="font-family:var(--font-mono)">${c.fuego || '-'}</td>
               <td>${c.marca || ''} ${c.modelo_nombre || ''}</td>
               <td style="font-family:var(--font-mono)">${c.medida || '-'}</td>
-              <td style="font-family:var(--font-mono)">${c.presion != null ? c.presion + ' psi' : '-'}</td>
-              <td>${estadoNombre(c.estado)}</td>
               <td style="font-family:var(--font-mono)">${c.km || 0}</td>
             </tr>`).join('')
         }
       </tbody>
     </table>
-
-    ${hayMediciones ? `
-    <div class="ver-section-title">Profundidad medida al abrir la OT</div>
-    <table>
-      <thead>
-        <tr><th>Posición</th><th>Fuego</th><th>Exterior</th><th>Interior</th><th>Dif.</th><th></th></tr>
-      </thead>
-      <tbody>
-        ${mediciones.map((m, i) => {
-          const ext = mmNum(m.mm_ext), int = mmNum(m.mm_int);
-          // Una diferencia grande entre hombros es el síntoma clásico de
-          // desalineación: se marca aunque los dos valores estén sobre el mínimo.
-          const dif = (ext !== null && int !== null) ? Math.abs(ext - int) : null;
-          const gastada = bajoMinimo(m);
-          return `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
-            <td>${posNombre(m.posicion)}</td>
-            <td style="font-family:var(--font-mono)">${e(m.fuego || '-')}</td>
-            <td style="font-family:var(--font-mono); ${ext !== null && ext < cfg.mm_min ? 'color:var(--red-bright); font-weight:700;' : ''}">${fmtMm(m.mm_ext)}</td>
-            <td style="font-family:var(--font-mono); ${int !== null && int < cfg.mm_min ? 'color:var(--red-bright); font-weight:700;' : ''}">${fmtMm(m.mm_int)}</td>
-            <td style="font-family:var(--font-mono)">${dif === null ? '-' : dif.toFixed(1)}</td>
-            <td style="font-size:11px;">
-              ${gastada ? '<span style="color:var(--red-bright); font-weight:700;">Bajo mínimo</span>' : ''}
-              ${dif !== null && dif >= 2 ? '<span style="color:#e67e22; font-weight:700;">Revisar alineación</span>' : ''}
-            </td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
-    <p style="font-size:11.5px; color:var(--text-muted); margin-top:6px;">
-      Mínimo aceptable: ${cfg.mm_min} mm. Valores en milímetros de profundidad de dibujo.
-    </p>` : ''}
 
     <a href="/OTs/list" class="list-back">&laquo; Volver al listado</a>
   </div>

@@ -109,7 +109,7 @@ function filtrar_ot() {
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
-            estado:document.getElementById('f_estado').value, orden:document.getElementById('f_orden').value,
+            orden:document.getElementById('f_orden').value,
             modo:'ot' },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
@@ -180,13 +180,6 @@ $(function() {
     <select id="f_medida">
       <option value="0">Todas</option>
       ${medidas.map(m => `<option value="${m.id}">${m.medida}</option>`).join('')}
-    </select>
-    <strong>Estado:</strong>
-    <select id="f_estado">
-      <option value="0">Todos</option>
-      <option value="1">Nueva</option>
-      <option value="2">Usada</option>
-      <option value="3">Recapada</option>
     </select>
     <button type="button" class="btn-filter" onclick="filtrar_ot()">Filtrar</button>
   </form>

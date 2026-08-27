@@ -32,14 +32,6 @@ const body = `
     </select>
   </div>
   <div class="field">
-    <label for="estado">Estado</label>
-    <select name="estado" id="estado">
-      <option value="1"` + (cubierta.estado==1?' selected':'') + `>Nueva</option>
-      <option value="2"` + (cubierta.estado==2?' selected':'') + `>Usada</option>
-      <option value="3"` + (cubierta.estado==3?' selected':'') + `>Recapada</option>
-    </select>
-  </div>
-  <div class="field">
     <label for="almacen_id">Almacén</label>
     <select name="almacen_id" id="almacen_id">
       <option value="0">— Sin almacén —</option>
@@ -82,8 +74,27 @@ const body = `
     <button type="button" class="btn-ghost" onclick="location.href='/cubiertas'">Cancelar</button>
   </div>
 </form>
+
+<div class="form-card" style="margin-top:1rem;">
+  <div class="form-header"><h2>Historial</h2></div>
+  <p class="field-hint" style="margin:0 0 10px 0;">
+    La vida de la cubierta se lleva en su historial. Si volvió de la recapadora,
+    asentalo acá para que quede el hito con su fecha.
+  </p>
+  <div class="form-actions">
+    <button type="button" class="btn-ghost" onclick="marcar_recapada()">Marcar como recapada</button>
+    <button type="button" class="btn-ghost" onclick="location.href='/reportes/historial?id=${cubierta.id}'">Ver historial</button>
+  </div>
+</div>
 <script>
 $(function() { $('#fecha_remito').datepicker({ dateFormat: 'dd/mm/yy' }); });
+function marcar_recapada() {
+  if (!confirm('¿Asentar un recapado de esta cubierta en su historial?')) return;
+  $.ajax({ type:'POST', url:'/ajax/marcar_recapada', data:{ r_id: ${cubierta.id} },
+    success: function() { location.href = '/reportes/historial?id=${cubierta.id}'; },
+    error: function(xhr) { alert(xhr.responseText || 'Error al marcar el recapado'); }
+  });
+}
 </script>
 `;
 %>

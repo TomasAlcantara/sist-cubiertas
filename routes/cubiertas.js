@@ -13,14 +13,13 @@ const ORD_MAP = {
   11: "CASE WHEN c.fuego ~ '^\\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END DESC, c.fuego DESC",
   2:  'mr.marca ASC',  12: 'mr.marca DESC',
   3:  'm.medida ASC',  13: 'm.medida DESC',
-  4:  'c.estado ASC',  14: 'c.estado DESC',
   5:  'c.km ASC',      15: 'c.km DESC',
 };
 
 // GET /cubiertas
 router.get('/', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
-    const { fuego = '', modelo = 0, estado = 0, proveedor = 0, orderby = 0, pagina = 1 } = req.query;
+    const { fuego = '', modelo = 0, proveedor = 0, orderby = 0, pagina = 1 } = req.query;
     const offset = (parseInt(pagina) - 1) * PER_PAGE;
 
     const [modelos, proveedores] = await Promise.all([
@@ -45,20 +44,18 @@ router.get('/', requirePerm('cubiertas_ver'), async (req, res, next) => {
          WHERE c.activo = 1
            AND ($1 = '' OR c.fuego ILIKE $2)
            AND ($3 = 0 OR c.modelo_id = $3)
-           AND ($4 = 0 OR c.estado = $4)
-           AND ($5 = 0 OR c.proveedor_id = $5)
+           AND ($4 = 0 OR c.proveedor_id = $4)
          ORDER BY ${orderExpr}
-         LIMIT $6 OFFSET $7`,
-        [fuego, '%' + fuego + '%', parseInt(modelo), parseInt(estado), parseInt(proveedor), PER_PAGE, offset]
+         LIMIT $5 OFFSET $6`,
+        [fuego, '%' + fuego + '%', parseInt(modelo), parseInt(proveedor), PER_PAGE, offset]
       ),
       sql(
         `SELECT COUNT(*) AS total FROM cubiertas c
          WHERE c.activo = 1
            AND ($1 = '' OR c.fuego ILIKE $2)
            AND ($3 = 0 OR c.modelo_id = $3)
-           AND ($4 = 0 OR c.estado = $4)
-           AND ($5 = 0 OR c.proveedor_id = $5)`,
-        [fuego, '%' + fuego + '%', parseInt(modelo), parseInt(estado), parseInt(proveedor)]
+           AND ($4 = 0 OR c.proveedor_id = $4)`,
+        [fuego, '%' + fuego + '%', parseInt(modelo), parseInt(proveedor)]
       ),
     ]);
 
@@ -68,7 +65,7 @@ router.get('/', requirePerm('cubiertas_ver'), async (req, res, next) => {
     res.render('cubiertas/index', {
       user: req.user, cubiertas, modelos, proveedores,
       currentPage: 'inicio', pagina: parseInt(pagina), totalPages,
-      filtros: { fuego, modelo: parseInt(modelo), estado: parseInt(estado), proveedor: parseInt(proveedor), orderby: parseInt(orderby) }
+      filtros: { fuego, modelo: parseInt(modelo), proveedor: parseInt(proveedor), orderby: parseInt(orderby) }
     });
   } catch (err) { next(err); }
 });
@@ -93,9 +90,6 @@ const nuevaCubiertaValidators = [
     .trim()
     .notEmpty().withMessage('El número de fuego es requerido')
     .isLength({ max: 50 }).withMessage('Fuego demasiado largo'),
-  body('estado')
-    .optional({ checkFalsy: true })
-    .isInt({ min: 1, max: 3 }).withMessage('Estado inválido'),
   body('km')
     .optional({ checkFalsy: true })
     .isInt({ min: 0 }).withMessage('KM debe ser un número no negativo'),
@@ -111,7 +105,7 @@ router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, a
     return res.redirect('/cubiertas/nuevo?error=' + encodeURIComponent(msg));
   }
   try {
-    const { fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, cantidad } = req.body;
+    const { fuego, modelo_id, medida_id, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, cantidad } = req.body;
 
     const parseFecha = (f) => {
       if (!f) return null;
@@ -125,7 +119,6 @@ router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, a
     const fechaParsed = parseFecha(fecha_remito);
     const mId = parseInt(modelo_id) || null;
     const medId = parseInt(medida_id) || null;
-    const est = parseInt(estado) || 1;
     const almId = parseInt(almacen_id) || null;
     const kmVal = parseInt(km) || 0;
     const provId = parseInt(proveedor_id) || null;
@@ -159,7 +152,7 @@ router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, a
         // Registro vacío importado del CSV → completar con los datos ingresados
         await sql`
           UPDATE cubiertas SET
-            modelo_id = ${mId}, medida_id = ${medId}, estado = ${est},
+            modelo_id = ${mId}, medida_id = ${medId},
             almacen_id = ${almId}, km = ${kmVal}, proveedor_id = ${provId},
             id_interno = ${id_interno?.trim() || null}, remito = ${remito?.trim() || null},
             precio = ${precioVal}, fecha_remito = ${fechaParsed}
@@ -167,8 +160,8 @@ router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, a
         `;
       } else {
         await sql`
-          INSERT INTO cubiertas (fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
-          VALUES (${f}, ${mId}, ${medId}, ${est}, ${almId}, ${kmVal}, ${provId},
+          INSERT INTO cubiertas (fuego, modelo_id, medida_id, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito, activo)
+          VALUES (${f}, ${mId}, ${medId}, ${almId}, ${kmVal}, ${provId},
                   ${id_interno?.trim() || null}, ${remito?.trim() || null}, ${precioVal}, ${fechaParsed}, 1)
         `;
       }
@@ -191,7 +184,6 @@ router.post('/nuevo', requirePerm('cubiertas_crear'), nuevaCubiertaValidators, a
         : `Creó ${qty} cubiertas: ${fuegosNuevos[0]} a ${fuegosNuevos[fuegosNuevos.length - 1]}`,
       cambios: [
         { campo: 'fuego', antes: null, despues: fuegosNuevos.join(', ') },
-        { campo: 'estado', antes: null, despues: ({1:'Nueva',2:'Usada',3:'Recapada'})[est] || est },
         ...(remito?.trim() ? [{ campo: 'remito', antes: null, despues: remito.trim() }] : []),
         ...(precioVal ? [{ campo: 'precio', antes: null, despues: precioVal }] : []),
       ],
@@ -224,7 +216,7 @@ router.get('/editar', requirePerm('cubiertas_editar'), async (req, res, next) =>
 // POST /cubiertas/editar
 router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) => {
   try {
-    const { id, fuego, modelo_id, medida_id, estado, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
+    const { id, fuego, modelo_id, medida_id, almacen_id, km, proveedor_id, id_interno, remito, precio, fecha_remito } = req.body;
     if (!id || !fuego) return res.redirect('/cubiertas');
 
     const previa = await sql`SELECT * FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
@@ -242,7 +234,6 @@ router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) =
         fuego = ${fuego.trim()},
         modelo_id = ${parseInt(modelo_id) || null},
         medida_id = ${parseInt(medida_id) || null},
-        estado = ${parseInt(estado) || 1},
         almacen_id = ${parseInt(almacen_id) || null},
         km = ${parseInt(km) || 0},
         proveedor_id = ${parseInt(proveedor_id) || null},
@@ -253,17 +244,9 @@ router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) =
       WHERE id = ${parseInt(id) || 0}
     `;
 
-    // Pasar a "Recapada" es un hito de la vida de la cubierta
-    if (parseInt(estado) === 3 && previa[0] && previa[0].estado !== 3) {
-      await registrarEvento({
-        cubierta_id: parseInt(id), tipo: 'recapado', fecha: new Date().toISOString().slice(0, 10),
-        detalle: 'Marcada como recapada',
-      });
-    }
-
     const [despuesCub] = await sql`SELECT * FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
     const cambiosCub = auditoria.diff(previa[0], despuesCub,
-      ['fuego', 'modelo_id', 'medida_id', 'estado', 'almacen_id', 'km', 'proveedor_id',
+      ['fuego', 'modelo_id', 'medida_id', 'almacen_id', 'km', 'proveedor_id',
        'id_interno', 'remito', 'precio', 'fecha_remito']);
     if (cambiosCub.length) {
       await auditoria.registrar({
