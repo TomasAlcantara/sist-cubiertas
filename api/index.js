@@ -54,9 +54,13 @@ app.locals.e = (str) => String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&l
 app.locals.ej = (val) => JSON.stringify(val);
 
 // Formato de fecha/hora argentino (el runtime de Vercel está en UTC)
-const { fmtFecha, fmtFechaHora } = require('../lib/fechas');
+const { fmtFecha, fmtFechaHora, fmtHora, fmtDuracion, tieneHora, hoyAR } = require('../lib/fechas');
 app.locals.fmtFecha = fmtFecha;
 app.locals.fmtFechaHora = fmtFechaHora;
+app.locals.fmtHora = fmtHora;
+app.locals.fmtDuracion = fmtDuracion;
+app.locals.tieneHora = tieneHora;
+app.locals.hoyAR = hoyAR;
 
 /**
  * Paginador agrupado: primera, última y ±2 alrededor de la actual, con "…" en
@@ -113,8 +117,6 @@ app.use('/CargaKm', require('../routes/cargaKm'));
 app.use('/cubiertas', require('../routes/cubiertas'));
 app.use('/recapadoras', require('../routes/recapadoras'));
 app.use('/reportes', require('../routes/reportes'));
-app.use('/mantenimiento', require('../routes/mantenimiento'));
-app.use('/presiones', require('../routes/presiones'));
 app.use('/admin', require('../routes/admin'));
 app.use('/ajax', require('../routes/ajax'));
 

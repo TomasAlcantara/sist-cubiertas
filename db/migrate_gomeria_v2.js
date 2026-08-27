@@ -48,7 +48,12 @@ function normalizarMedida(m) {
     // La columna se agrega sin DEFAULT a propósito: si tuviera NOW() todas las
     // OTs históricas quedarían con la fecha de esta migración. Se rellenan con
     // su propia fecha (a medianoche) y recién ahí se activa el default.
-    const back = await sql`UPDATE ots SET creado_en = fecha::timestamptz WHERE creado_en IS NULL`;
+    // La medianoche es la ARGENTINA: `fecha::timestamptz` la tomaba como UTC y
+    // en pantalla eso son las 21:00 del día anterior (ver migrate_cierre_ot.js).
+    const back = await sql`
+      UPDATE ots
+         SET creado_en = (fecha::timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')
+       WHERE creado_en IS NULL`;
     await sql`ALTER TABLE ots ALTER COLUMN creado_en SET DEFAULT NOW()`;
     console.log(`OK: creado_en backfilleado (${back.length ?? 0} filas) y default activado`);
 

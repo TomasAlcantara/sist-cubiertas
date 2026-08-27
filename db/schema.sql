@@ -39,8 +39,6 @@ CREATE TABLE IF NOT EXISTS micro (
   descripcion VARCHAR(200),
   km_actual INTEGER DEFAULT 0,
   tipo_unidad SMALLINT DEFAULT 1,  -- 1, 2, 3 o 4 (tipo de vehículo)
-  ultima_alineacion DATE,          -- se actualiza al cerrar una OT con "Alinear"
-  ultimo_preventivo DATE,          -- se actualiza al cerrar una OT con "Preventivo"
   activo SMALLINT DEFAULT 1
 );
 
@@ -53,8 +51,7 @@ CREATE TABLE IF NOT EXISTS marcas_ruedas (
 
 CREATE TABLE IF NOT EXISTS medidas (
   id SERIAL PRIMARY KEY,
-  medida VARCHAR(50) NOT NULL,
-  presion INTEGER                  -- presión de inflado obligatoria, en PSI
+  medida VARCHAR(50) NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS proveedor (
@@ -69,7 +66,8 @@ CREATE TABLE IF NOT EXISTS cubiertas (
   fuego VARCHAR(20),
   modelo_id INTEGER REFERENCES marcas_ruedas(id),
   medida_id INTEGER REFERENCES medidas(id),
-  estado SMALLINT DEFAULT 1,       -- 1=Nueva, 2=Usada, 3=Recapada
+  -- La cubierta no lleva estado: su vida (colocaciones, retiros, reparaciones,
+  -- recapados) se lee de cubierta_eventos. Ver lib/cubiertaHistorial.js.
   almacen_id INTEGER REFERENCES almacen(id),
   gomeria_id INTEGER REFERENCES gomeria(id),
   micro_id INTEGER REFERENCES micro(id),
@@ -107,6 +105,7 @@ CREATE TABLE IF NOT EXISTS ots (
   creado_en TIMESTAMPTZ DEFAULT NOW(),  -- fecha/hora real de alta (fecha = fecha de solicitud)
   descripcion_cierre TEXT,              -- lo que escribe el gomero al cerrar un preventivo
   cerrado_por VARCHAR(100),
+  cerrado_en TIMESTAMPTZ,               -- hora de salida: creado_en..cerrado_en es lo que tardo el trabajo
   -- Anular es baja lógica: la OT se marca, no se borra, para que quede
   -- constancia de que existió y de quién la dio de baja.
   anulada BOOLEAN NOT NULL DEFAULT FALSE,
@@ -123,18 +122,6 @@ CREATE TABLE IF NOT EXISTS ot_cubiertas (
   posicion VARCHAR(10),            -- ddi, ddd, tie, tii, tdi, tde, cie, cii, cdi, cde, ra
   cubierta_anterior_id INTEGER REFERENCES cubiertas(id),
   PRIMARY KEY (ot_id, cubierta_id)
-);
-
--- Profundidad de dibujo medida por el gomero al abrir la OT, por posición del
--- esquema. mm_ext/mm_int son los dos hombros de la MISMA cubierta: la diferencia
--- entre ambos es lo que delata una desalineación.
-CREATE TABLE IF NOT EXISTS ot_mediciones (
-  ot_id       INTEGER NOT NULL REFERENCES ots(id) ON DELETE CASCADE,
-  posicion    VARCHAR(10) NOT NULL,
-  cubierta_id INTEGER REFERENCES cubiertas(id),
-  mm_ext      NUMERIC(4,1),
-  mm_int      NUMERIC(4,1),
-  PRIMARY KEY (ot_id, posicion)
 );
 
 -- Historial de vida de cada cubierta. Se llena solo al cerrar OTs.
@@ -158,10 +145,8 @@ CREATE INDEX IF NOT EXISTS idx_cub_ev_ot ON cubierta_eventos (ot_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cub_ev_unico
   ON cubierta_eventos (cubierta_id, tipo, ot_id) WHERE ot_id IS NOT NULL;
 
--- Config clave/valor (credenciales de mail, intervalos de mantenimiento, etc.).
--- Mail: node db/set_mail_config.js
--- Intervalos: dias_alineacion (default 180) y dias_preventivo (default 45)
--- Milimetros: mm_min (default 4) y mm_max (default 20)
+-- Config clave/valor: credenciales de mail para el aviso de pinchadura.
+-- Cargarlas con: node db/set_mail_config.js
 CREATE TABLE IF NOT EXISTS config (
   clave TEXT PRIMARY KEY,
   valor TEXT

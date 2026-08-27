@@ -7,8 +7,7 @@ const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth'
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
 const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
-const { parseFecha } = require('../lib/fechas');
-const { CONFIG_EDITABLE } = require('../lib/config');
+const { parseFecha, hoyISO } = require('../lib/fechas');
 const auditoria = require('../lib/auditoria');
 
 const isProd = process.env.NODE_ENV === 'production';
@@ -129,7 +128,7 @@ router.post('/mover_cubierta', requirePerm('cubiertas_mover'), async (req, res, 
     if (antes[0] && antes[0].micro_id) {
       const km = await sql`SELECT km_actual FROM micro WHERE id = ${antes[0].micro_id}`;
       await registrarEvento({
-        cubierta_id: cubId, tipo: 'retiro', fecha: new Date().toISOString().slice(0, 10),
+        cubierta_id: cubId, tipo: 'retiro', fecha: hoyISO(),
         micro_id: antes[0].micro_id, posicion: antes[0].posicion,
         km_unidad: km[0] ? km[0].km_actual : null,
         detalle: 'Movida a almacén por fuera de una OT',
@@ -139,26 +138,25 @@ router.post('/mover_cubierta', requirePerm('cubiertas_mover'), async (req, res, 
   } catch (err) { next(err); }
 });
 
-// POST /ajax/nuevo_estado - Cambiar estado de cubierta
-router.post('/nuevo_estado', requirePerm('cubiertas_editar'), async (req, res, next) => {
+// POST /ajax/marcar_recapada - Asentar un recapado en el historial de la cubierta
+//
+// La cubierta ya no lleva una columna de estado: el recapado es un hito de su
+// vida, así que se guarda como evento y se lee desde el historial.
+router.post('/marcar_recapada', requirePerm('cubiertas_editar'), async (req, res, next) => {
   try {
-    const { r_id, estado } = req.body;
-    const cubId = parseInt(r_id) || 0;
-    const previa = await sql`SELECT estado, fuego FROM cubiertas WHERE id = ${cubId}`;
-    await sql`UPDATE cubiertas SET estado = ${parseInt(estado)} WHERE id = ${cubId}`;
-    const nombreEstado = (e) => ({ 1: 'Nueva', 2: 'Usada', 3: 'Recapada' })[e] || String(e);
+    const cubId = parseInt(req.body.r_id) || 0;
+    const previa = await sql`SELECT fuego FROM cubiertas WHERE id = ${cubId}`;
+    if (!previa.length) return res.status(404).send('Cubierta inexistente');
+
+    await registrarEvento({
+      cubierta_id: cubId, tipo: 'recapado', fecha: hoyISO(),
+      detalle: 'Marcada como recapada',
+    });
     await auditoria.registrar({
       req, accion: 'editar', entidad: 'cubierta', entidad_id: cubId,
-      descripcion: `Cambió el estado de la cubierta ${previa[0] ? previa[0].fuego : cubId}`,
-      cambios: [{ campo: 'estado', antes: previa[0] ? nombreEstado(previa[0].estado) : null,
-                  despues: nombreEstado(parseInt(estado)) }],
+      descripcion: `Asentó un recapado de la cubierta ${previa[0].fuego}`,
+      cambios: [{ campo: 'historial', antes: null, despues: 'Recapado' }],
     });
-    if (parseInt(estado) === 3 && previa[0] && previa[0].estado !== 3) {
-      await registrarEvento({
-        cubierta_id: cubId, tipo: 'recapado', fecha: new Date().toISOString().slice(0, 10),
-        detalle: 'Marcada como recapada',
-      });
-    }
     res.send('ok');
   } catch (err) { next(err); }
 });
@@ -392,75 +390,32 @@ router.post('/save_recapadora', requireMaster, async (req, res, next) => {
 // POST /ajax/save_medida
 router.post('/save_medida', requireMaster, async (req, res, next) => {
   try {
-    const { id, medida, presion } = req.body;
+    const { id, medida } = req.body;
     // Estado previo, para que el log pueda mostrar antes -> despues
     const prevAbm = id ? (await sql(`SELECT * FROM medidas WHERE id = $1`, [parseInt(id) || 0]))[0] || null : null;
-    // Vacío = sin dato, no cero: una presión 0 no existe y ensuciaría la tabla.
-    const psi = presion === '' || presion == null ? null : parseInt(presion);
-    const psiVal = Number.isFinite(psi) && psi > 0 && psi <= 200 ? psi : null;
     if (id) {
-      await sql`UPDATE medidas SET medida=${medida}, presion=${psiVal} WHERE id=${parseInt(id)}`;
-      await auditarAbm(req, { tabla:'medidas', entidad:'medida', id, antes: prevAbm, etiqueta:'la medida', campos:['medida','presion'] });
+      await sql`UPDATE medidas SET medida=${medida} WHERE id=${parseInt(id)}`;
+      await auditarAbm(req, { tabla:'medidas', entidad:'medida', id, antes: prevAbm, etiqueta:'la medida', campos:['medida'] });
       res.send('Medida actualizada correctamente');
     } else {
-      await sql`INSERT INTO medidas (medida, presion) VALUES (${medida}, ${psiVal})`;
-      await auditarAbm(req, { tabla:'medidas', entidad:'medida', id:null, antes:null, etiqueta:'la medida', campos:['medida','presion'] });
+      await sql`INSERT INTO medidas (medida) VALUES (${medida})`;
+      await auditarAbm(req, { tabla:'medidas', entidad:'medida', id:null, antes:null, etiqueta:'la medida', campos:['medida'] });
       res.send('Medida creada correctamente');
     }
-  } catch (err) { next(err); }
-});
-
-// POST /ajax/save_config - Guardar parámetros de la pantalla de configuración
-router.post('/save_config', requireMaster, async (req, res, next) => {
-  try {
-    const guardadas = [];
-    const cambiosCfg = [];
-    for (const [clave, valor] of Object.entries(req.body)) {
-      // Whitelist estricta: la tabla config guarda también las credenciales de
-      // Gmail, y aceptar una clave arbitraria las dejaría pisar desde la web.
-      const campo = Object.prototype.hasOwnProperty.call(CONFIG_EDITABLE, clave)
-        ? CONFIG_EDITABLE[clave]
-        : null;
-      if (!campo) return res.status(400).send(`Parámetro no permitido: ${clave}`);
-
-      const n = parseInt(valor);
-      if (!Number.isFinite(n) || n < campo.min || n > campo.max) {
-        return res.status(400).send(`${campo.label}: debe estar entre ${campo.min} y ${campo.max}`);
-      }
-
-      const [antesCfg] = await sql`SELECT valor FROM config WHERE clave = ${clave}`;
-      await sql`
-        INSERT INTO config (clave, valor) VALUES (${clave}, ${String(n)})
-        ON CONFLICT (clave) DO UPDATE SET valor = EXCLUDED.valor
-      `;
-      guardadas.push(campo.label);
-      if (!antesCfg || String(antesCfg.valor) !== String(n)) {
-        cambiosCfg.push({ campo: campo.label, antes: antesCfg ? antesCfg.valor : null, despues: String(n) });
-      }
-    }
-    if (!guardadas.length) return res.status(400).send('Nada para guardar');
-    if (cambiosCfg.length) {
-      await auditoria.registrar({
-        req, accion: 'editar', entidad: 'config',
-        descripcion: 'Cambió la configuración del sistema',
-        cambios: cambiosCfg,
-      });
-    }
-    res.send('Configuración guardada');
   } catch (err) { next(err); }
 });
 
 // POST /ajax/listar_ruedas - Listar cubiertas para selección en micro u OT
 router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, next) => {
   try {
-    const { almacen = 0, fuego = '', modelo = 0, medida = 0, estado = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos, orden = 'asc' } = req.body;
+    const { almacen = 0, fuego = '', modelo = 0, medida = 0, micro_id, pos, modo = 'micro', unidad_id, current_pos, orden = 'asc' } = req.body;
     const orderDir = orden === 'desc' ? 'DESC' : 'ASC';
 
     const [cubiertas, rotacion] = await Promise.all([
       // Cubiertas en almacén (disponibles)
       orderDir === 'DESC'
         ? sql`
-            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
+            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.km
             FROM cubiertas c
             LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
             LEFT JOIN medidas med ON c.medida_id = med.id
@@ -470,12 +425,11 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
               AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
               AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
               AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
-              AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
             ORDER BY CASE WHEN c.fuego ~ '^\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END DESC, c.fuego DESC
             LIMIT 50
           `
         : sql`
-            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km
+            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.km
             FROM cubiertas c
             LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
             LEFT JOIN medidas med ON c.medida_id = med.id
@@ -485,14 +439,13 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
               AND (${fuego} = '' OR c.fuego ILIKE ${'%' + fuego + '%'})
               AND (${parseInt(modelo)} = 0 OR c.modelo_id = ${parseInt(modelo)})
               AND (${parseInt(medida)} = 0 OR c.medida_id = ${parseInt(medida)})
-              AND (${parseInt(estado)} = 0 OR c.estado = ${parseInt(estado)})
             ORDER BY CASE WHEN c.fuego ~ '^\d+$' THEN CAST(c.fuego AS INTEGER) ELSE 0 END ASC, c.fuego ASC
             LIMIT 50
           `,
       // Cubiertas montadas en la unidad para rotación (solo en modo OT con unidad_id)
       modo === 'ot' && parseInt(unidad_id)
         ? sql`
-            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado, c.km, c.posicion
+            SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.km, c.posicion
             FROM cubiertas c
             LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
             LEFT JOIN medidas med ON c.medida_id = med.id
@@ -515,7 +468,6 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
       ra:'Auxilio', ra2:'Auxilio 2'
     })[p] || p;
 
-    const estadoNombre = (e) => e === 1 ? 'Nueva' : e === 2 ? 'Usada' : 'Recapada';
     const escJs = (s) => String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
     let html = '';
@@ -527,7 +479,7 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
           ↺ Rotación — cubiertas montadas en esta unidad
         </p>
         <table>
-          <thead><th>Fuego</th><th>Posición actual</th><th>Modelo</th><th>Medida</th><th>Estado</th><th></th></thead>`;
+          <thead><th>Fuego</th><th>Posición actual</th><th>Modelo</th><th>Medida</th><th></th></thead>`;
       for (const c of rotacion) {
         const fuegoEsc  = escJs(c.fuego);
         const modeloEsc = escJs(((c.marca || '') + ' ' + (c.modelo_nombre || '')).trim());
@@ -537,7 +489,6 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
           <td style="color:#b8860b; font-weight:600;">${escapeHtml(posNombre(c.posicion))}</td>
           <td>${escapeHtml(c.marca)} ${escapeHtml(c.modelo_nombre)}</td>
           <td>${escapeHtml(c.medida) || '-'}</td>
-          <td>${estadoNombre(c.estado)}</td>
           <td><input type="button" value="Rotar aquí" style="background:#e6a800;border:none;color:#fff;padding:4px 10px;cursor:pointer;border-radius:3px;"
                onclick="seleccionar_ot(${c.id}, '${fuegoEsc}', '${modeloEsc}', '${medidaEsc}')" /></td>
         </tr>`;
@@ -546,7 +497,7 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
     }
 
     // ── Sección almacén ──────────────────────────────────────────
-    html += '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Estado</th><th>Km</th><th></th></thead>';
+    html += '<table><thead><th>Fuego</th><th>Modelo</th><th>Medida</th><th>Km</th><th></th></thead>';
     if (cubiertas.length === 0) {
       html += '<tr><td colspan="6" style="text-align:center; color:#888; padding:8px;">No hay cubiertas disponibles en almacén.</td></tr>';
     }
@@ -562,7 +513,6 @@ router.post('/listar_ruedas', requirePerm('cubiertas_ver'), async (req, res, nex
         <td>${escapeHtml(c.fuego) || '-'}</td>
         <td>${escapeHtml(c.marca)} ${escapeHtml(c.modelo_nombre)}</td>
         <td>${escapeHtml(c.medida) || '-'}</td>
-        <td>${estadoNombre(c.estado)}</td>
         <td>${parseInt(c.km) || 0}</td>
         <td>${btn}</td>
       </tr>`;
@@ -616,10 +566,7 @@ router.post('/colocar_rueda', requirePerm('cubiertas_mover'), async (req, res, n
     if (existing.length) {
       await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL WHERE id = ${existing[0].id}`;
     }
-    // Al montarse deja de ser "Nueva". Con CASE y no con estado = 2 a secas:
-    // una Recapada que se monta sigue siendo Recapada, no baja a Usada.
-    await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL,
-      estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
+    await sql`UPDATE cubiertas SET micro_id = ${parseInt(unidad) || null}, posicion = ${pos}, almacen_id = NULL, gomeria_id = NULL
       WHERE id = ${parseInt(id) || 0}`;
 
     const [cubC] = await sql`SELECT fuego FROM cubiertas WHERE id = ${parseInt(id) || 0}`;
@@ -996,7 +943,8 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
       armar    = ${trabajos.armar},
       preventivo = ${trabajos.preventivo},
       descripcion_cierre = ${descripcion},
-      cerrado_por = ${req.user?.usuario || null}
+      cerrado_por = ${req.user?.usuario || null},
+      cerrado_en = NOW()
     WHERE id = ${otIdInt}`;
 
     const unidad_id = otPrevia[0].unidad_id;
@@ -1006,17 +954,6 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
       // un kilometraje más reciente cargado a mano en Carga de Km.
       await sql`UPDATE micro SET km_actual = ${kmCierre}
         WHERE id = ${unidad_id} AND ${kmCierre} > COALESCE(km_actual, 0)`;
-
-      // Fechas de mantenimiento: solo avanzan, para que cerrar una OT vieja no
-      // haga parecer que el servicio se hizo después de lo que realmente se hizo.
-      if (otFecha && trabajos.alinear) {
-        await sql`UPDATE micro SET ultima_alineacion = ${otFecha}
-          WHERE id = ${unidad_id} AND (ultima_alineacion IS NULL OR ultima_alineacion < ${otFecha})`;
-      }
-      if (otFecha && trabajos.preventivo) {
-        await sql`UPDATE micro SET ultimo_preventivo = ${otFecha}
-          WHERE id = ${unidad_id} AND (ultimo_preventivo IS NULL OR ultimo_preventivo < ${otFecha})`;
-      }
     }
 
     const cambios = await sql`
@@ -1029,12 +966,9 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
     const incomingIds = new Set(cambios.map(c => c.cubierta_id));
 
     // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones.
-    // Una cubierta que se monta deja de ser "Nueva". El CASE evita degradar a
-    // Usada las que ya son Recapadas, que tienen su propio estado.
     for (const c of cambios) {
       await sql`
-        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL,
-          estado = CASE WHEN estado = 1 THEN 2 ELSE estado END
+        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL
         WHERE id = ${c.cubierta_id}
       `;
     }
@@ -1122,47 +1056,6 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
   } catch (err) { next(err); }
 });
 
-/**
- * Guarda la profundidad de dibujo medida por posición.
- *
- * La medición pertenece a la cubierta que el gomero tuvo en la mano, o sea la
- * que estaba montada al abrir la OT — no la que entra por el cambio. Por eso
- * `cubierta_id` se resuelve contra lo que hay montado hoy en esa posición.
- */
-async function guardarMediciones(otId, unidadId, mediciones) {
-  if (!mediciones || typeof mediciones !== 'object') return;
-
-  const montadas = unidadId
-    ? await sql`SELECT id, posicion FROM cubiertas WHERE micro_id = ${unidadId} AND activo = 1 AND posicion IS NOT NULL`
-    : [];
-  const porPosicion = {};
-  for (const c of montadas) porPosicion[c.posicion] = c.id;
-
-  // Valor válido: número entre 0 y 30 mm. Cualquier otra cosa se descarta en
-  // silencio en vez de romper la carga entera de la OT.
-  const mm = (v) => {
-    if (v === null || v === undefined || v === '') return null;
-    const n = parseFloat(v);
-    return Number.isFinite(n) && n >= 0 && n <= 30 ? Math.round(n * 10) / 10 : null;
-  };
-
-  for (const [posicion, valores] of Object.entries(mediciones)) {
-    if (!posicion || typeof posicion !== 'string' || posicion.length > 10) continue;
-    if (!valores || typeof valores !== 'object') continue;
-
-    const ext = mm(valores.ext);
-    const int = mm(valores.int);
-    if (ext === null && int === null) continue;
-
-    await sql`
-      INSERT INTO ot_mediciones (ot_id, posicion, cubierta_id, mm_ext, mm_int)
-      VALUES (${otId}, ${posicion}, ${porPosicion[posicion] || null}, ${ext}, ${int})
-      ON CONFLICT (ot_id, posicion)
-      DO UPDATE SET cubierta_id = EXCLUDED.cubierta_id, mm_ext = EXCLUDED.mm_ext, mm_int = EXCLUDED.mm_int
-    `;
-  }
-}
-
 // POST /ajax/nueva_ot - Crear nueva OT con posiciones de cubiertas
 router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
   try {
@@ -1202,17 +1095,6 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
           `;
         }
       } catch(e) { /* JSON inválido, ignorar */ }
-    }
-
-    // Profundidad de dibujo medida por el gomero, en su propio try/catch: una
-    // medición mal formada no puede tumbar la creación de la OT.
-    const medicionesJson = req.body.mediciones_json;
-    if (medicionesJson) {
-      try {
-        await guardarMediciones(ot_id, parseInt(unidad_id) || null, JSON.parse(medicionesJson));
-      } catch (e) {
-        console.error(`[mediciones] OT ${ot_id}: ${e.message}`);
-      }
     }
 
     if (pinchadura === '1') {

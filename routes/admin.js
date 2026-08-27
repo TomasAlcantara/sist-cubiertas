@@ -3,7 +3,6 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { sql } = require('../db');
 const { requireMaster } = require('../middleware/auth');
-const { leerConfigInt, CONFIG_EDITABLE } = require('../lib/config');
 const { ACCIONES, ENTIDADES } = require('../lib/auditoria');
 const { parseFecha } = require('../lib/fechas');
 
@@ -229,19 +228,6 @@ router.get('/ruedas_micro/modelo', requireMaster, async (req, res, next) => {
     ]);
 
     res.render('admin/micros/modelo', { user: req.user, micro: micro[0], ruedas, almacenes, modelos, currentPage: 'admin' });
-  } catch (err) { next(err); }
-});
-
-// ─── CONFIGURACION ──────────────────────────────────────────
-router.get('/config', requireMaster, async (req, res, next) => {
-  try {
-    const defaults = Object.fromEntries(
-      Object.entries(CONFIG_EDITABLE).map(([k, v]) => [k, v.def])
-    );
-    const cfg = await leerConfigInt(defaults);
-    res.render('admin/config/index', {
-      user: req.user, cfg, campos: CONFIG_EDITABLE, currentPage: 'admin',
-    });
   } catch (err) { next(err); }
 });
 

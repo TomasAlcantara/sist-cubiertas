@@ -15,7 +15,8 @@
     ],
     "setupFiles": [
       "<rootDir>/tests/setup.js"
-    ]
+    ],
+    "globalSetup": "<rootDir>/tests/globalSetup.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.9.0",

@@ -46,6 +46,54 @@ describe('GET /OTs/list', () => {
       .set('Cookie', `token=${makeToken()}`);
     expect(res.status).toBe(200);
   });
+
+  // La ruta pide gomerías, unidades y OTs en ese orden (Promise.all).
+  const listaCon = (...ots) => {
+    sql.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce(ots);
+    return request(app).get('/OTs/list').set('Cookie', `token=${makeToken()}`);
+  };
+
+  test('una OT cerrada muestra ingreso, salida y cuánto tardó', async () => {
+    const res = await listaCon({
+      id: 342, estado: 1, fecha: new Date(2026, 7, 25),
+      creado_en: '2026-08-25T11:47:00Z',   // 08:47 en Argentina
+      cerrado_en: '2026-08-25T14:02:00Z',  // 11:02 en Argentina
+    });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('08:47');
+    expect(res.text).toContain('11:02');
+    expect(res.text).toContain('2 h 15 min');
+  });
+
+  test('una OT pendiente muestra la salida en curso', async () => {
+    const res = await listaCon({
+      id: 343, estado: 0, fecha: new Date(2026, 7, 25),
+      creado_en: '2026-08-25T11:47:00Z', cerrado_en: null,
+    });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('en curso');
+  });
+
+  test('una OT cerrada antes de la migración no inventa una duración', async () => {
+    const res = await listaCon({
+      id: 100, estado: 1, fecha: new Date(2026, 4, 10),
+      creado_en: '2026-05-10T03:00:00Z',   // backfill: medianoche argentina
+      cerrado_en: null,
+    });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('sin dato');
+    expect(res.text).not.toMatch(/\d+ h \d+ min/);
+  });
+
+  test('la fecha de la OT no retrocede un día en UTC', async () => {
+    // El runtime de Vercel está en UTC: una columna DATE llega como medianoche
+    // UTC y antes se mostraba como el día anterior.
+    const res = await listaCon({
+      id: 342, estado: 1, fecha: new Date(2026, 7, 25), creado_en: null, cerrado_en: null,
+    });
+    expect(res.text).toContain('25/8/2026');
+    expect(res.text).not.toContain('24/8/2026');
+  });
 });
 
 // ─── Ver OT ───────────────────────────────────────────────────
@@ -298,61 +346,6 @@ describe('POST /ajax/nueva_ot — motivo rotura', () => {
   });
 });
 
-// ─── Mediciones de profundidad ────────────────────────────────
-describe('POST /ajax/nueva_ot — mediciones de profundidad', () => {
-  const insertsMediciones = () =>
-    sql.mock.calls.filter(c => String(c[0]).includes('INSERT INTO ot_mediciones'));
-
-  test('JSON inválido no tumba la creación de la OT', async () => {
-    sql.mockResolvedValue([{ id: 90 }]);
-    const res = await request(app)
-      .post('/ajax/nueva_ot')
-      .set('Cookie', `token=${makeToken()}`)
-      .type('form')
-      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
-              mediciones_json: '{esto no es json' });
-    expect(res.status).toBe(200);
-    expect(res.text).toBe('90');
-  });
-
-  test('valores válidos se insertan', async () => {
-    sql.mockResolvedValue([{ id: 91 }]);
-    await request(app)
-      .post('/ajax/nueva_ot')
-      .set('Cookie', `token=${makeToken()}`)
-      .type('form')
-      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
-              mediciones_json: JSON.stringify({ ddi: { ext: 8.5, int: 3 } }) });
-    expect(insertsMediciones().length).toBe(1);
-  });
-
-  test('valores fuera de rango o no numéricos se descartan', async () => {
-    sql.mockResolvedValue([{ id: 92 }]);
-    await request(app)
-      .post('/ajax/nueva_ot')
-      .set('Cookie', `token=${makeToken()}`)
-      .type('form')
-      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
-              mediciones_json: JSON.stringify({
-                ddi: { ext: 999, int: 'ocho' },   // ambos inválidos → no se inserta
-                ddd: { ext: -3, int: null },      // ambos inválidos → no se inserta
-                tie: { ext: 7.5, int: 'x' },      // ext válido → sí se inserta
-              }) });
-    expect(insertsMediciones().length).toBe(1);
-  });
-
-  test('posición con nombre absurdo se ignora', async () => {
-    sql.mockResolvedValue([{ id: 93 }]);
-    await request(app)
-      .post('/ajax/nueva_ot')
-      .set('Cookie', `token=${makeToken()}`)
-      .type('form')
-      .send({ fecha: '20/08/2026', unidad_id: 1, cambio: '1', pinchadura: '0', rotura: '0',
-              mediciones_json: JSON.stringify({ 'posicion-larguisima-invalida': { ext: 5 } }) });
-    expect(insertsMediciones().length).toBe(0);
-  });
-});
-
 // ─── Filtros del listado de OTs ───────────────────────────────
 describe('GET /OTs/list — filtros por fecha y número', () => {
   const ultimaQueryOts = () =>
@@ -532,9 +525,9 @@ describe('POST /ajax/confirmar_cerrar_ot — quién puede cerrar qué', () => {
   });
 });
 
-// ─── Nueva → Usada al montarse ────────────────────────────────
-describe('Cubierta Nueva pasa a Usada al montarse', () => {
-  test('colocar_rueda degrada Nueva pero respeta Recapada', async () => {
+// ─── La cubierta ya no lleva estado ───────────────────────────
+describe('Montar una cubierta no le cambia ningún estado', () => {
+  test('colocar_rueda solo mueve la cubierta, sin tocar estado', async () => {
     sql.mockResolvedValue([]);
     await request(app)
       .post('/ajax/colocar_rueda')
@@ -545,6 +538,6 @@ describe('Cubierta Nueva pasa a Usada al montarse', () => {
     const update = sql.mock.calls
       .map(c => (Array.isArray(c[0]) ? c[0].join(' ? ') : String(c[0])))
       .find(q => q.includes('UPDATE cubiertas SET micro_id'));
-    expect(update).toContain('CASE WHEN estado = 1 THEN 2 ELSE estado END');
+    expect(update).not.toContain('estado');
   });
 });

@@ -47,7 +47,7 @@ router.get('/historial', requirePerm('reportes_ver'), async (req, res, next) => 
       ficha = await fichaDeCubierta(id);
     } else if (fuego) {
       coincidencias = await sql`
-        SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida, c.estado,
+        SELECT c.id, c.fuego, mr.marca, mr.modelo AS modelo_nombre, med.medida,
                a.nombre AS almacen_nombre, g.nombre AS gomeria_nombre, mi.unidad
         FROM cubiertas c
         LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
@@ -71,25 +71,36 @@ router.get('/historial', requirePerm('reportes_ver'), async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-// GET /reportes/estados - Reporte de estados
+// GET /reportes/estados - Dónde está parada cada cubierta
+//
+// Reemplaza al viejo reporte por estado (Nueva/Usada/Recapada): la cubierta ya no
+// lleva esa columna. Lo que sigue sirviendo para ver el stock de un vistazo es
+// dónde está: montada, en almacén, en gomería o sin ubicar.
+const UBICACION_SQL = `
+  CASE WHEN c.micro_id   IS NOT NULL THEN 'unidad'
+       WHEN c.almacen_id IS NOT NULL THEN 'almacen'
+       WHEN c.gomeria_id IS NOT NULL THEN 'gomeria'
+       ELSE 'sin_ubicar' END`;
+
 router.get('/estados', requirePerm('reportes_ver'), async (req, res, next) => {
   try {
     const resumen = await sql`
       SELECT
-        COUNT(*) FILTER (WHERE estado = 1) AS nuevas,
-        COUNT(*) FILTER (WHERE estado = 2) AS usadas,
-        COUNT(*) FILTER (WHERE estado = 3) AS recapadas,
+        COUNT(*) FILTER (WHERE c.micro_id IS NOT NULL) AS en_unidad,
+        COUNT(*) FILTER (WHERE c.micro_id IS NULL AND c.almacen_id IS NOT NULL) AS en_almacen,
+        COUNT(*) FILTER (WHERE c.micro_id IS NULL AND c.almacen_id IS NULL AND c.gomeria_id IS NOT NULL) AS en_gomeria,
+        COUNT(*) FILTER (WHERE c.micro_id IS NULL AND c.almacen_id IS NULL AND c.gomeria_id IS NULL) AS sin_ubicar,
         COUNT(*) AS total
-      FROM cubiertas WHERE activo = 1
+      FROM cubiertas c WHERE c.activo = 1
     `;
-    const porModelo = await sql`
-      SELECT mr.marca, mr.modelo, c.estado, COUNT(*) AS cantidad
-      FROM cubiertas c
-      LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
-      WHERE c.activo = 1
-      GROUP BY mr.marca, mr.modelo, c.estado
-      ORDER BY mr.marca, mr.modelo, c.estado
-    `;
+    const porModelo = await sql(
+      `SELECT mr.marca, mr.modelo, ${UBICACION_SQL} AS ubicacion, COUNT(*) AS cantidad
+       FROM cubiertas c
+       LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
+       WHERE c.activo = 1
+       GROUP BY mr.marca, mr.modelo, ubicacion
+       ORDER BY mr.marca, mr.modelo, ubicacion`
+    );
     res.render('reportes/estados', { user: req.user, resumen: resumen[0], porModelo, currentPage: 'reportes' });
   } catch (err) { next(err); }
 });
@@ -102,7 +113,7 @@ router.get('/reporte_unidad', requirePerm('reportes_ver'), async (req, res, next
     let cubiertas = [];
     if (parseInt(unidad) > 0) {
       cubiertas = await sql`
-        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida, m.presion
+        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m.medida
         FROM cubiertas c
         LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
         LEFT JOIN medidas m ON c.medida_id = m.id

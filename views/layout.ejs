@@ -52,16 +52,6 @@
         <a href="/reportes">Reportes</a>
       </li>
       <% } %>
-      <% if (can('mantenimiento_ver')) { %>
-      <li class="<%= currentPage === 'mantenimiento' ? 'active' : '' %>">
-        <a href="/mantenimiento">Mantenimiento</a>
-      </li>
-      <% } %>
-      <% if (can('cubiertas_ver')) { %>
-      <li class="<%= currentPage === 'presiones' ? 'active' : '' %>">
-        <a href="/presiones">Presiones</a>
-      </li>
-      <% } %>
       <% if (can('admin')) { %>
       <li class="<%= currentPage === 'admin' ? 'active' : '' %>">
         <a href="/admin">Administrar</a>

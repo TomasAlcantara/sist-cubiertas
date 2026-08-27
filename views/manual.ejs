@@ -38,7 +38,6 @@ solo los que tu usuario tenga habilitados:</p>
   <tr class="dark"><td><strong>Carga de Km</strong></td><td>Actualizar los kilómetros de cada unidad</td></tr>
   <tr class="light"><td><strong>Cubiertas</strong></td><td>Listado completo de todas las cubiertas</td></tr>
   <tr class="dark"><td><strong>Recapadoras</strong></td><td>Ver OTs de recapado por recapadora</td></tr>
-  <tr class="light"><td><strong>Presiones</strong></td><td>Tabla de presión de inflado por medida y profundidad mínima</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -47,7 +46,7 @@ solo los que tu usuario tenga habilitados:</p>
 
 <h3>Ver cubiertas de un almacén</h3>
 <ul>
-  <li>Podés filtrar por <strong>Fuego</strong> (número de serie), <strong>Modelo</strong> y <strong>Estado</strong>.</li>
+  <li>Podés filtrar por <strong>Fuego</strong> (número de serie), <strong>Modelo</strong> y <strong>Medida</strong>.</li>
   <li>Hacé click en los encabezados de columna para ordenar la tabla.</li>
   <li>El botón <strong>Filtrar</strong> aplica los filtros seleccionados.</li>
 </ul>
@@ -64,7 +63,7 @@ solo los que tu usuario tenga habilitados:</p>
 <h2>4. Gomerías</h2>
 <p>Funciona igual que Almacenes: seleccionás la gomería y ves las cubiertas que están ahí.</p>
 <ul>
-  <li>Podés filtrar por Fuego, Modelo y Estado.</li>
+  <li>Podés filtrar por Fuego, Modelo y Medida.</li>
   <li>Podés mover cubiertas a un almacén desde esta vista.</li>
 </ul>
 
@@ -78,6 +77,19 @@ solo los que tu usuario tenga habilitados:</p>
   <li>Las OTs cerradas muestran solo <strong>VER</strong>.</li>
 </ul>
 
+<h3>Cuánto tardó cada trabajo</h3>
+<p>La columna <strong>Ingreso / Salida</strong> del listado muestra tres datos:</p>
+<table>
+  <thead><th>Línea</th><th>Qué es</th></thead>
+  <tr class="light"><td><strong>Ing</strong></td><td>Fecha y hora en que se generó la OT (el ingreso a la gomería)</td></tr>
+  <tr class="dark"><td><strong>Sal</strong></td><td>Fecha y hora en que se cerró la OT. Mientras está abierta dice <em>en curso</em></td></tr>
+  <tr class="light"><td><strong>Demora</strong></td><td>Lo que pasó entre las dos: es el tiempo que llevó el trabajo</td></tr>
+</table>
+<p>En las OTs abiertas la demora se muestra en gris: es el tiempo transcurrido hasta ahora, no el final.</p>
+<p><strong>Las OTs viejas dicen "sin dato".</strong> El sistema empezó a guardar la hora de cierre
+recién ahora, así que las que ya estaban cerradas no tienen con qué calcular la demora.
+De acá en adelante todas la registran.</p>
+
 <h3>Crear una nueva OT</h3>
 <div class="paso">
   <strong>Paso 1:</strong> Hacé click en <strong>Nueva OT</strong>.<br/>
@@ -86,28 +98,8 @@ solo los que tu usuario tenga habilitados:</p>
   <strong>Paso 3:</strong> Marcá los <strong>trabajos a realizar</strong> (al menos uno).<br/>
   <strong>Paso 4:</strong> Contestá las dos preguntas de <strong>Motivo</strong>: si fue pinchadura y si fue rotura.
   Las dos son obligatorias.<br/>
-  <strong>Paso 5:</strong> Cargá la <strong>profundidad en mm</strong> de cada rueda en los dos casilleros de abajo
-  de cada cubierta (ver más abajo).<br/>
-  <strong>Paso 6:</strong> Si hay cambio de cubiertas, asignalas en el esquema.<br/>
-  <strong>Paso 7:</strong> Hacé click en <strong>Generar</strong>.
-</div>
-
-<h3>Medir la profundidad de dibujo</h3>
-<p>Cada rueda del esquema tiene dos casilleros abajo de todo:</p>
-<table>
-  <thead><th>Casillero</th><th>Qué se mide</th></thead>
-  <tr class="light"><td><strong>ext</strong></td><td>Profundidad del hombro <strong>exterior</strong> de esa cubierta, en mm</td></tr>
-  <tr class="dark"><td><strong>int</strong></td><td>Profundidad del hombro <strong>interior</strong> de la <em>misma</em> cubierta, en mm</td></tr>
-</table>
-<div class="tip">
-  Son los dos hombros de una misma cubierta, no dos cubiertas distintas.
-  Una diferencia grande entre ambos suele ser síntoma de desalineación, y el sistema
-  lo marca como <strong>"Revisar alineación"</strong> en la vista de la OT.
-</div>
-<div class="warn">
-  Si un valor queda por debajo del mínimo (configurable en Administrar → Configuración,
-  por defecto <strong>4 mm</strong>) el casillero se pinta en rojo y aparece un aviso.
-  <strong>No impide guardar la OT</strong>: la idea es justamente dejar asentada la cubierta gastada.
+  <strong>Paso 5:</strong> Si hay cambio de cubiertas, asignalas en el esquema.<br/>
+  <strong>Paso 6:</strong> Hacé click en <strong>Generar</strong>.
 </div>
 
 <h3>Buscar OTs</h3>
@@ -148,17 +140,17 @@ solo los que tu usuario tenga habilitados:</p>
 <ul>
   <li><strong>Fuego:</strong> número de serie de la cubierta.</li>
   <li><strong>Modelo:</strong> marca y modelo de la cubierta.</li>
-  <li><strong>Estado:</strong> Nueva / Usada / Recapada.</li>
   <li><strong>Proveedor:</strong> filtra por proveedor de compra.</li>
   <li>Hacé click en los encabezados para ordenar la tabla.</li>
   <li>Si hay muchos resultados, usá la paginación al pie de la tabla.</li>
 </ul>
-<table>
-  <thead><th>Estado</th><th>Descripción</th></thead>
-  <tr class="light"><td>Nueva</td><td>Cubierta sin uso</td></tr>
-  <tr class="dark"><td>Usada</td><td>Cubierta en uso o retirada del servicio</td></tr>
-  <tr class="light"><td>Recapada</td><td>Cubierta que pasó por proceso de recapado</td></tr>
-</table>
+<div class="tip">
+  La cubierta no tiene un campo de "estado". Todo lo que le pasó — cuándo entró al
+  sistema, en qué unidades estuvo, reparaciones, recapados y los km que acumuló —
+  se consulta en <strong>Reportes → Historial de Cubierta</strong>. Si una cubierta
+  vuelve de la recapadora, se asienta desde <strong>Editar cubierta → Marcar como
+  recapada</strong>.
+</div>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2>8. Recapadoras</h2>
@@ -170,14 +162,15 @@ solo los que tu usuario tenga habilitados:</p>
 
 <!-- ═══════════════════════════════════════════ -->
 <h2>9. Reportes</h2>
-<p>Desde el menú <strong>Reportes</strong> podés generar 5 tipos de informes:</p>
+<p>Desde el menú <strong>Reportes</strong> podés generar 6 tipos de informes:</p>
 <table>
   <thead><th>Reporte</th><th>¿Qué muestra?</th></thead>
-  <tr class="light"><td><strong>Por Cubierta</strong></td><td>Busca una cubierta por su fuego y muestra su historial y ubicación actual</td></tr>
-  <tr class="dark"><td><strong>De Estados</strong></td><td>Resumen de cuántas cubiertas hay por estado (nueva, usada, recapada) y por modelo</td></tr>
-  <tr class="light"><td><strong>Por Interno</strong></td><td>Muestra todas las cubiertas montadas en una unidad</td></tr>
-  <tr class="dark"><td><strong>Por Gomería</strong></td><td>Lista las cubiertas que están en una gomería específica</td></tr>
-  <tr class="light"><td><strong>Por Proveedor</strong></td><td>Muestra las cubiertas adquiridas a un proveedor</td></tr>
+  <tr class="light"><td><strong>Por Cubierta</strong></td><td>Busca una cubierta por su fuego y muestra su ubicación actual</td></tr>
+  <tr class="dark"><td><strong>Historial de Cubierta</strong></td><td>Ficha de vida por número de fuego: km acumulados, unidades por las que pasó, reparaciones y recapados</td></tr>
+  <tr class="light"><td><strong>De Ubicación</strong></td><td>Resumen de cuántas cubiertas hay montadas, en almacén, en gomería o sin ubicar, total y por modelo</td></tr>
+  <tr class="dark"><td><strong>Por Interno</strong></td><td>Muestra todas las cubiertas montadas en una unidad</td></tr>
+  <tr class="light"><td><strong>Por Gomería</strong></td><td>Lista las cubiertas que están en una gomería específica</td></tr>
+  <tr class="dark"><td><strong>Por Proveedor</strong></td><td>Muestra las cubiertas adquiridas a un proveedor</td></tr>
 </table>
 
 <!-- ═══════════════════════════════════════════ -->
@@ -192,7 +185,6 @@ solo los que tu usuario tenga habilitados:</p>
   <tr class="light"><td><strong>Gomerías</strong></td><td>Agregar o editar gomerías</td></tr>
   <tr class="dark"><td><strong>Recapadoras</strong></td><td>Agregar o editar recapadoras</td></tr>
   <tr class="light"><td><strong>Anular OT</strong></td><td>Dar de baja una OT abierta (queda registrada, se puede restaurar)</td></tr>
-  <tr class="dark"><td><strong>Configuración</strong></td><td>Profundidad mínima y máxima de dibujo, e intervalos de alineación y preventivo</td></tr>
   <tr class="light"><td><strong>Registro de Actividad</strong></td><td>Log de todo lo que se hace en el sistema: quién, cuándo y qué cambió</td></tr>
 </table>
 
@@ -202,11 +194,11 @@ y hora, la IP y el detalle de qué cambió (valor anterior → valor nuevo).</p>
 <table>
   <thead><th>Se registra</th><th>Ejemplos</th></thead>
   <tr class="light"><td><strong>OTs</strong></td><td>Crear, editar, cerrar, anular, restaurar</td></tr>
-  <tr class="dark"><td><strong>Cubiertas</strong></td><td>Crear, editar, mover, colocar, almacenar, cambiar estado</td></tr>
+  <tr class="dark"><td><strong>Cubiertas</strong></td><td>Crear, editar, mover, colocar, almacenar</td></tr>
   <tr class="light"><td><strong>Kilometraje</strong></td><td>Carga individual y carga masiva</td></tr>
   <tr class="dark"><td><strong>Usuarios</strong></td><td>Alta, edición, cambios de permisos, baja</td></tr>
   <tr class="light"><td><strong>Accesos</strong></td><td>Ingresos al sistema e intentos fallidos</td></tr>
-  <tr class="dark"><td><strong>Configuración y ABMs</strong></td><td>Parámetros, gomerías, almacenes, medidas, modelos, proveedores</td></tr>
+  <tr class="dark"><td><strong>ABMs</strong></td><td>Gomerías, almacenes, medidas, modelos, proveedores</td></tr>
 </table>
 <div class="tip">
   Se puede filtrar por usuario, tipo de movimiento, rango de fechas y texto libre.
@@ -231,7 +223,7 @@ y hora, la IP y el detalle de qué cambió (valor anterior → valor nuevo).</p>
   <thead><th>Sección</th><th>¿Qué permite?</th></thead>
   <tr class="light"><td><strong>Modelos de Cubiertas</strong></td><td>Agregar marcas y modelos de cubiertas</td></tr>
   <tr class="dark"><td><strong>Unidades</strong></td><td>Agregar o editar los vehículos/internos. Desde VER se puede colocar y quitar cubiertas en cada posición</td></tr>
-  <tr class="light"><td><strong>Medidas</strong></td><td>Agregar medidas de cubiertas (ej: 295/80R22.5) y su presión de inflado en PSI</td></tr>
+  <tr class="light"><td><strong>Medidas</strong></td><td>Agregar medidas de cubiertas (ej: 295/80R22.5)</td></tr>
   <tr class="dark"><td><strong>Proveedores</strong></td><td>Agregar proveedores con teléfono y mail</td></tr>
 </table>
 
@@ -240,7 +232,7 @@ y hora, la IP y el detalle de qué cambió (valor anterior → valor nuevo).</p>
   <strong>Paso 1:</strong> Ir a Administrar → Unidades → <strong>VER</strong> en la unidad deseada.<br/>
   <strong>Paso 2:</strong> La tabla muestra las posiciones: DD, TIE, TII, TDI, TDE, RA, DI.<br/>
   <strong>Paso 3:</strong> Hacé click en <strong>COLOCAR</strong> (posición vacía) o <strong>CAMBIAR</strong> (posición ocupada).<br/>
-  <strong>Paso 4:</strong> Se abre un buscador de cubiertas. Filtrá por almacén, fuego, modelo o estado.<br/>
+  <strong>Paso 4:</strong> Se abre un buscador de cubiertas. Filtrá por almacén, fuego, modelo o medida.<br/>
   <strong>Paso 5:</strong> Hacé click en <strong>Seleccionar</strong> en la cubierta deseada.
 </div>
 <div class="tip">
@@ -254,7 +246,7 @@ y hora, la IP y el detalle de qué cambió (valor anterior → valor nuevo).</p>
   <strong>Paso 1:</strong> Ir a Administrar → Usuarios → <strong>Nuevo Usuario</strong>.<br/>
   <strong>Paso 2:</strong> Completá usuario y contraseña.<br/>
   <strong>Paso 3:</strong> Elegí los permisos. Lo más rápido es usar un preset y después ajustar:<br/>
-  &nbsp;&nbsp;• <strong>Preset Gomero</strong>: abre y carga OTs, cierra preventivos, ve cubiertas y mantenimiento. No crea cubiertas ni cierra OTs con trabajos.<br/>
+  &nbsp;&nbsp;• <strong>Preset Gomero</strong>: abre y carga OTs, cierra preventivos, ve cubiertas y reportes. No crea cubiertas ni cierra OTs con trabajos.<br/>
   &nbsp;&nbsp;• <strong>Preset Consulta</strong>: solo mira, no modifica nada.<br/>
   &nbsp;&nbsp;• <strong>Preset Admin</strong>: todo el sistema.<br/>
   <strong>Paso 4:</strong> Si el usuario es de una gomería puntual, seleccionala en <strong>Gomería</strong>:

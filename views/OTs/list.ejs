@@ -39,12 +39,39 @@ const accionesAbierta = (o) => {
   return acciones.join(' | ');
 };
 
+// Ingreso = alta de la OT, salida = cierre. La demora entre las dos es lo que
+// tardo el trabajo. Las OTs viejas no tienen hora real guardada (creado_en
+// backfilleado a medianoche, cierres previos a la auditoria): ahi no se inventa
+// una duracion, se muestra "sin dato".
+const tiemposCelda = (o) => {
+  const abierta = o.estado == 0 && !o.anulada;
+  const salida = o.cerrado_en
+    ? fmtFechaHora(o.cerrado_en)
+    : (abierta ? '<span class="ot-t-vacio">en curso</span>' : '<span class="ot-t-vacio">sin dato</span>');
+  const demora = abierta
+    ? fmtDuracion(o.creado_en, new Date())
+    : fmtDuracion(o.creado_en, o.cerrado_en);
+  return '<div><span class="ot-t-lbl">Ing</span>' + fmtFechaHora(o.creado_en) + '</div>'
+    + '<div><span class="ot-t-lbl">Sal</span>' + salida + '</div>'
+    + (demora
+        ? '<div class="ot-demora' + (abierta ? ' abierta' : '') + '" title="'
+          + (abierta ? 'Tiempo transcurrido con la OT abierta' : 'Tiempo entre el ingreso y el cierre') + '">'
+          + demora + '</div>'
+        : '');
+};
+
 const hayFiltros = !!(filtros.numero || filtros.desde || filtros.hasta || filtros.anuladas)
   || filtros.unidad > 0 || filtros.gomeria > 0 || filtros.estado !== -1;
 const body = `
 <style>
 .trab-wrap { cursor:default; color:var(--red); font-weight:bold; white-space:nowrap; }
 .trab-tip { display:none; position:fixed; background:var(--bg-card); border:1px solid var(--border-strong); padding:6px 10px; z-index:9999; box-shadow:var(--shadow-sm); white-space:nowrap; border-radius:var(--radius); pointer-events:none; }
+
+.ot-tiempos { font-family:var(--font-mono); font-size:11px; white-space:nowrap; line-height:1.55; text-align:left; }
+.ot-t-lbl { display:inline-block; width:30px; color:var(--text-muted); }
+.ot-t-vacio { color:var(--text-muted); font-style:italic; }
+.ot-demora { margin-top:2px; padding-left:30px; font-weight:bold; color:var(--red); }
+.ot-demora.abierta { color:var(--text-muted); font-weight:normal; }
 
 .ot-filters {
   display: flex;
@@ -279,7 +306,7 @@ function confirmar_cerrar(ot_id) {
     <th>Micro</th>
     <th>Gomería</th>
     <th>Fecha</th>
-    <th>Alta</th>
+    <th>Ingreso / Salida</th>
     <th>Km</th>
     <th>Solicitó</th>
     <th>Trabajos</th>
@@ -292,7 +319,7 @@ function confirmar_cerrar(ot_id) {
       <td align="center">${o.unidad||'-'}</td>
       <td align="center">${o.gomeria_nombre||'-'}</td>
       <td align="center">${fmtFecha(o.fecha)}</td>
-      <td align="center" style="font-family:var(--font-mono); font-size:11px; white-space:nowrap;">${fmtFechaHora(o.creado_en)}</td>
+      <td class="ot-tiempos">${tiemposCelda(o)}</td>
       <td align="center" style="font-family:var(--font-mono)">${o.km != null ? Number(o.km).toLocaleString('es-AR') : '-'}</td>
       <td align="center">${o.solicitado_por||'-'}</td>
       <td>${trabajosTooltip(o)}</td>
