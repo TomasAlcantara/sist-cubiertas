@@ -473,6 +473,50 @@ describe('POST /ajax/confirmar_cerrar_ot — quién puede cerrar qué', () => {
     expect(res.status).toBe(400);
   });
 
+  // La hora de salida es la mitad de "cuanto tardo el trabajo": si el cierre no
+  // la graba, la columna Ingreso/Salida queda en "sin dato" para siempre y nadie
+  // se entera hasta que alguien mira la pantalla.
+  const updateDeCierre = () => sql.mock.calls
+    .map(c => (Array.isArray(c[0]) ? c[0].join(' ? ') : String(c[0])))
+    .find(q => q.includes('UPDATE ots SET') && q.includes('estado = 1'));
+
+  test('cerrar como admin graba la hora de salida', async () => {
+    conOT(OT_CON_TRABAJOS);
+    await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenAdmin()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000 });
+    expect(updateDeCierre()).toContain('cerrado_en = NOW()');
+  });
+
+  test('cerrar un preventivo como gomero tambien graba la hora de salida', async () => {
+    conOT(OT_SOLO_PREVENTIVO);
+    await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenGomero()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000, descripcion_cierre: 'Todo OK' });
+    expect(updateDeCierre()).toContain('cerrado_en = NOW()');
+  });
+
+  test('la hora de salida viaja en el mismo UPDATE que el estado', async () => {
+    // Si algun dia se separan en dos statements, un fallo entre medio deja la OT
+    // cerrada sin hora de salida. Que sea uno solo es lo que lo hace imposible.
+    conOT(OT_CON_TRABAJOS);
+    await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${tokenAdmin()}`)
+      .type('form')
+      .send({ ot_id: 1, km_actual: 250000 });
+    const updates = sql.mock.calls
+      .map(c => (Array.isArray(c[0]) ? c[0].join(' ? ') : String(c[0])))
+      .filter(q => q.includes('UPDATE ots SET'));
+    expect(updates.length).toBe(1);
+    expect(updates[0]).toContain('estado = 1');
+    expect(updates[0]).toContain('cerrado_en = NOW()');
+  });
+
   test('gomero no puede colar trabajos por el body', async () => {
     conOT(OT_SOLO_PREVENTIVO);
     await request(app)
