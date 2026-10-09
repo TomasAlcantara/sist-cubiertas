@@ -103,7 +103,14 @@ function cargar_tires(unidad_id) {
     document.getElementById('diagrama-wrap').innerHTML = '<p style="color:var(--text-muted); font-size:12px; text-align:center;">Seleccione una unidad para ver el diagrama</p>';
     return;
   }
+  // Mientras llega la respuesta no queda a la vista el diagrama de la unidad
+  // anterior, con asignaciones marcadas que ya no existen.
+  document.getElementById('diagrama-wrap').innerHTML = '<p style="color:var(--text-muted); font-size:12px;">Cargando...</p>';
   $.ajax({ type:'GET', url:'/ajax/cubiertas_unidad?unidad_id='+unidad_id,
+    error: function() {
+      if (String(unidad_id) !== String(unidadCargada)) return;
+      document.getElementById('diagrama-wrap').innerHTML = '<p style="color:var(--text-muted); font-size:12px;">No se pudo cargar el diagrama de la unidad. Volvé a elegirla.</p>';
+    },
     success: function(data) {
       // Si mientras tanto se eligió otra unidad, esta respuesta ya no sirve.
       if (String(unidad_id) !== String(unidadCargada)) return;

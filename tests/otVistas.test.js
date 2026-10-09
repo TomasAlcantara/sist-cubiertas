@@ -152,6 +152,40 @@ describe('Editar OT — cubiertas asignadas', () => {
     expect(p.marcada('pos-ddi', 'seleccionada')).toBe(false);
   });
 
+  test('mientras llega la respuesta de la otra unidad no queda a la vista el diagrama anterior', async () => {
+    // La prueba en un navegador real lo mostró: las asignaciones ya estaban
+    // vacías, pero el dibujo de la unidad anterior seguía en pantalla, marcado.
+    const p = await abrir();
+    p.pagina.$.ajax = () => {};                // el servidor todavía no contestó
+    p.elegirUnidad('140');
+
+    expect(p.asignadas()).toEqual({});
+    expect(p.texto('diagrama-wrap')).toContain('Cargando');
+    expect(p.texto('fn-ddi')).toBeUndefined();
+  });
+
+  test('si el diagrama de la otra unidad no se puede cargar, lo dice', async () => {
+    const p = await abrir();
+    p.pagina.$.ajax = (opciones) => opciones.error({ status: 0 });
+    p.elegirUnidad('140');
+
+    expect(p.asignadas()).toEqual({});
+    expect(p.texto('diagrama-wrap')).toContain('No se pudo cargar');
+  });
+
+  test('una respuesta que llega tarde, de una unidad que ya no es la elegida, se descarta', async () => {
+    const p = await abrir();
+    const pendientes = [];
+    p.pagina.$.ajax = (opciones) => pendientes.push(opciones);
+    p.elegirUnidad('140');
+    p.elegirUnidad('399');
+    // Contestan en orden inverso: primero la 399, después la 140 que quedó vieja
+    pendientes[1].success({ tipo_unidad: 3, cubiertas: MONTADAS[399] });
+    pendientes[0].success({ tipo_unidad: 3, cubiertas: MONTADAS[140] });
+
+    expect(p.texto('fn-ddi')).toBe('MONTADA-399');
+  });
+
   test('quedarse sin unidad también las vacía', async () => {
     const p = await abrir();
     p.elegirUnidad('');
