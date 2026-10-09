@@ -7,7 +7,8 @@ const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth'
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
 const {
-  nombrePosicion, normalizarCambios, validarCubiertasDeOt, guardarCubiertasDeOt,
+  nombrePosicion, ALMACEN_A_VERIFICAR, almacenAVerificar,
+  normalizarCambios, validarCubiertasDeOt, guardarCubiertasDeOt,
   leerEstadoParaCierre, planificarCierre, consultasDeCierre,
 } = require('../lib/otCubiertas');
 const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
@@ -817,6 +818,10 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
           <p style="margin:10px 0 3px 0;"><strong>Descripción del preventivo:</strong> <span style="color:#c00;">*</span></p>
           <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:90px; resize:vertical;"
                     placeholder="Ej: se revisó presión en las 6 posiciones, todo OK"></textarea>
+          ${plan.salientes.length ? `
+          <p style="margin:10px 0 0 0; font-size:12px; color:#888;">
+            Las cubiertas que salen (${escapeHtml(fuegos(plan.salientes))}) van al almacén <strong>${ALMACEN_A_VERIFICAR}</strong>.
+          </p>` : ''}
           ${botones('Cerrar Preventivo', 150)}
           ` : `
           <p style="margin:0 0 5px 0;"><strong>Tareas a Realizar:</strong></p>
@@ -912,7 +917,9 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
     }
 
     const destinoEsCeamse = destino_almacen_id === 'ceamse';
-    const destinoAlmacenId = (!destinoEsCeamse && parseInt(destino_almacen_id)) ? parseInt(destino_almacen_id) : 1;
+    // Puede no venir: el formulario con el que el gomero cierra un preventivo no
+    // tiene selector de destino. Se resuelve más abajo, cuando se sabe si hace falta.
+    const destinoElegido = destinoEsCeamse ? null : (parseInt(destino_almacen_id) || null);
 
     const kmCierre = parseInt(km_actual) || 0;
 
@@ -940,6 +947,11 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
       ot, km: kmCierre, arreglo: trabajos.arreglo, destinoEsCeamse, ...estadoUnidad,
     });
     if (plan.errores.length) return res.status(400).send(plan.errores.join('\n'));
+
+    // Sin destino elegido, lo que sale va a "A VERIFICAR" (antes caía en el
+    // almacén id 1, que es el de pruebas). Solo se busca, o se crea, si algo sale.
+    const sinDestino = !destinoEsCeamse && !destinoElegido && plan.salientes.length > 0;
+    const destinoAlmacenId = sinDestino ? await almacenAVerificar() : destinoElegido;
 
     // Todo el cierre viaja en una sola transacción. Antes eran decenas de
     // queries sueltas: si una fallaba a mitad de camino la OT quedaba cerrada
@@ -998,6 +1010,7 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
           antes: plan.salientes.map(conFuego).join(', ') || null,
           despues: plan.entrantes.map(conFuego).join(', ') || null,
         }] : []),
+        ...(sinDestino ? [{ campo: 'destino de las salientes', antes: null, despues: ALMACEN_A_VERIFICAR + ' (no se eligió destino)' }] : []),
       ],
     });
 
