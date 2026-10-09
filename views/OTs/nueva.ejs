@@ -270,7 +270,7 @@ function guardar_ot() {
       if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al crear la OT');
     },
-    error: function(xhr) { alert('Error del servidor: ' + xhr.status + ' ' + xhr.responseText); }
+    error: function(xhr) { alert(xhr.responseText || ('Error del servidor: ' + xhr.status)); }
   });
 }
 

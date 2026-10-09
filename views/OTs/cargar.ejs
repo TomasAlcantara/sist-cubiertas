@@ -116,7 +116,17 @@ function renderDiagrama(tipo) {
   });
 }
 
+function clearPos(pos) {
+  delete cambios_ot[pos];
+  var elIn = document.getElementById('fn-in-'+pos);
+  var pEl  = document.getElementById('pos-'+pos);
+  if (elIn) { elIn.innerHTML = '+'; elIn.classList.remove('con-valor'); }
+  if (pEl)  pEl.classList.remove('con-entrante');
+}
+
 function abrir_modal(pos) {
+  // Si ya tiene asignación, el click la deshace
+  if (cambios_ot[pos] !== undefined) { clearPos(pos); actualizar_tabla_resumen(); return; }
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
   document.getElementById('filter_list').style.display = 'block';
@@ -270,7 +280,7 @@ function finalizar() {
       if (id) location.href = '/OTs/list';
       else alert('Error al guardar');
     },
-    error: function(xhr) { alert('Error del servidor: ' + xhr.status); }
+    error: function(xhr) { alert(xhr.responseText || ('Error del servidor: ' + xhr.status)); }
   });
 }
 
@@ -344,7 +354,7 @@ $(function() {
 <!-- Diagrama de cubiertas -->
 <div style="width:420px; margin:10px auto; border:1px solid #333; padding:8px;">
   <strong>Cambio de cubiertas:</strong>
-  <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar &nbsp;·&nbsp; Clic en vacía para asignar desde almacén</p>
+  <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para asignar desde almacén</p>
   <p style="font-size:11px; color:#666; margin:0 0 8px 0;">En cada rueda: arriba la cubierta actual, abajo la que entra.</p>
   <div id="diagrama-wrap" style="text-align:center;"></div>
 </div>
