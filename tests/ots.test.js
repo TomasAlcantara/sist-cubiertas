@@ -4,7 +4,7 @@
  * Verifica que las rutas principales de OTs respondan correctamente
  * y que los endpoints AJAX de OTs manejen datos inválidos sin explotar.
  */
-const request = require('supertest');
+const request = require('./pedido');
 const jwt = require('jsonwebtoken');
 
 jest.mock('../db', () => {
