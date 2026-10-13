@@ -5,7 +5,7 @@
  * sigue leyendo una variable que la ruta ya no le pasa. Acá cada pantalla se
  * renderiza entera contra una DB vacía, que es donde eso explota.
  */
-const request = require('supertest');
+const request = require('./pedido');
 const jwt = require('jsonwebtoken');
 
 // Un COUNT/agregado siempre devuelve exactamente una fila, también contra una

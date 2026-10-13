@@ -4,7 +4,7 @@
  * Mockea el módulo de DB para no necesitar conexión real a Neon.
  * Cubre: login, logout, rutas protegidas, cookie segura.
  */
-const request = require('supertest');
+const request = require('./pedido');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 

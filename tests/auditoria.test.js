@@ -4,7 +4,7 @@
  * Lo que se verifica acá no es que el log "funcione" sino sus dos garantías:
  * que nunca rompa la operación auditada, y que nunca guarde secretos.
  */
-const request = require('supertest');
+const request = require('./pedido');
 const jwt = require('jsonwebtoken');
 
 jest.mock('../db', () => {

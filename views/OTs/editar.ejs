@@ -5,12 +5,17 @@ const cubCargadas = {};
 ot_cubiertas.forEach(c => { cubCargadas[c.posicion] = { id: c.cubierta_id, fuego: c.fuego }; });
 const cambiosIniciales = {};
 ot_cubiertas.forEach(c => { cambiosIniciales[c.posicion] = c.cubierta_id; });
+// Posiciones (auxilios) que la OT ya tiene marcadas para dejar vacías.
+const vaciarInicial = {};
+(ot.posiciones_vaciar || []).forEach(p => { vaciarInicial[p] = true; });
 const body = `
 <style>
 .bus-row { display:flex; align-items:center; justify-content:center; }
 .rueda { width:52px; height:68px; background:#111; border:2px solid #444; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; margin:2px; flex-direction:column; }
 .rueda:hover { background:#222; border-color:#666; }
 .rueda.seleccionada { border-color:#c00; background:#3a0000; }
+.rueda.dragging { opacity:0.3; border-style:dashed; }
+.rueda.drag-over { box-shadow:0 0 0 2px #c00; }
 .rueda .fn { color:#fff; font-size:10px; font-weight:bold; text-align:center; word-break:break-all; line-height:1.2; padding:2px; }
 .rueda .fn.vacia { color:#555; font-size:18px; }
 .rueda.seleccionada .fn { color:#cc0000; }
@@ -26,6 +31,8 @@ const body = `
 var cambios_ot = ${JSON.stringify(cambiosIniciales)};
 // Lo que se ve asignado en cada posición (id y fuego). Va siempre a la par de cambios_ot.
 var seleccion = ${JSON.stringify(cubCargadas)};
+var vaciar_ot = ${JSON.stringify(vaciarInicial)};   // posiciones que la OT deja vacías: sale la que hay y no entra otra
+var VACIABLES = ['ra', 'ra2'];                       // solo los auxilios
 var current_pos = '';
 var unidadActual = {};     // posición → cubierta montada hoy en la unidad elegida
 var unidadCargada = null;  // unidad a la que corresponden las asignaciones en pantalla
@@ -37,8 +44,20 @@ var LAYOUTS = {
   4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }
 };
 
+var POS_NOMBRES = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
+  tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
+  cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
+
 function mkRueda(pos) {
-  return '<div class="rueda" id="pos-'+pos+'" onclick="abrir_modal(\\''+pos+'\\')"><span class="fn vacia" id="fn-'+pos+'">+</span></div>';
+  return '<div class="rueda" id="pos-'+pos+'" draggable="true" '+
+    'onclick="abrir_modal(\\''+pos+'\\')" '+
+    'ondragstart="dStart(event,\\''+pos+'\\');" '+
+    'ondragend="dEnd(\\''+pos+'\\');" '+
+    'ondragover="dOver(event);" '+
+    'ondragenter="dEnter(\\''+pos+'\\');" '+
+    'ondragleave="dLeave(\\''+pos+'\\');" '+
+    'ondrop="dDrop(event,\\''+pos+'\\');">'+
+    '<span class="fn vacia" id="fn-'+pos+'">+</span></div>';
 }
 
 function renderDiagrama(tipo) {
@@ -72,14 +91,16 @@ function renderDiagrama(tipo) {
   document.getElementById('diagrama-wrap').innerHTML = h;
 }
 
-// Deja la posición mostrando lo que le toca: su asignación, lo montado en la unidad, o vacía.
+// Deja la posición mostrando lo que le toca: que va a quedar vacía, su
+// asignación, lo montado en la unidad, o nada.
 function pintarPos(pos) {
   var el = document.getElementById('fn-'+pos);
   var p  = document.getElementById('pos-'+pos);
   if (!el || !p) return;
   var sel = seleccion[pos];
   var act = unidadActual[pos];
-  if (sel)      { el.innerHTML = sel.fuego || '-'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
+  if (vaciar_ot[pos]) { el.innerHTML = 'VACÍA'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
+  else if (sel) { el.innerHTML = sel.fuego || '-'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
   else if (act) { el.innerHTML = act.fuego || '-'; el.classList.remove('vacia'); p.classList.remove('seleccionada'); }
   else          { el.innerHTML = '+';              el.classList.add('vacia');    p.classList.remove('seleccionada'); }
 }
@@ -87,6 +108,7 @@ function pintarPos(pos) {
 function clearPos(pos) {
   delete cambios_ot[pos];
   delete seleccion[pos];
+  delete vaciar_ot[pos];
   pintarPos(pos);
 }
 
@@ -96,6 +118,7 @@ function cargar_tires(unidad_id) {
   if (unidadCargada !== null && String(unidad_id) !== String(unidadCargada)) {
     cambios_ot = {};
     seleccion = {};
+    vaciar_ot = {};
   }
   unidadCargada = unidad_id;
   unidadActual = {};
@@ -120,19 +143,36 @@ function cargar_tires(unidad_id) {
       (data.cubiertas || []).forEach(function(c) {
         unidadActual[c.posicion] = { id: c.id, fuego: c.fuego };
       });
-      Object.keys(unidadActual).concat(Object.keys(seleccion)).forEach(pintarPos);
+      Object.keys(unidadActual).concat(Object.keys(seleccion), Object.keys(vaciar_ot)).forEach(pintarPos);
     }
   });
 }
 
 function abrir_modal(pos) {
-  // Si ya tiene asignación, el click la deshace
-  if (cambios_ot[pos] !== undefined) { clearPos(pos); return; }
+  // Si ya tiene asignación, o está marcada para quedar vacía, el click la deshace
+  if (cambios_ot[pos] !== undefined || vaciar_ot[pos]) { clearPos(pos); return; }
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
   document.getElementById('filter_list').style.display = 'block';
   document.getElementById('rueda_list').innerHTML = '';
+  mostrar_vaciar(pos);
   filtrar_ot();
+}
+
+// En el selector de un auxilio que tiene cubierta se ofrece sacarla sin poner otra.
+function mostrar_vaciar(pos) {
+  var actual = unidadActual[pos];
+  var ofrecer = VACIABLES.indexOf(pos) >= 0 && !!actual;
+  document.getElementById('vaciar_box').style.display = ofrecer ? 'block' : 'none';
+  if (ofrecer) document.getElementById('vaciar_txt').textContent = 'Sale la ' + (actual.fuego || '-') + ' y no entra otra.';
+}
+
+function vaciar_posicion() {
+  delete cambios_ot[current_pos];
+  delete seleccion[current_pos];
+  vaciar_ot[current_pos] = true;
+  pintarPos(current_pos);
+  cerrar_modal();
 }
 
 function cerrar_modal() {
@@ -141,30 +181,87 @@ function cerrar_modal() {
 }
 
 function filtrar_ot() {
+  // Con la unidad, el servidor suma al listado la sección "Rotación" con las
+  // cubiertas montadas en ella (menos la de esta posición). Sin eso, desde acá
+  // solo se podía elegir del almacén y no había forma de rotar.
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
             orden:document.getElementById('f_orden').value,
-            modo:'ot' },
+            modo:'ot', unidad_id:document.getElementById('unidad_id').value, current_pos:current_pos },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
 }
 
-function seleccionar_ot(id, fuego) {
-  var posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
-    tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
-    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
-  for (var pos in cambios_ot) {
-    if (cambios_ot[pos] == id && pos !== current_pos) {
-      alert('Esta cubierta ya está asignada en: ' + (posNombres[pos] || pos));
-      cerrar_modal();
-      return;
+// Asigna una cubierta a una posición. Es el único camino, venga del selector o
+// del arrastre, así las dos formas avisan igual si la cubierta ya está en otra.
+function asignar(pos, id, fuego) {
+  for (var otra in cambios_ot) {
+    if (cambios_ot[otra] == id && otra !== pos) {
+      alert('Esta cubierta ya está asignada en: ' + (POS_NOMBRES[otra] || otra));
+      return false;
     }
   }
-  cambios_ot[current_pos] = id;
-  seleccion[current_pos] = { id: id, fuego: fuego || id };
-  pintarPos(current_pos);
+  cambios_ot[pos] = id;
+  seleccion[pos] = { id: id, fuego: fuego || id };
+  delete vaciar_ot[pos];
+  pintarPos(pos);
+  return true;
+}
+
+function seleccionar_ot(id, fuego) {
+  asignar(current_pos, id, fuego);
   cerrar_modal();
+}
+
+// Arrastrar una cubierta montada hasta otra posición: rotación de una sola vía,
+// igual que en Nueva OT. Solo cambia el destino.
+var _dragSrc = null;
+
+function dStart(e, pos) {
+  if (!unidadActual[pos]) { e.preventDefault(); return; }
+  _dragSrc = pos;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(function() {
+    var el = document.getElementById('pos-'+pos);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function dEnd(pos) {
+  _dragSrc = null;
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('dragging');
+}
+
+function dOver(e) { e.preventDefault(); return false; }
+
+function dEnter(pos) {
+  if (!_dragSrc || _dragSrc === pos) return;
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.add('drag-over');
+}
+
+function dLeave(pos) {
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('drag-over');
+}
+
+function dDrop(e, pos) {
+  e.preventDefault();
+  e.stopPropagation();
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('drag-over');
+  if (!_dragSrc || _dragSrc === pos) { _dragSrc = null; return false; }
+
+  var srcPos = _dragSrc;
+  _dragSrc = null;
+  var srcEl = document.getElementById('pos-'+srcPos);
+  if (srcEl) srcEl.classList.remove('dragging');
+
+  var u = unidadActual[srcPos];
+  if (u) asignar(pos, u.id, u.fuego);
+  return false;
 }
 
 function guardar_ot() {
@@ -184,7 +281,8 @@ function guardar_ot() {
             armar:     document.getElementById('cb_armar').checked     ? '1':'0',
             preventivo: document.getElementById('cb_preventivo').checked ? '1':'0',
             pinchadura: document.getElementById('cb_pinchadura').checked ? '1':'0',
-            cambios_ot_json: JSON.stringify(cambios_ot) },
+            cambios_ot_json: JSON.stringify(cambios_ot),
+            vaciar_ot_json: JSON.stringify(Object.keys(vaciar_ot)) },
     success: function(id) {
       if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al guardar la OT');
@@ -226,6 +324,11 @@ $(function() {
     </select>
     <button type="button" class="btn-filter" onclick="filtrar_ot()">Filtrar</button>
   </form>
+  <!-- Solo se muestra en el selector de un auxilio que tiene cubierta -->
+  <div id="vaciar_box" style="display:none; margin:0 14px 10px; padding:8px 10px; border:1px dashed #c62828; background:rgba(198,40,40,0.06); font-size:12px;">
+    <input type="button" value="Dejar vacía esta posición" onclick="vaciar_posicion();" />
+    <span id="vaciar_txt" style="margin-left:8px;"></span>
+  </div>
   <div id="rueda_list" style="padding:0 14px 14px;"></div>
 </div>
 
@@ -277,7 +380,7 @@ $(function() {
 
   <div class="form-section">
     <div class="form-section-title">Cambio de cubiertas — clic en posición para cambiar</div>
-    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Clic en una asignada para deshacer &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
+    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Arrastrá una cubierta montada para rotarla &nbsp;·&nbsp; Clic en una asignada para deshacer &nbsp;·&nbsp; Un auxilio también se puede dejar vacío &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
     <div id="diagrama-wrap" style="text-align:center; padding:10px 0;">
       <p style="color:var(--text-muted); font-size:12px;">Cargando...</p>
     </div>
