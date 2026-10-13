@@ -26,7 +26,8 @@
 //      Qué queda lo decide lib/correccionCubiertas.js (reglas R1 y R2). Lo que
 //      las reglas no resuelven no se toca: queda listado para revisar a mano.
 //   4. Borra las filas fantasma de las OTs y la "colocación" falsa que dejaron
-//      en el historial de esa cubierta.
+//      en el historial de esa cubierta. Si otra OT "cerró" después ese tramo que
+//      nunca existió, borra también ese retiro.
 //   5. A la cubierta que sale y queda con una colocación abierta en su historial
 //      le asienta el retiro (origen 'correccion').
 //   6. Deja una entrada por unidad en el log de auditoría.
@@ -176,7 +177,7 @@ function mostrarPlan(plan, huella, datos) {
     escribir(`    Para resolver una, cargarla en DECISIONES al principio de este archivo: { '${plan.pendientes[0].unidad}:${plan.pendientes[0].posicion}': '<fuego que queda>' }`);
   }
 
-  escribir(`\nFilas fantasma en OTs: ${plan.fantasmas.length} (se borran, junto con su "colocación" falsa en el historial)`);
+  escribir(`\nFilas fantasma en OTs: ${plan.fantasmas.length} (se borran, junto con su "colocación" falsa en el historial y el retiro que la haya cerrado)`);
   for (const f of plan.fantasmas) {
     escribir(`    OT ${String(f.ot_id).padEnd(5)} ${nombrePosicion(f.posicion).padEnd(16)} se borra ${String(f.fuego).padEnd(7)} queda ${f.queda}`
       + (f.ot_abierta ? '   (OT ABIERTA)' : ''));
@@ -317,20 +318,45 @@ async function ejecutar(c, plan, datos, porDefecto) {
   // salidas de arriba, esa cubierta sigue montada justo en esa unidad y posición:
   // entonces sí estuvo, y borrarla le dejaría el historial sin su tramo actual.
   let eventosBorrados = 0;
+  const sueltos = [];
   for (const f of plan.fantasmas) {
     await exacto(c, 1, 'DELETE FROM ot_cubiertas WHERE ot_id = $1 AND cubierta_id = $2 AND posicion = $3',
       [f.ot_id, f.cubierta_id, f.posicion], `borrar la fila de la ${f.fuego} en la OT ${f.ot_id}`);
-    const r = await c.query(`
+    const { rows: colocaciones } = await c.query(`
       DELETE FROM cubierta_eventos e
       WHERE e.ot_id = $1 AND e.cubierta_id = $2 AND e.posicion = $3 AND e.tipo = 'colocacion'
         AND NOT EXISTS (
           SELECT 1 FROM cubiertas cu JOIN ots o ON o.id = e.ot_id
           WHERE cu.id = e.cubierta_id AND cu.activo = 1
-            AND cu.micro_id = o.unidad_id AND cu.posicion = e.posicion)`,
+            AND cu.micro_id = o.unidad_id AND cu.posicion = e.posicion)
+      RETURNING e.id, e.fecha::text AS fecha, e.micro_id`,
       [f.ot_id, f.cubierta_id, f.posicion]);
-    eventosBorrados += r.rowCount;
+    eventosBorrados += colocaciones.length;
+
+    // El tramo que abría esa colocación nunca existió. Si una OT posterior lo
+    // "cerró" (anotó a esta cubierta como la anterior de esa posición, porque el
+    // sistema la mostraba ahí), ese retiro tampoco pasó y quedaría suelto, sin
+    // colocación que lo abra. Se borra solo el movimiento que le sigue a la
+    // colocación en el historial de la cubierta (mismo orden que usa el historial:
+    // fecha y, a igual fecha, id), y solo si es un retiro de esa misma unidad y posición.
+    for (const col of colocaciones) {
+      const { rows } = await c.query(`
+        DELETE FROM cubierta_eventos r
+        WHERE r.id = (
+            SELECT s.id FROM cubierta_eventos s
+            WHERE s.cubierta_id = $1 AND s.tipo IN ('colocacion', 'retiro')
+              AND (COALESCE(s.fecha, '-infinity'::date), s.id) > (COALESCE($2::date, '-infinity'::date), $3::int)
+            ORDER BY s.fecha ASC NULLS FIRST, s.id ASC LIMIT 1)
+          AND r.tipo = 'retiro' AND r.micro_id = $4 AND r.posicion = $5
+        RETURNING r.ot_id, r.fecha::text AS fecha, (SELECT unidad FROM micro WHERE id = r.micro_id) AS unidad`,
+        [f.cubierta_id, col.fecha, col.id, col.micro_id, f.posicion]);
+      for (const r of rows) {
+        sueltos.push(`${f.fuego} (el del ${r.fecha || 'sin fecha'}, OT ${r.ot_id ?? '-'}, unidad ${r.unidad} ${nombrePosicion(f.posicion)})`);
+      }
+    }
   }
   hechos.push(`${plan.fantasmas.length} fila(s) fantasma borradas de las OTs y ${eventosBorrados} colocación(es) falsa(s) del historial`);
+  hechos.push(`${sueltos.length} retiro(s) que cerraban una de esas colocaciones falsas, borrados` + (sueltos.length ? ': ' + sueltos.join('; ') : ''));
 
   // Si el historial de una que salió termina en una colocación, queda un tramo
   // abierto para siempre. Se cierra con un retiro fechado hoy y sin km, así el
