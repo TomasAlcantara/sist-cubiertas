@@ -84,6 +84,7 @@ function abrirPagina(html) {
   const pagina = vm.createContext({
     document: { getElementById: porId, addEventListener() {}, querySelector: () => null },
     $, alert: (mensaje) => avisos.push(mensaje), location: {},
+    setTimeout: (fn) => fn(),      // el arrastre marca la rueda "en vuelo" con un setTimeout
   });
 
   const script = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
@@ -99,6 +100,15 @@ function abrirPagina(html) {
     marcada: (id, clase) => !!elementos[id] && elementos[id].clases.has(clase),
     abierto: (id) => !!elementos[id] && elementos[id].style.display === 'block',
     elegirUnidad: (unidad) => { porId('unidad_id').value = unidad; pagina.cargar_tires(unidad); },
+    // Lo que la página le pidió por última vez al servidor para armar el selector de cubiertas.
+    pedidoDeLista: () => pedidos.filter(p => /listar_ruedas/.test(p.url)).pop().data,
+    // Arrastra la rueda de una posición y la suelta sobre otra, como lo hace el navegador.
+    arrastrar: (desde, hasta) => {
+      const evento = { cancelado: false, preventDefault() { this.cancelado = true; }, stopPropagation() {}, dataTransfer: {} };
+      pagina.dStart(evento, desde);
+      if (!evento.cancelado) pagina.dDrop({ preventDefault() {}, stopPropagation() {}, dataTransfer: {} }, hasta);
+      pagina.dEnd(desde);
+    },
     guardado,
     cubiertasEnviadas: () => JSON.parse(guardado().data.cambios_ot_json),
   };
@@ -244,6 +254,80 @@ describe('Editar OT — cubiertas asignadas', () => {
     expect(p.avisos).toHaveLength(1);
     expect(p.avisos[0]).toContain('Del. Der.');
     expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219 });
+  });
+
+  // Rotar desde "Editar" no se podía: el selector pedía la lista sin decir de qué
+  // unidad era (así el servidor no arma la sección "Rotación") y no había arrastre.
+  describe('rotación', () => {
+    test('el selector pide la lista diciendo la unidad y la posición', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('tie');
+      expect(p.pedidoDeLista()).toMatchObject({ modo: 'ot', unidad_id: '399', current_pos: 'tie' });
+    });
+
+    test('si se cambió la unidad, pide las cubiertas montadas en la nueva', async () => {
+      const p = await abrir();
+      p.elegirUnidad('140');
+      p.pagina.abrir_modal('tde');
+      expect(p.pedidoDeLista()).toMatchObject({ unidad_id: '140', current_pos: 'tde' });
+    });
+
+    test('"Rotar aquí" asigna en la posición una cubierta que está montada en otra', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('tie');
+      p.pagina.seleccionar_ot(1, 'MONTADA-399');   // el botón "Rotar aquí" de la sección Rotación
+
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219, tie: 1 });
+      expect(p.texto('fn-tie')).toBe('MONTADA-399');
+    });
+
+    test('arrastrar una cubierta montada la asigna en el destino, y el origen no cambia', async () => {
+      const p = await abrir();
+      p.arrastrar('ddi', 'tie');                   // la que hoy está en Del. Izq. pasa atrás
+
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219, tie: 1 });
+      expect(p.texto('fn-tie')).toBe('MONTADA-399');
+      expect(p.marcada('pos-tie', 'seleccionada')).toBe(true);
+      expect(p.texto('fn-ddi')).toBe('14291');     // sigue con lo que tenía asignado
+    });
+
+    test('desde una posición sin cubierta montada no se arrastra nada', async () => {
+      const p = await abrir();
+      p.arrastrar('tde', 'tie');
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219 });
+    });
+
+    test('soltar sobre la misma posición no hace nada', async () => {
+      const p = await abrir();
+      p.arrastrar('ddi', 'ddi');
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219 });
+      expect(p.avisos).toEqual([]);
+    });
+
+    test('arrastrar la misma cubierta a una segunda posición avisa y no la duplica', async () => {
+      const p = await abrir();
+      p.arrastrar('ddi', 'tie');
+      p.arrastrar('ddi', 'tii');
+
+      expect(p.avisos).toHaveLength(1);
+      expect(p.avisos[0]).toContain('Tras. Izq. Ext.');
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219, tie: 1 });
+    });
+
+    test('una rotación arrastrada se deshace con un clic, como cualquier asignación', async () => {
+      const p = await abrir();
+      p.arrastrar('ddi', 'tie');
+      p.pagina.abrir_modal('tie');
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219 });
+      expect(p.texto('fn-tie')).toBe('+');
+    });
+
+    test('la rotación viaja al guardar', async () => {
+      const p = await abrir();
+      p.arrastrar('ddi', 'tie');
+      p.pagina.guardar_ot();
+      expect(p.cubiertasEnviadas()).toEqual({ ddi: 13220, ddd: 13219, tie: 1 });
+    });
   });
 
   test('guardar manda exactamente lo que quedó en pantalla', async () => {

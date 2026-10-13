@@ -11,6 +11,8 @@ const body = `
 .rueda { width:52px; height:68px; background:#111; border:2px solid #444; display:inline-flex; align-items:center; justify-content:center; cursor:pointer; margin:2px; flex-direction:column; }
 .rueda:hover { background:#222; border-color:#666; }
 .rueda.seleccionada { border-color:#c00; background:#3a0000; }
+.rueda.dragging { opacity:0.3; border-style:dashed; }
+.rueda.drag-over { box-shadow:0 0 0 2px #c00; }
 .rueda .fn { color:#fff; font-size:10px; font-weight:bold; text-align:center; word-break:break-all; line-height:1.2; padding:2px; }
 .rueda .fn.vacia { color:#555; font-size:18px; }
 .rueda.seleccionada .fn { color:#cc0000; }
@@ -37,8 +39,20 @@ var LAYOUTS = {
   4: { del:['ddi','ddd'], tr1:['tie','tii','tdi','tde'], tr2:[], aux:['ra','ra2'], bodyH:140 }
 };
 
+var POS_NOMBRES = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
+  tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
+  cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
+
 function mkRueda(pos) {
-  return '<div class="rueda" id="pos-'+pos+'" onclick="abrir_modal(\\''+pos+'\\')"><span class="fn vacia" id="fn-'+pos+'">+</span></div>';
+  return '<div class="rueda" id="pos-'+pos+'" draggable="true" '+
+    'onclick="abrir_modal(\\''+pos+'\\')" '+
+    'ondragstart="dStart(event,\\''+pos+'\\');" '+
+    'ondragend="dEnd(\\''+pos+'\\');" '+
+    'ondragover="dOver(event);" '+
+    'ondragenter="dEnter(\\''+pos+'\\');" '+
+    'ondragleave="dLeave(\\''+pos+'\\');" '+
+    'ondrop="dDrop(event,\\''+pos+'\\');">'+
+    '<span class="fn vacia" id="fn-'+pos+'">+</span></div>';
 }
 
 function renderDiagrama(tipo) {
@@ -141,30 +155,86 @@ function cerrar_modal() {
 }
 
 function filtrar_ot() {
+  // Con la unidad, el servidor suma al listado la sección "Rotación" con las
+  // cubiertas montadas en ella (menos la de esta posición). Sin eso, desde acá
+  // solo se podía elegir del almacén y no había forma de rotar.
   $.ajax({ type:'POST', url:'/ajax/listar_ruedas',
     data: { almacen:document.getElementById('f_almacen').value, fuego:document.getElementById('f_fuego').value,
             modelo:document.getElementById('f_modelo').value, medida:document.getElementById('f_medida').value,
             orden:document.getElementById('f_orden').value,
-            modo:'ot' },
+            modo:'ot', unidad_id:document.getElementById('unidad_id').value, current_pos:current_pos },
     success: function(data) { document.getElementById('rueda_list').innerHTML = data; }
   });
 }
 
-function seleccionar_ot(id, fuego) {
-  var posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
-    tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
-    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
-  for (var pos in cambios_ot) {
-    if (cambios_ot[pos] == id && pos !== current_pos) {
-      alert('Esta cubierta ya está asignada en: ' + (posNombres[pos] || pos));
-      cerrar_modal();
-      return;
+// Asigna una cubierta a una posición. Es el único camino, venga del selector o
+// del arrastre, así las dos formas avisan igual si la cubierta ya está en otra.
+function asignar(pos, id, fuego) {
+  for (var otra in cambios_ot) {
+    if (cambios_ot[otra] == id && otra !== pos) {
+      alert('Esta cubierta ya está asignada en: ' + (POS_NOMBRES[otra] || otra));
+      return false;
     }
   }
-  cambios_ot[current_pos] = id;
-  seleccion[current_pos] = { id: id, fuego: fuego || id };
-  pintarPos(current_pos);
+  cambios_ot[pos] = id;
+  seleccion[pos] = { id: id, fuego: fuego || id };
+  pintarPos(pos);
+  return true;
+}
+
+function seleccionar_ot(id, fuego) {
+  asignar(current_pos, id, fuego);
   cerrar_modal();
+}
+
+// Arrastrar una cubierta montada hasta otra posición: rotación de una sola vía,
+// igual que en Nueva OT. Solo cambia el destino.
+var _dragSrc = null;
+
+function dStart(e, pos) {
+  if (!unidadActual[pos]) { e.preventDefault(); return; }
+  _dragSrc = pos;
+  e.dataTransfer.effectAllowed = 'move';
+  setTimeout(function() {
+    var el = document.getElementById('pos-'+pos);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function dEnd(pos) {
+  _dragSrc = null;
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('dragging');
+}
+
+function dOver(e) { e.preventDefault(); return false; }
+
+function dEnter(pos) {
+  if (!_dragSrc || _dragSrc === pos) return;
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.add('drag-over');
+}
+
+function dLeave(pos) {
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('drag-over');
+}
+
+function dDrop(e, pos) {
+  e.preventDefault();
+  e.stopPropagation();
+  var el = document.getElementById('pos-'+pos);
+  if (el) el.classList.remove('drag-over');
+  if (!_dragSrc || _dragSrc === pos) { _dragSrc = null; return false; }
+
+  var srcPos = _dragSrc;
+  _dragSrc = null;
+  var srcEl = document.getElementById('pos-'+srcPos);
+  if (srcEl) srcEl.classList.remove('dragging');
+
+  var u = unidadActual[srcPos];
+  if (u) asignar(pos, u.id, u.fuego);
+  return false;
 }
 
 function guardar_ot() {
@@ -277,7 +347,7 @@ $(function() {
 
   <div class="form-section">
     <div class="form-section-title">Cambio de cubiertas — clic en posición para cambiar</div>
-    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Clic en una asignada para deshacer &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
+    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Arrastrá una cubierta montada para rotarla &nbsp;·&nbsp; Clic en una asignada para deshacer &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
     <div id="diagrama-wrap" style="text-align:center; padding:10px 0;">
       <p style="color:var(--text-muted); font-size:12px;">Cargando...</p>
     </div>
