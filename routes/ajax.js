@@ -6,6 +6,11 @@ const { sql, sanitizeFuego } = require('../db');
 const { requireAuth, requireMaster, requirePerm } = require('../middleware/auth');
 const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
+const {
+  nombrePosicion, ALMACEN_A_VERIFICAR, almacenAVerificar,
+  normalizarCambios, validarCubiertasDeOt, guardarCubiertasDeOt,
+  leerEstadoParaCierre, planificarCierre, consultasDeCierre,
+} = require('../lib/otCubiertas');
 const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
 const { parseFecha, hoyISO } = require('../lib/fechas');
 const auditoria = require('../lib/auditoria');
@@ -641,12 +646,6 @@ function puedeCerrar(user, ot) {
 }
 
 // POST /ajax/mb_cerrar_ot - Devuelve formulario HTML para confirmar cierre de OT
-const posNombreCierre = (p) => ({
-  ddi:'Del. Izq.', ddd:'Del. Der.', tie:'Tras. Izq. Ext.', tii:'Tras. Izq. Int.',
-  tdi:'Tras. Der. Int.', tde:'Tras. Der. Ext.', cie:'Cen. Izq. Ext.', cii:'Cen. Izq. Int.',
-  cdi:'Cen. Der. Int.', cde:'Cen. Der. Ext.', ra:'Auxilio', ra2:'Auxilio 2'
-})[p] || p;
-
 router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), async (req, res, next) => {
   try {
     const { ot_id } = req.body;
@@ -685,30 +684,38 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
     // ni cubiertas salientes que mandar a ningún lado. Solo km y descripción.
     const cierreReducido = !tienePermiso(req.user, 'ot_cerrar');
 
-    // Cubiertas de la OT (entrantes) con sus salientes
-    const [otCubiertas, unitTires] = await Promise.all([
-      sql`
-        SELECT oc.posicion, c_in.fuego AS fuego_in, c_out.fuego AS fuego_out
-        FROM ot_cubiertas oc
-        JOIN cubiertas c_in ON oc.cubierta_id = c_in.id
-        LEFT JOIN cubiertas c_out ON oc.cubierta_anterior_id = c_out.id
-        WHERE oc.ot_id = ${otIdInt} AND oc.posicion IS NOT NULL
-        ORDER BY oc.posicion
-      `,
-      ot.unidad_id
-        ? sql`SELECT fuego, posicion FROM cubiertas WHERE micro_id = ${ot.unidad_id} AND activo = 1 AND posicion IS NOT NULL`
-        : Promise.resolve([]),
-    ]);
+    // El diagrama se arma con el mismo plan que va a ejecutar el cierre: lo que
+    // entra por la OT contra lo que está montado en la unidad en este momento.
+    const estadoUnidad = await leerEstadoParaCierre(ot);
+    const plan = planificarCierre({ ot, ...estadoUnidad });
+    const fuegos = (cubs) => cubs.map(c => c.fuego || '-').join(' / ');
 
-    // Mapas: entrantes (OT), salientes (OT), actuales (unidad)
+    // Mapas: entrantes (OT), salientes (lo que hoy ocupa ese lugar), actuales (unidad)
     const mapaIn  = {};  // pos → fuego nuevo (entrante)
-    const mapaOut = {};  // pos → fuego saliente (si se registró anterior)
-    otCubiertas.forEach(c => {
-      mapaIn[c.posicion]  = c.fuego_in  || 'S/N';
-      if (c.fuego_out) mapaOut[c.posicion] = c.fuego_out;
+    const mapaOut = {};  // pos → fuego(s) que dejan esa posición
+    plan.entrantes.forEach(f => {
+      mapaIn[f.posicion] = f.fuego || 'S/N';
+      const ocupan = estadoUnidad.montadas.filter(t => t.posicion === f.posicion && t.id !== f.cubierta_id);
+      if (ocupan.length) mapaOut[f.posicion] = fuegos(ocupan);
     });
-    const mapaUnidad = {}; // pos → fuego actualmente montado
-    unitTires.forEach(t => { mapaUnidad[t.posicion] = t.fuego || '-'; });
+    const mapaUnidad = {}; // pos → fuego(s) actualmente montados
+    estadoUnidad.montadas.forEach(t => {
+      mapaUnidad[t.posicion] = fuegos(estadoUnidad.montadas.filter(x => x.posicion === t.posicion));
+    });
+
+    // Si el plan no se puede ejecutar se explica por qué y no se ofrece cerrar:
+    // el cierre lo rechazaría igual, pero recién después de completar el formulario.
+    const avisoNoCierra = plan.errores.length ? `
+          <div style="margin:0 0 12px 0; padding:8px 10px; background:rgba(198,40,40,0.10); border-left:3px solid #c62828; font-size:12.5px;">
+            <strong>Esta OT todavía no se puede cerrar:</strong>
+            <ul style="margin:6px 0 6px 18px; padding:0;">${plan.errores.map(e => `<li>${escapeHtml(e)}</li>`).join('')}</ul>
+            Corregí las cubiertas desde <strong>CARGAR</strong> y volvé a cerrarla.
+          </div>` : '';
+    const botones = (texto, ancho) => `
+          <div style="margin-top:18px; display:flex; gap:10px;">
+            ${plan.errores.length ? '' : `<input type="button" value="${texto}" onclick="confirmar_cerrar(${otIdInt})" style="width:${ancho}px;font-size:13px;" />`}
+            <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
+          </div>`;
 
     const tipoUnidad = parseInt(ot.tipo_unidad) || 1;
 
@@ -725,7 +732,7 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
     // Genera rueda con dos filas si hay cambio, o una fila si solo está montada
     const mkRuedaRO = (pos) => {
       const entrante = mapaIn[pos];
-      const saliente = mapaOut[pos] || (entrante ? mapaUnidad[pos] : null);
+      const saliente = mapaOut[pos] || null;
       const actual   = mapaUnidad[pos];
 
       if (entrante) {
@@ -796,6 +803,7 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
 
         <!-- Columna izquierda: formulario -->
         <div style="flex:1; min-width:240px;">
+          ${avisoNoCierra}
           ${cierreReducido ? `
           <p style="margin:0 0 10px 0; padding:8px 10px; background:rgba(46,125,50,0.12); border-left:3px solid #2e7d32; font-size:12.5px;">
             Cierre de <strong>Preventivo</strong>. Detallá abajo qué se revisó y si quedó todo OK.
@@ -810,11 +818,11 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
           <p style="margin:10px 0 3px 0;"><strong>Descripción del preventivo:</strong> <span style="color:#c00;">*</span></p>
           <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:90px; resize:vertical;"
                     placeholder="Ej: se revisó presión en las 6 posiciones, todo OK"></textarea>
-
-          <div style="margin-top:18px; display:flex; gap:10px;">
-            <input type="button" value="Cerrar Preventivo" onclick="confirmar_cerrar(${otIdInt})" style="width:150px;font-size:13px;" />
-            <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
-          </div>
+          ${plan.salientes.length ? `
+          <p style="margin:10px 0 0 0; font-size:12px; color:#888;">
+            Las cubiertas que salen (${escapeHtml(fuegos(plan.salientes))}) van al almacén <strong>${ALMACEN_A_VERIFICAR}</strong>.
+          </p>` : ''}
+          ${botones('Cerrar Preventivo', 150)}
           ` : `
           <p style="margin:0 0 5px 0;"><strong>Tareas a Realizar:</strong></p>
           <div style="display:grid; grid-template-columns:1fr 1fr; gap:2px 16px; margin-bottom:12px; font-size:12px;">
@@ -861,11 +869,7 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
           <p style="margin:10px 0 3px 0;"><strong>Descripción del cierre:</strong></p>
           <textarea id="descripcion_cierre" style="width:100%; max-width:340px; height:60px; resize:vertical;"
                     placeholder="Opcional">${escapeHtml(ot.descripcion_cierre || '')}</textarea>
-
-          <div style="margin-top:18px; display:flex; gap:10px;">
-            <input type="button" value="Cerrar OT" onclick="confirmar_cerrar(${otIdInt})" style="width:120px;font-size:13px;" />
-            <input type="button" value="Cancelar" onclick="close_carga();" style="width:100px;font-size:13px;" />
-          </div>
+          ${botones('Cerrar OT', 120)}
           `}
         </div>
 
@@ -913,7 +917,9 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
     }
 
     const destinoEsCeamse = destino_almacen_id === 'ceamse';
-    const destinoAlmacenId = (!destinoEsCeamse && parseInt(destino_almacen_id)) ? parseInt(destino_almacen_id) : 1;
+    // Puede no venir: el formulario con el que el gomero cierra un preventivo no
+    // tiene selector de destino. Se resuelve más abajo, cuando se sabe si hace falta.
+    const destinoElegido = destinoEsCeamse ? null : (parseInt(destino_almacen_id) || null);
 
     const kmCierre = parseInt(km_actual) || 0;
 
@@ -930,116 +936,65 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
           alinear: false, balanceo: false, armar: false, preventivo: true,
         };
 
-    await sql`UPDATE ots SET
-      estado = 1,
-      factura = ${cierraTodo ? (factura || null) : null},
-      costo = ${cierraTodo ? (costo || null) : null},
-      km = ${kmCierre},
-      rotacion = ${trabajos.rotacion},
-      arreglo  = ${trabajos.arreglo},
-      cambio   = ${trabajos.cambio},
-      alinear  = ${trabajos.alinear},
-      balanceo = ${trabajos.balanceo},
-      armar    = ${trabajos.armar},
-      preventivo = ${trabajos.preventivo},
-      descripcion_cierre = ${descripcion},
-      cerrado_por = ${req.user?.usuario || null},
-      cerrado_en = NOW()
-    WHERE id = ${otIdInt}`;
+    const ot = otPrevia[0];
+    const unidad_id = ot.unidad_id;
 
-    const unidad_id = otPrevia[0].unidad_id;
-    const otFecha = otPrevia[0].fecha || null;
-    if (unidad_id) {
-      // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar
-      // un kilometraje más reciente cargado a mano en Carga de Km.
-      await sql`UPDATE micro SET km_actual = ${kmCierre}
-        WHERE id = ${unidad_id} AND ${kmCierre} > COALESCE(km_actual, 0)`;
-    }
+    // Qué cubiertas se mueven se decide con lo que hay montado ahora en la
+    // unidad, y se valida antes de escribir nada: si el plan no cierra, la OT
+    // queda como estaba y el usuario ve por qué.
+    const estadoUnidad = await leerEstadoParaCierre(ot);
+    const plan = planificarCierre({
+      ot, km: kmCierre, arreglo: trabajos.arreglo, destinoEsCeamse, ...estadoUnidad,
+    });
+    if (plan.errores.length) return res.status(400).send(plan.errores.join('\n'));
 
-    const cambios = await sql`
-      SELECT cubierta_id, cubierta_anterior_id, posicion
-      FROM ot_cubiertas
-      WHERE ot_id = ${otIdInt} AND posicion IS NOT NULL AND cubierta_id IS NOT NULL
-    `;
+    // Sin destino elegido, lo que sale va a "A VERIFICAR" (antes caía en el
+    // almacén id 1, que es el de pruebas). Solo se busca, o se crea, si algo sale.
+    const sinDestino = !destinoEsCeamse && !destinoElegido && plan.salientes.length > 0;
+    const destinoAlmacenId = sinDestino ? await almacenAVerificar() : destinoElegido;
 
-    // IDs de todas las cubiertas que ENTRAN en esta OT (para detectar rotaciones)
-    const incomingIds = new Set(cambios.map(c => c.cubierta_id));
-
-    // Paso 1: colocar todas las cubiertas entrantes en sus nuevas posiciones.
-    for (const c of cambios) {
-      await sql`
-        UPDATE cubiertas SET micro_id = ${unidad_id}, posicion = ${c.posicion}, almacen_id = NULL, gomeria_id = NULL
-        WHERE id = ${c.cubierta_id}
-      `;
-    }
-
-    // Paso 2: manejar las cubiertas salientes
-    // Si una cubierta "sale" de una posición pero es TAMBIÉN una "entrante" en otra
-    // posición (rotación), no se manda al destino — ya fue movida en el paso 1.
-    for (const c of cambios) {
-      if (c.cubierta_anterior_id) {
-        if (!incomingIds.has(c.cubierta_anterior_id)) {
-          // Sale de la unidad → enviar al destino elegido
-          if (destinoEsCeamse) {
-            await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = NULL, activo = 0 WHERE id = ${c.cubierta_anterior_id}`;
-          } else {
-            await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = ${destinoAlmacenId} WHERE id = ${c.cubierta_anterior_id}`;
-          }
-        }
-        // Si está en incomingIds es una rotación: ya fue reubicada en el paso 1, no hacer nada.
-      } else if (unidad_id) {
-        // Sin anterior registrado: buscar si hay otra cubierta en esa posición (excluir rotantes)
-        const incomingArr = [...incomingIds];
-        if (destinoEsCeamse) {
-          await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = NULL, activo = 0
-            WHERE micro_id = ${unidad_id} AND posicion = ${c.posicion}
-            AND id != ${c.cubierta_id} AND NOT (id = ANY(${incomingArr}))`;
-        } else {
-          await sql`UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = ${destinoAlmacenId}
-            WHERE micro_id = ${unidad_id} AND posicion = ${c.posicion}
-            AND id != ${c.cubierta_id} AND NOT (id = ANY(${incomingArr}))`;
-        }
+    // Todo el cierre viaja en una sola transacción. Antes eran decenas de
+    // queries sueltas: si una fallaba a mitad de camino la OT quedaba cerrada
+    // con las cubiertas a medio mover, y ya no se la podía volver a cerrar.
+    let resultados;
+    try {
+      resultados = await sql.transaction([
+        sql`UPDATE ots SET
+          estado = 1,
+          factura = ${cierraTodo ? (factura || null) : null},
+          costo = ${cierraTodo ? (costo || null) : null},
+          km = ${kmCierre},
+          rotacion = ${trabajos.rotacion},
+          arreglo  = ${trabajos.arreglo},
+          cambio   = ${trabajos.cambio},
+          alinear  = ${trabajos.alinear},
+          balanceo = ${trabajos.balanceo},
+          armar    = ${trabajos.armar},
+          preventivo = ${trabajos.preventivo},
+          descripcion_cierre = ${descripcion},
+          cerrado_por = ${req.user?.usuario || null},
+          cerrado_en = NOW()
+        WHERE id = ${otIdInt} AND estado = 0 AND anulada = FALSE
+        RETURNING id`,
+        // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar
+        // un kilometraje más reciente cargado a mano en Carga de Km.
+        ...(unidad_id ? [sql`UPDATE micro SET km_actual = ${kmCierre}
+          WHERE id = ${unidad_id} AND ${kmCierre} > COALESCE(km_actual, 0)`] : []),
+        ...consultasDeCierre(plan, { ot, destinoEsCeamse, destinoAlmacenId }),
+      ]);
+    } catch (e) {
+      // 23505 = índice único. Dos cierres a la vez sobre la misma unidad: el
+      // segundo planificó sobre un estado que ya cambió. No se aplicó nada.
+      if (e && e.code === '23505') {
+        return res.status(409).send('La unidad cambió mientras se cerraba la OT. Volvé a intentarlo.');
       }
+      throw e;
     }
-
-    // Paso 3: registrar el historial de vida de las cubiertas involucradas.
-    // Primero los retiros y después las colocaciones: en una rotación la misma
-    // cubierta sale de una posición y entra en otra dentro de la misma OT, y el
-    // orden de los eventos es lo que define dónde se corta cada tramo de km.
-    for (const c of cambios) {
-      if (!c.cubierta_anterior_id) continue;
-      const saleDeLaUnidad = !incomingIds.has(c.cubierta_anterior_id);
-      await registrarEvento({
-        cubierta_id: c.cubierta_anterior_id, tipo: 'retiro', fecha: otFecha,
-        micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
-        detalle: saleDeLaUnidad
-          ? (destinoEsCeamse ? 'Sale de la unidad — baja por CEAMSE' : 'Sale de la unidad al almacén')
-          : 'Cambia de posición dentro de la unidad (rotación)',
-      });
-      if (trabajos.arreglo) {
-        await registrarEvento({
-          cubierta_id: c.cubierta_anterior_id, tipo: 'reparacion', fecha: otFecha,
-          micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
-          detalle: 'Arreglo registrado en la OT N° ' + otIdInt,
-        });
-      }
-      if (saleDeLaUnidad && destinoEsCeamse) {
-        await registrarEvento({
-          cubierta_id: c.cubierta_anterior_id, tipo: 'baja', fecha: otFecha,
-          micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
-          detalle: 'Baja por CEAMSE',
-        });
-      }
-    }
-    for (const c of cambios) {
-      await registrarEvento({
-        cubierta_id: c.cubierta_id, tipo: 'colocacion', fecha: otFecha,
-        micro_id: unidad_id, posicion: c.posicion, km_unidad: kmCierre, ot_id: otIdInt,
-        detalle: 'Entra por OT N° ' + otIdInt,
-      });
-    }
+    // Otro pedido la cerró entre la lectura y la escritura (doble clic en Cerrar).
+    if (!resultados[0].length) return res.status(400).send('La OT ya está cerrada');
 
     const [uni] = unidad_id ? await sql`SELECT unidad FROM micro WHERE id = ${unidad_id}` : [null];
+    const conFuego = (c) => `${nombrePosicion(c.posicion)}: ${c.fuego || '#' + (c.cubierta_id || c.id)}`;
     await auditoria.registrar({
       req, accion: 'cerrar', entidad: 'ot', entidad_id: otIdInt,
       descripcion: `Cerró la OT N° ${otIdInt}` + (uni ? ` — Interno ${uni.unidad}` : '')
@@ -1048,7 +1003,14 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
         { campo: 'estado', antes: 'Pendiente', despues: 'Cerrada' },
         ...auditoria.diff(otPrevia[0], { km: kmCierre, ...trabajos, descripcion_cierre: descripcion },
           ['km', ...TRABAJOS_REALES, 'preventivo', 'descripcion_cierre']),
-        ...(cambios.length ? [{ campo: 'cubiertas', antes: null, despues: cambios.length + ' posición(es) modificada(s)' }] : []),
+        // Qué salió y qué entró, con número de fuego: es lo que después permite
+        // reconstruir desde el log cómo quedó la unidad.
+        ...(plan.entrantes.length || plan.salientes.length ? [{
+          campo: 'cubiertas',
+          antes: plan.salientes.map(conFuego).join(', ') || null,
+          despues: plan.entrantes.map(conFuego).join(', ') || null,
+        }] : []),
+        ...(sinDestino ? [{ campo: 'destino de las salientes', antes: null, despues: ALMACEN_A_VERIFICAR + ' (no se eligió destino)' }] : []),
       ],
     });
 
@@ -1064,6 +1026,13 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
 
     const fechaISO = parseFecha(fecha);
 
+    // Las cubiertas se validan antes de crear la OT: si alguna no se puede usar,
+    // que el usuario lo vea y no quede una OT cargada a medias.
+    const cambios = normalizarCambios(req.body.cambios_ot_json);
+    const filas = cambios
+      ? await validarCubiertasDeOt({ unidadId: parseInt(unidad_id) || null, cambios })
+      : [];
+
     const result = await sql`
       INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura, solicitado_por)
       VALUES (
@@ -1076,26 +1045,7 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
     `;
     const ot_id = result[0].id;
 
-    const cambiosJson = req.body.cambios_ot_json;
-    if (cambiosJson) {
-      try {
-        const cambios = JSON.parse(cambiosJson);
-        for (const [posicion, cubierta_id] of Object.entries(cambios)) {
-          if (!cubierta_id) continue;
-          const anterior = await sql`
-            SELECT id FROM cubiertas
-            WHERE micro_id = ${parseInt(unidad_id)||null} AND posicion = ${posicion} AND activo = 1
-            LIMIT 1
-          `;
-          const anterior_id = anterior[0]?.id || null;
-          await sql`
-            INSERT INTO ot_cubiertas (ot_id, cubierta_id, posicion, cubierta_anterior_id)
-            VALUES (${ot_id}, ${parseInt(cubierta_id)}, ${posicion}, ${anterior_id})
-            ON CONFLICT (ot_id, cubierta_id) DO UPDATE SET posicion = EXCLUDED.posicion, cubierta_anterior_id = EXCLUDED.cubierta_anterior_id
-          `;
-        }
-      } catch(e) { /* JSON inválido, ignorar */ }
-    }
+    if (filas.length) await guardarCubiertasDeOt({ otId: ot_id, filas });
 
     if (pinchadura === '1') {
       // En Vercel serverless hay que esperar el envío antes de responder,
@@ -1118,7 +1068,7 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
           gomeria: gomeriaRow[0]?.nombre,
           fecha,
           trabajos: { rotacion, arreglo, cambio, alinear, balanceo, armar },
-          cambios: cubs.map(c => ({ ...c, posicion: posNombreCierre(c.posicion) })),
+          cambios: cubs.map(c => ({ ...c, posicion: nombrePosicion(c.posicion) })),
           observaciones,
           solicitadoPor: req.user?.usuario,
         });
@@ -1159,6 +1109,15 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
 
     const antesOt = await sql`SELECT * FROM ots WHERE id = ${otIdInt}`;
     if (antesOt.length && antesOt[0].anulada) return res.status(400).send('La OT está anulada');
+    // Una OT cerrada ya movió sus cubiertas: reescribirle las filas (desde una
+    // pestaña que quedó abierta, por ejemplo) solo falsea lo que dejó registrado.
+    if (antesOt.length && antesOt[0].estado == 1) return res.status(400).send('La OT ya está cerrada');
+
+    // Las cubiertas se validan antes de tocar la OT, para no guardar nada a medias.
+    const cambios = normalizarCambios(req.body.cambios_ot_json);
+    const filas = cambios
+      ? await validarCubiertasDeOt({ unidadId: parseInt(unidad_id) || null, cambios })
+      : null;
 
     await sql`
       UPDATE ots SET
@@ -1172,26 +1131,9 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
       WHERE id = ${otIdInt} AND estado = 0
     `;
 
-    const cambiosJson = req.body.cambios_ot_json;
-    if (cambiosJson) {
-      try {
-        const cambios = JSON.parse(cambiosJson);
-        for (const [posicion, cubierta_id] of Object.entries(cambios)) {
-          if (!cubierta_id) continue;
-          const anterior = await sql`
-            SELECT id FROM cubiertas
-            WHERE micro_id = ${parseInt(unidad_id)||null} AND posicion = ${posicion} AND activo = 1
-            LIMIT 1
-          `;
-          const anterior_id = anterior[0]?.id || null;
-          await sql`
-            INSERT INTO ot_cubiertas (ot_id, cubierta_id, posicion, cubierta_anterior_id)
-            VALUES (${otIdInt}, ${parseInt(cubierta_id)}, ${posicion}, ${anterior_id})
-            ON CONFLICT (ot_id, cubierta_id) DO UPDATE SET posicion = EXCLUDED.posicion, cubierta_anterior_id = EXCLUDED.cubierta_anterior_id
-          `;
-        }
-      } catch(e) { /* JSON inválido, ignorar */ }
-    }
+    // filas en null = el formulario no mandó cubiertas y no se tocan. Una lista
+    // vacía sí es un dato: en pantalla la OT quedó sin cubiertas.
+    if (filas && antesOt.length) await guardarCubiertasDeOt({ otId: otIdInt, filas });
 
     const despuesOt = {
       fecha: fechaISO, gomeria_id: parseInt(gomeria_id) || null, unidad_id: parseInt(unidad_id) || null,

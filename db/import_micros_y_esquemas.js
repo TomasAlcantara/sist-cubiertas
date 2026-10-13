@@ -7,7 +7,10 @@
  *  3. Asigna micro_id + posicion en cubiertas
  *
  * Uso:
- *   node db/import_micros_y_esquemas.js [--dry-run]
+ *   node db/import_micros_y_esquemas.js [--dry-run | --forzar]
+ *
+ * Fue la carga inicial y ya se aplicó en abril de 2026. Sin --dry-run exige
+ * --forzar: ver el comentario al principio de main().
  */
 const fs   = require('fs');
 const path = require('path');
@@ -28,6 +31,15 @@ function inferirTipo(posiciones) {
 
 async function main() {
   if (DRY) console.log('=== DRY RUN ===\n');
+
+  // Re-correr esta carga vuelve a montar las cubiertas del sistema viejo encima
+  // de lo que hoy tienen las unidades, sin desalojar lo que haya en cada
+  // posición. Por eso no corre de verdad si no se lo piden a propósito.
+  if (!DRY && !process.argv.includes('--forzar')) {
+    console.error('Esta carga inicial ya se aplicó (abril de 2026) y pisa las posiciones actuales de las cubiertas.');
+    console.error('Para ver qué haría: --dry-run. Para ejecutarla igual: --forzar.');
+    process.exit(1);
+  }
 
   // Leer CSV
   const lines = fs.readFileSync(CSV, 'utf8').trim().split('\n').slice(1);

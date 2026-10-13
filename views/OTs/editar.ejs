@@ -24,7 +24,11 @@ const body = `
 
 <script>
 var cambios_ot = ${JSON.stringify(cambiosIniciales)};
+// Lo que se ve asignado en cada posición (id y fuego). Va siempre a la par de cambios_ot.
+var seleccion = ${JSON.stringify(cubCargadas)};
 var current_pos = '';
+var unidadActual = {};     // posición → cubierta montada hoy en la unidad elegida
+var unidadCargada = null;  // unidad a la que corresponden las asignaciones en pantalla
 
 var LAYOUTS = {
   1: { del:['ddi','ddd'], tr1:['tie','tde'],             tr2:[], aux:['ra'],        bodyH:140 },
@@ -68,31 +72,62 @@ function renderDiagrama(tipo) {
   document.getElementById('diagrama-wrap').innerHTML = h;
 }
 
+// Deja la posición mostrando lo que le toca: su asignación, lo montado en la unidad, o vacía.
+function pintarPos(pos) {
+  var el = document.getElementById('fn-'+pos);
+  var p  = document.getElementById('pos-'+pos);
+  if (!el || !p) return;
+  var sel = seleccion[pos];
+  var act = unidadActual[pos];
+  if (sel)      { el.innerHTML = sel.fuego || '-'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
+  else if (act) { el.innerHTML = act.fuego || '-'; el.classList.remove('vacia'); p.classList.remove('seleccionada'); }
+  else          { el.innerHTML = '+';              el.classList.add('vacia');    p.classList.remove('seleccionada'); }
+}
+
+function clearPos(pos) {
+  delete cambios_ot[pos];
+  delete seleccion[pos];
+  pintarPos(pos);
+}
+
 function cargar_tires(unidad_id) {
+  // Las asignaciones valen para una unidad: si se cambia, se vacían. Si no, la OT
+  // se guardaría con las cubiertas de la unidad anterior y el cierre las montaría en esta.
+  if (unidadCargada !== null && String(unidad_id) !== String(unidadCargada)) {
+    cambios_ot = {};
+    seleccion = {};
+  }
+  unidadCargada = unidad_id;
+  unidadActual = {};
   if (!unidad_id) {
     document.getElementById('diagrama-wrap').innerHTML = '<p style="color:var(--text-muted); font-size:12px; text-align:center;">Seleccione una unidad para ver el diagrama</p>';
     return;
   }
+  // Mientras llega la respuesta no queda a la vista el diagrama de la unidad
+  // anterior, con asignaciones marcadas que ya no existen.
+  document.getElementById('diagrama-wrap').innerHTML = '<p style="color:var(--text-muted); font-size:12px;">Cargando...</p>';
   $.ajax({ type:'GET', url:'/ajax/cubiertas_unidad?unidad_id='+unidad_id,
+    error: function() {
+      if (String(unidad_id) !== String(unidadCargada)) return;
+      document.getElementById('diagrama-wrap').innerHTML = '<p style="color:var(--text-muted); font-size:12px;">No se pudo cargar el diagrama de la unidad. Volvé a elegirla.</p>';
+    },
     success: function(data) {
+      // Si mientras tanto se eligió otra unidad, esta respuesta ya no sirve.
+      if (String(unidad_id) !== String(unidadCargada)) return;
       var tipo = data.tipo_unidad || 1;
       renderDiagrama(tipo);
+      unidadActual = {};
       (data.cubiertas || []).forEach(function(c) {
-        var el = document.getElementById('fn-'+c.posicion);
-        if (el) { el.innerHTML = c.fuego || '-'; el.classList.remove('vacia'); }
+        unidadActual[c.posicion] = { id: c.id, fuego: c.fuego };
       });
-      var cargadas = ${JSON.stringify(cubCargadas)};
-      Object.keys(cargadas).forEach(function(pos) {
-        var el = document.getElementById('fn-'+pos);
-        var p  = document.getElementById('pos-'+pos);
-        if (el) { el.innerHTML = cargadas[pos].fuego || '-'; el.classList.remove('vacia'); }
-        if (p)  { p.classList.add('seleccionada'); }
-      });
+      Object.keys(unidadActual).concat(Object.keys(seleccion)).forEach(pintarPos);
     }
   });
 }
 
 function abrir_modal(pos) {
+  // Si ya tiene asignación, el click la deshace
+  if (cambios_ot[pos] !== undefined) { clearPos(pos); return; }
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
   document.getElementById('filter_list').style.display = 'block';
@@ -116,11 +151,19 @@ function filtrar_ot() {
 }
 
 function seleccionar_ot(id, fuego) {
+  var posNombres = {ddi:'Del. Izq.',ddd:'Del. Der.',tie:'Tras. Izq. Ext.',tii:'Tras. Izq. Int.',
+    tdi:'Tras. Der. Int.',tde:'Tras. Der. Ext.',cie:'Cen. Izq. Ext.',cii:'Cen. Izq. Int.',
+    cdi:'Cen. Der. Int.',cde:'Cen. Der. Ext.',ra:'Auxilio',ra2:'Auxilio 2'};
+  for (var pos in cambios_ot) {
+    if (cambios_ot[pos] == id && pos !== current_pos) {
+      alert('Esta cubierta ya está asignada en: ' + (posNombres[pos] || pos));
+      cerrar_modal();
+      return;
+    }
+  }
   cambios_ot[current_pos] = id;
-  var el = document.getElementById('fn-'+current_pos);
-  if (el) { el.innerHTML = fuego || id; el.classList.remove('vacia'); }
-  var p = document.getElementById('pos-'+current_pos);
-  if (p) p.classList.add('seleccionada');
+  seleccion[current_pos] = { id: id, fuego: fuego || id };
+  pintarPos(current_pos);
   cerrar_modal();
 }
 
@@ -146,7 +189,7 @@ function guardar_ot() {
       if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al guardar la OT');
     },
-    error: function(xhr) { alert('Error del servidor: ' + xhr.status + ' ' + xhr.responseText); }
+    error: function(xhr) { alert(xhr.responseText || ('Error del servidor: ' + xhr.status)); }
   });
 }
 
@@ -234,6 +277,7 @@ $(function() {
 
   <div class="form-section">
     <div class="form-section-title">Cambio de cubiertas — clic en posición para cambiar</div>
+    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Clic en una asignada para deshacer &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
     <div id="diagrama-wrap" style="text-align:center; padding:10px 0;">
       <p style="color:var(--text-muted); font-size:12px;">Cargando...</p>
     </div>

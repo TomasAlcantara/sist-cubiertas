@@ -234,7 +234,8 @@ router.post('/editar', requirePerm('cubiertas_editar'), async (req, res, next) =
         fuego = ${fuego.trim()},
         modelo_id = ${parseInt(modelo_id) || null},
         medida_id = ${parseInt(medida_id) || null},
-        almacen_id = ${parseInt(almacen_id) || null},
+        -- Una cubierta montada no está en ningún almacén: se ignora el del formulario
+        almacen_id = CASE WHEN micro_id IS NOT NULL THEN NULL ELSE ${parseInt(almacen_id) || null}::int END,
         km = ${parseInt(km) || 0},
         proveedor_id = ${parseInt(proveedor_id) || null},
         id_interno = ${id_interno?.trim() || null},

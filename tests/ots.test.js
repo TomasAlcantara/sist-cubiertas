@@ -9,6 +9,10 @@ const jwt = require('jsonwebtoken');
 
 jest.mock('../db', () => {
   const fn = jest.fn().mockResolvedValue([]);
+  // sql.transaction([...]) recibe las consultas ya armadas y devuelve, en orden,
+  // el resultado de cada una. Acá una "consulta" es la promesa que devolvió el
+  // mock de sql, así que alcanza con esperarlas todas.
+  fn.transaction = jest.fn((consultas) => Promise.all(consultas));
   return { sql: fn };
 });
 
@@ -25,6 +29,45 @@ function makeToken(tipo = 1, permisos) {
   if (permisos !== undefined) payload.permisos = permisos;
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
+
+// Texto de una llamada a sql`...`, en una línea y con un ? donde iba cada valor.
+const textoDe = (q) => (Array.isArray(q) ? q.join('?') : String(q)).replace(/\s+/g, ' ').trim();
+
+/**
+ * Base de mentira armada con reglas [texto, filas]: la primera regla cuyo texto
+ * aparezca en la consulta decide qué devuelve (o, si es un Error, con qué falla).
+ * Cada promesa lleva pegados el texto y los valores de su consulta, para poder
+ * mirar después qué viajó adentro de un sql.transaction([...]).
+ */
+function baseCon(reglas = []) {
+  sql.mockReset();
+  sql.mockImplementation((q, ...valores) => {
+    const texto = textoDe(q);
+    const regla = reglas.find(([clave]) => texto.includes(clave));
+    const filas = regla ? regla[1] : [];
+    const promesa = filas instanceof Error ? Promise.reject(filas) : Promise.resolve(filas);
+    promesa.catch(() => {});   // la espera quien la use; acá solo se evita el aviso de rechazo suelto
+    promesa.texto = texto;
+    promesa.valores = valores;
+    return promesa;
+  });
+}
+
+// Todas las consultas que se armaron, en orden, hayan ido o no en una transacción.
+const consultas = () => sql.mock.results.map(r => r.value).filter(p => p && p.texto);
+const consultaCon = (clave) => consultas().find(p => p.texto.includes(clave));
+const esEscritura = (p) => /^(INSERT|UPDATE|DELETE)/.test(p.texto);
+// Lo que viajó dentro de sql.transaction, en orden.
+const enTransaccion = () => sql.transaction.mock.calls.flatMap(([lote]) => lote);
+const comienzo = (p) => p.texto.split(' ').slice(0, 3).join(' ');
+
+// Los tests que provocan un rechazo a propósito pasan por el handler global, que
+// lo imprime por consola: se calla para que la salida muestre solo lo inesperado.
+const callarErrores = () => {
+  let espia;
+  beforeEach(() => { espia = jest.spyOn(console, 'error').mockImplementation(() => {}); });
+  afterEach(() => espia.mockRestore());
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -433,6 +476,8 @@ describe('POST /ajax/confirmar_cerrar_ot — quién puede cerrar qué', () => {
     sql.mockImplementation((q) => {
       const txt = Array.isArray(q) ? q.join(' ? ') : String(q);
       if (txt.includes('SELECT * FROM ots')) return Promise.resolve([ot]);
+      // El cierre pide RETURNING id para saber que fue este pedido el que la cerró
+      if (txt.includes('UPDATE ots SET') && ot) return Promise.resolve([{ id: ot.id }]);
       return Promise.resolve([]);
     });
   };
@@ -583,5 +628,527 @@ describe('Montar una cubierta no le cambia ningún estado', () => {
       .map(c => (Array.isArray(c[0]) ? c[0].join(' ? ') : String(c[0])))
       .find(q => q.includes('UPDATE cubiertas SET micro_id'));
     expect(update).not.toContain('estado');
+  });
+});
+
+// ─── Cubiertas de la OT: una sola por posición ────────────────
+// Guardar una OT hacía un upsert por (ot, cubierta): al elegir otra cubierta
+// para una posición ya cargada, la fila de la primera quedaba viva y el cierre
+// montaba las dos en el mismo lugar. Así quedó la unidad 5074 con 12 cubiertas
+// en 6 posiciones.
+const CUBIERTAS_ELEGIDAS = 'c.activo, c.micro_id, m.unidad';      // validarCubiertasDeOt: las de la OT
+const OCUPANTES = 'SELECT id, posicion FROM cubiertas';            // validarCubiertasDeOt: lo montado hoy
+const FILAS_DE_LA_OT = 'posicion_actual';                          // leerEstadoParaCierre: filas de la OT
+const MONTADAS = 'SELECT id, fuego, posicion FROM cubiertas';      // leerEstadoParaCierre: lo montado hoy
+const A_VERIFICAR = 'SELECT id, activo FROM almacen';              // almacenAVerificar
+
+const LIBRES = [
+  { id: 13220, fuego: '14291', activo: 1, micro_id: null, unidad: null },
+  { id: 13219, fuego: '14290', activo: 1, micro_id: null, unidad: null },
+];
+// Una fila de la OT tal como la devuelve leerEstadoParaCierre: libre, salvo que se diga dónde está.
+const fila = (cubierta_id, posicion, fuego, donde = {}) => ({
+  cubierta_id, posicion, fuego, activo: 1, micro_id: null, posicion_actual: null, unidad: null, ...donde,
+});
+
+describe('POST /ajax/actualizar_ot — cubiertas de la OT', () => {
+  callarErrores();
+  const OT = { id: 592, estado: 0, anulada: false, unidad_id: 399 };
+
+  const guardar = (extra = {}) => request(app)
+    .post('/ajax/actualizar_ot')
+    .set('Cookie', `token=${makeToken()}`)
+    .type('form')
+    .send({ ot_id: 592, fecha: '07/10/2026', unidad_id: 399, gomeria_id: 1, cambio: '1', ...extra });
+
+  test('guardar reemplaza el juego: borra lo que había e inserta lo de la pantalla, en una transacción', async () => {
+    baseCon([['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    const res = await guardar({ cambios_ot_json: '{"ddi":13220,"ddd":13219}' });
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('592');
+    expect(sql.transaction).toHaveBeenCalledTimes(1);
+    const lote = enTransaccion();
+    expect(lote.map(comienzo)).toEqual([
+      'DELETE FROM ot_cubiertas', 'INSERT INTO ot_cubiertas', 'INSERT INTO ot_cubiertas',
+    ]);
+    // El DELETE es de esta OT y no se lleva las filas sin posición
+    expect(lote[0].valores).toEqual([592]);
+    expect(lote[0].texto).toContain('posicion IS NOT NULL');
+    // Ninguna fila de cubiertas se escribe por fuera de la transacción
+    const sueltas = consultas().filter(p => esEscritura(p) && p.texto.includes('ot_cubiertas') && !lote.includes(p));
+    expect(sueltas).toHaveLength(0);
+  });
+
+  test('la "anterior" que anota es la que hoy ocupa esa posición', async () => {
+    baseCon([
+      ['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, LIBRES],
+      [OCUPANTES, [{ id: 13340, posicion: 'ddi' }]],
+    ]);
+    await guardar({ cambios_ot_json: '{"ddi":13220,"ddd":13219}' });
+    const filas = enTransaccion().filter(p => p.texto.startsWith('INSERT')).map(p => p.valores);
+    expect(filas).toEqual([[592, 13220, 'ddi', 13340], [592, 13219, 'ddd', null]]);
+  });
+
+  test('las cubiertas se validan antes de tocar la OT', async () => {
+    baseCon([['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    await guardar({ cambios_ot_json: '{"ddi":13220}' });
+    const orden = consultas().map(p => p.texto);
+    const valida = orden.findIndex(t => t.includes(CUBIERTAS_ELEGIDAS));
+    const actualiza = orden.findIndex(t => t.startsWith('UPDATE ots SET'));
+    expect(valida).toBeGreaterThan(-1);
+    expect(valida).toBeLessThan(actualiza);
+  });
+
+  test('{} es una OT sin cubiertas en pantalla: borra las filas', async () => {
+    baseCon([['SELECT * FROM ots', [OT]]]);
+    const res = await guardar({ cambios_ot_json: '{}' });
+    expect(res.status).toBe(200);
+    expect(enTransaccion().map(comienzo)).toEqual(['DELETE FROM ot_cubiertas']);
+  });
+
+  test('si el formulario no manda cubiertas, no las toca', async () => {
+    baseCon([['SELECT * FROM ots', [OT]]]);
+    const res = await guardar();
+    expect(res.status).toBe(200);
+    expect(sql.transaction).not.toHaveBeenCalled();
+    expect(consultaCon('ot_cubiertas')).toBeUndefined();
+  });
+
+  test('cubierta montada en otra unidad → 400 con el motivo, y no escribe nada', async () => {
+    // Lo que pasó con la OT 80: se armó para la unidad 153, se la cambió a la
+    // 267 y al cerrar se llevó puestas cuatro cubiertas de la 153.
+    baseCon([
+      ['SELECT * FROM ots', [OT]],
+      [CUBIERTAS_ELEGIDAS, [{ id: 6218, fuego: '7074', activo: 1, micro_id: 153, unidad: '153' }]],
+    ]);
+    const res = await guardar({ cambios_ot_json: '{"ddi":6218}' });
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('7074');
+    expect(res.text).toContain('unidad 153');
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('una cubierta montada en esta misma unidad sí se puede cargar (rotación)', async () => {
+    baseCon([
+      ['SELECT * FROM ots', [OT]],
+      [CUBIERTAS_ELEGIDAS, [{ id: 13221, fuego: '14292', activo: 1, micro_id: 399, unidad: '5074' }]],
+    ]);
+    const res = await guardar({ cambios_ot_json: '{"tde":13221}' });
+    expect(res.status).toBe(200);
+    expect(enTransaccion().map(comienzo)).toEqual(['DELETE FROM ot_cubiertas', 'INSERT INTO ot_cubiertas']);
+  });
+
+  test('cubierta dada de baja → 400', async () => {
+    baseCon([
+      ['SELECT * FROM ots', [OT]],
+      [CUBIERTAS_ELEGIDAS, [{ id: 13220, fuego: '14291', activo: 0, micro_id: null, unidad: null }]],
+    ]);
+    const res = await guardar({ cambios_ot_json: '{"ddi":13220}' });
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('14291');
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('cubierta que no existe → 400', async () => {
+    baseCon([['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, []]]);
+    const res = await guardar({ cambios_ot_json: '{"ddi":99999}' });
+    expect(res.status).toBe(400);
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test.each([
+    ['la misma cubierta en dos posiciones', '{"ddi":13220,"tie":13220}'],
+    ['una posición que no existe', '{"xyz":13220}'],
+    ['algo que no es JSON', '{ddi:'],
+  ])('%s → 400 y no escribe nada', async (_caso, json) => {
+    baseCon([['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    const res = await guardar({ cambios_ot_json: json });
+    expect(res.status).toBe(400);
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('OT cerrada → 400 y no le reescribe las cubiertas', async () => {
+    // Antes el UPDATE de la OT se frenaba con "AND estado = 0", pero las filas
+    // de cubiertas se regrababan igual desde una pestaña que hubiera quedado abierta.
+    baseCon([['SELECT * FROM ots', [{ ...OT, estado: 1 }]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    const res = await guardar({ cambios_ot_json: '{"ddi":13220}' });
+    expect(res.status).toBe(400);
+    expect(res.text).toMatch(/cerrada/);
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('si la base falla al guardar las cubiertas responde 500, ya no dice que guardó', async () => {
+    // El catch que estaba pensado para un JSON inválido también se tragaba esto.
+    baseCon([
+      ['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, LIBRES],
+      ['INSERT INTO ot_cubiertas', new Error('se cayó la conexión')],
+    ]);
+    const res = await guardar({ cambios_ot_json: '{"ddi":13220}' });
+    expect(res.status).toBe(500);
+  });
+});
+
+describe('POST /ajax/nueva_ot — cubiertas de la OT', () => {
+  callarErrores();
+
+  const crear = (extra = {}) => request(app)
+    .post('/ajax/nueva_ot')
+    .set('Cookie', `token=${makeToken()}`)
+    .type('form')
+    .send({ fecha: '08/10/2026', unidad_id: 399, gomeria_id: 1, cambio: '1', pinchadura: '0', rotura: '0', ...extra });
+
+  test('crea la OT y le guarda sus cubiertas con el id nuevo', async () => {
+    baseCon([['INSERT INTO ots', [{ id: 700 }]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    const res = await crear({ cambios_ot_json: '{"ddi":13220}' });
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('700');
+    const filas = enTransaccion().filter(p => p.texto.startsWith('INSERT INTO ot_cubiertas')).map(p => p.valores);
+    expect(filas).toEqual([[700, 13220, 'ddi', null]]);
+  });
+
+  test('con una cubierta que no se puede usar → 400 y la OT no se crea', async () => {
+    baseCon([
+      ['INSERT INTO ots', [{ id: 701 }]],
+      [CUBIERTAS_ELEGIDAS, [{ id: 6218, fuego: '7074', activo: 1, micro_id: 153, unidad: '153' }]],
+    ]);
+    const res = await crear({ cambios_ot_json: '{"ddi":6218}' });
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('unidad 153');
+    expect(consultaCon('INSERT INTO ots')).toBeUndefined();
+  });
+
+  test('una OT sin cubiertas no consulta ni abre una transacción de más', async () => {
+    baseCon([['INSERT INTO ots', [{ id: 702 }]]]);
+    const res = await crear({ cambios_ot_json: '{}' });
+    expect(res.text).toBe('702');
+    expect(sql.transaction).not.toHaveBeenCalled();
+    expect(consultaCon(CUBIERTAS_ELEGIDAS)).toBeUndefined();
+  });
+});
+
+// ─── Cierre: qué se mueve ─────────────────────────────────────
+// El cierre montaba todas las filas de la OT y solo sacaba la "anterior" anotada
+// al cargarla, con decenas de queries sueltas. Ahora decide con lo que hay
+// montado en ese momento y escribe todo junto o nada.
+describe('POST /ajax/confirmar_cerrar_ot — qué cubiertas se mueven', () => {
+  callarErrores();
+  const OT = {
+    id: 592, estado: 0, anulada: false, unidad_id: 399, fecha: '2026-10-07',
+    preventivo: false, rotacion: false, arreglo: false, cambio: true,
+    alinear: false, balanceo: false, armar: false,
+  };
+  const VIEJA_EN_DDI = { id: 13340, fuego: '14404', posicion: 'ddi' };
+
+  const escenario = ({ filas = [], montadas = [], reglas = [] } = {}) => baseCon([
+    ...reglas,
+    ['SELECT * FROM ots', [OT]],
+    [FILAS_DE_LA_OT, filas],
+    [MONTADAS, montadas],
+    ['UPDATE ots SET', [{ id: OT.id }]],
+  ]);
+  const cerrar = (extra = {}) => request(app)
+    .post('/ajax/confirmar_cerrar_ot')
+    .set('Cookie', `token=${makeToken(1, 'ot_ver,ot_cerrar')}`)
+    .type('form')
+    .send({ ot_id: 592, km_actual: 2362, cambio: '1', destino_almacen_id: '2', ...extra });
+  const paso = (p) => {
+    if (p.texto.startsWith('UPDATE ots SET')) return 'ot';
+    if (p.texto.startsWith('UPDATE micro SET km_actual')) return 'km';
+    if (p.texto.startsWith('UPDATE cubiertas SET micro_id = NULL')) return 'salen';
+    if (p.texto.startsWith('UPDATE cubiertas SET posicion = NULL')) return 'sueltan';
+    if (p.texto.startsWith('UPDATE cubiertas SET micro_id = ?')) return 'entra';
+    if (p.texto.startsWith('UPDATE ot_cubiertas SET cubierta_anterior_id')) return 'anterior';
+    if (p.texto.startsWith('INSERT INTO cubierta_eventos')) return 'evento:' + p.valores[1];
+    return p.texto;
+  };
+
+  test('todo el cierre viaja en una sola transacción', async () => {
+    escenario({ filas: [fila(13220, 'ddi', '14291')], montadas: [VIEJA_EN_DDI] });
+    const res = await cerrar();
+
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('ok');
+    expect(sql.transaction).toHaveBeenCalledTimes(1);
+    // La OT, el km, las cubiertas y el historial: o se escribe todo, o nada.
+    const lote = enTransaccion();
+    expect(lote.map(paso)).toEqual([
+      'ot', 'km', 'salen', 'entra', 'anterior', 'evento:retiro', 'evento:colocacion',
+    ]);
+    // Por fuera de la transacción solo queda el log de auditoría.
+    const sueltas = consultas().filter(p => esEscritura(p) && !lote.includes(p));
+    expect(sueltas.map(comienzo)).toEqual(['INSERT INTO auditoria']);
+  });
+
+  test('sale la que ocupa hoy la posición, aunque la OT no la tuviera anotada', async () => {
+    escenario({ filas: [fila(13220, 'ddi', '14291')], montadas: [VIEJA_EN_DDI] });
+    await cerrar();
+    const lote = enTransaccion();
+    // Al almacén elegido, y solo si sigue montada en esta unidad
+    expect(lote.find(p => paso(p) === 'salen').valores).toEqual([2, [13340], 399]);
+    expect(lote.find(p => paso(p) === 'entra').valores).toEqual([399, 'ddi', 13220]);
+    // Y la OT queda diciendo a quién reemplazó de verdad
+    expect(lote.find(p => paso(p) === 'anterior').valores).toEqual([13340, 592, 13220]);
+  });
+
+  test('rotación con recambio: primero salen, después sueltan su lugar las que rotan, recién ahí entran', async () => {
+    // Las delanteras pasan atrás, entran dos nuevas adelante y las traseras viejas salen.
+    const enUnidad = (posicion_actual) => ({ micro_id: 399, posicion_actual, unidad: '5074' });
+    escenario({
+      filas: [
+        fila(91, 'ddd', '13402'), fila(92, 'ddi', '13412'),
+        fila(1, 'tde', '12398', enUnidad('ddd')), fila(2, 'tdi', '12389', enUnidad('ddi')),
+      ],
+      montadas: [
+        { id: 1, fuego: '12398', posicion: 'ddd' }, { id: 2, fuego: '12389', posicion: 'ddi' },
+        { id: 3, fuego: '12394', posicion: 'tde' }, { id: 4, fuego: '11516', posicion: 'tdi' },
+      ],
+    });
+    const res = await cerrar();
+    expect(res.text).toBe('ok');
+    const lote = enTransaccion();
+    expect(lote.map(paso).filter(x => !x.startsWith('evento') && x !== 'anterior')).toEqual([
+      'ot', 'km', 'salen', 'sueltan', 'entra', 'entra', 'entra', 'entra',
+    ]);
+    expect(lote.find(p => paso(p) === 'salen').valores[1]).toEqual([3, 4]);
+    expect(lote.find(p => paso(p) === 'sueltan').valores[0]).toEqual([1, 2]);
+    // En el historial, los retiros van antes que las colocaciones
+    const eventos = lote.map(paso).filter(x => x.startsWith('evento'));
+    expect(eventos).toEqual([...Array(4).fill('evento:retiro'), ...Array(4).fill('evento:colocacion')]);
+  });
+
+  test('una OT sin cubiertas solo cierra la OT y actualiza el km', async () => {
+    escenario();
+    const res = await cerrar();
+    expect(res.text).toBe('ok');
+    expect(enTransaccion().map(paso)).toEqual(['ot', 'km']);
+  });
+
+  test('dos cubiertas cargadas para la misma posición → 400 y no se escribe nada', async () => {
+    escenario({ filas: [fila(13340, 'ddi', '14404'), fila(13220, 'ddi', '14291')] });
+    const res = await cerrar();
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('Del. Izq.');
+    expect(res.text).toContain('14404');
+    expect(res.text).toContain('14291');
+    expect(sql.transaction).not.toHaveBeenCalled();
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('entrante que figura montada en otra unidad → 400 y no se la lleva', async () => {
+    escenario({ filas: [fila(6218, 'ddi', '7074', { micro_id: 153, posicion_actual: 'tie', unidad: '153' })] });
+    const res = await cerrar();
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('unidad 153');
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('entrante dada de baja → 400', async () => {
+    escenario({ filas: [fila(13220, 'ddi', '14291', { activo: 0 })] });
+    const res = await cerrar();
+    expect(res.status).toBe(400);
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('si otro pedido la cerró primero (doble clic) → 400 y no lo asienta dos veces', async () => {
+    escenario({ filas: [fila(13220, 'ddi', '14291')], reglas: [['UPDATE ots SET', []]] });
+    const res = await cerrar();
+    expect(res.status).toBe(400);
+    expect(res.text).toMatch(/ya está cerrada/);
+    expect(consultaCon('INSERT INTO auditoria')).toBeUndefined();
+  });
+
+  test('el cierre solo toma una OT que siga abierta y sin anular', async () => {
+    escenario();
+    await cerrar();
+    const update = consultaCon('UPDATE ots SET estado = 1');
+    expect(update.texto).toContain('AND estado = 0 AND anulada = FALSE');
+    expect(update.texto).toContain('RETURNING id');
+  });
+
+  test('choque con un índice único → 409 para reintentar, sin asentar el cierre', async () => {
+    const choque = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    escenario({
+      filas: [fila(13220, 'ddi', '14291')],
+      reglas: [['UPDATE cubiertas SET micro_id = ?, posicion = ?', choque]],
+    });
+    const res = await cerrar();
+    expect(res.status).toBe(409);
+    expect(res.text).toMatch(/Volvé a intentarlo/);
+    expect(consultaCon('INSERT INTO auditoria')).toBeUndefined();
+  });
+
+  test('cualquier otro error de la base → 500', async () => {
+    escenario({
+      filas: [fila(13220, 'ddi', '14291')],
+      reglas: [['UPDATE cubiertas SET micro_id = ?, posicion = ?', new Error('se cayó la conexión')]],
+    });
+    const res = await cerrar();
+    expect(res.status).toBe(500);
+    expect(consultaCon('INSERT INTO auditoria')).toBeUndefined();
+  });
+
+  test('el log dice qué fuegos salieron y cuáles entraron', async () => {
+    escenario({ filas: [fila(13220, 'ddi', '14291')], montadas: [VIEJA_EN_DDI] });
+    await cerrar();
+    const cambios = JSON.parse(consultaCon('INSERT INTO auditoria').valores[6]);
+    expect(cambios).toContainEqual({ campo: 'cubiertas', antes: 'Del. Izq.: 14404', despues: 'Del. Izq.: 14291' });
+  });
+
+  test('CEAMSE: la saliente se da de baja y queda asentado en su historial', async () => {
+    escenario({ filas: [fila(13220, 'ddi', '14291')], montadas: [VIEJA_EN_DDI] });
+    const res = await cerrar({ destino_almacen_id: 'ceamse' });
+    expect(res.text).toBe('ok');
+    const lote = enTransaccion();
+    const salen = lote.find(p => paso(p) === 'salen');
+    expect(salen.texto).toContain('activo = 0');
+    expect(salen.valores).toEqual([[13340], 399]);
+    expect(lote.map(paso).filter(x => x.startsWith('evento'))).toEqual([
+      'evento:retiro', 'evento:baja', 'evento:colocacion',
+    ]);
+    // Dar de baja no es "sin destino": no va a buscar el almacén de verificación
+    expect(consultaCon(A_VERIFICAR)).toBeUndefined();
+  });
+});
+
+describe('POST /ajax/confirmar_cerrar_ot — salientes sin destino elegido', () => {
+  // El formulario con el que el gomero cierra un preventivo no tiene selector de
+  // destino. Las salientes caían en el almacén id 1 por un default del código, y
+  // en producción el id 1 es "PRUEBA 01".
+  const OT_PREVENTIVO = {
+    id: 7, estado: 0, anulada: false, unidad_id: 5, fecha: '2026-10-08',
+    preventivo: true, rotacion: false, arreglo: false, cambio: false,
+    alinear: false, balanceo: false, armar: false,
+  };
+  const conUnaSaliente = (reglas = []) => baseCon([
+    ...reglas,
+    ['SELECT * FROM ots', [OT_PREVENTIVO]],
+    [FILAS_DE_LA_OT, [fila(50, 'ddi', 'NUEVA')]],
+    [MONTADAS, [{ id: 8, fuego: 'VIEJA', posicion: 'ddi' }]],
+    ['UPDATE ots SET', [{ id: 7 }]],
+  ]);
+  const cerrarComoGomero = () => request(app)
+    .post('/ajax/confirmar_cerrar_ot')
+    .set('Cookie', `token=${makeToken(0, 'ot_ver,ot_cerrar_preventivo')}`)
+    .type('form')
+    .send({ ot_id: 7, km_actual: 250000, descripcion_cierre: 'Todo OK' });
+  const salida = () => enTransaccion().find(p => p.texto.startsWith('UPDATE cubiertas SET micro_id = NULL'));
+
+  test('van a "A VERIFICAR", no al almacén 1', async () => {
+    conUnaSaliente([[A_VERIFICAR, [{ id: 19, activo: 1 }]]]);
+    const res = await cerrarComoGomero();
+    expect(res.text).toBe('ok');
+    expect(consultaCon(A_VERIFICAR).valores).toEqual(['A VERIFICAR']);
+    expect(salida().valores).toEqual([19, [8], 5]);
+    // Ya existía y estaba activo: no hay nada que escribir en almacenes
+    expect(consultaCon('INSERT INTO almacen')).toBeUndefined();
+    expect(consultaCon('UPDATE almacen')).toBeUndefined();
+  });
+
+  test('si "A VERIFICAR" todavía no existe, lo crea', async () => {
+    conUnaSaliente([[A_VERIFICAR, []], ['INSERT INTO almacen', [{ id: 20 }]]]);
+    const res = await cerrarComoGomero();
+    expect(res.text).toBe('ok');
+    expect(consultaCon('INSERT INTO almacen').valores).toEqual(['A VERIFICAR']);
+    expect(salida().valores[0]).toBe(20);
+  });
+
+  test('si estaba dado de baja lo reactiva: en un almacén inactivo las cubiertas no se ven', async () => {
+    conUnaSaliente([[A_VERIFICAR, [{ id: 19, activo: 0 }]]]);
+    await cerrarComoGomero();
+    expect(consultaCon('UPDATE almacen SET activo = 1').valores).toEqual([19]);
+    expect(salida().valores[0]).toBe(19);
+  });
+
+  test('si no sale ninguna cubierta, ni lo busca ni lo crea', async () => {
+    baseCon([['SELECT * FROM ots', [OT_PREVENTIVO]], ['UPDATE ots SET', [{ id: 7 }]]]);
+    const res = await cerrarComoGomero();
+    expect(res.text).toBe('ok');
+    expect(consultaCon(A_VERIFICAR)).toBeUndefined();
+    expect(consultaCon('INSERT INTO almacen')).toBeUndefined();
+  });
+
+  test('con destino elegido se respeta y no se consulta "A VERIFICAR"', async () => {
+    conUnaSaliente();
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${makeToken(1, 'ot_ver,ot_cerrar')}`)
+      .type('form')
+      .send({ ot_id: 7, km_actual: 250000, preventivo: '1', destino_almacen_id: '2' });
+    expect(res.text).toBe('ok');
+    expect(salida().valores[0]).toBe(2);
+    expect(consultaCon(A_VERIFICAR)).toBeUndefined();
+  });
+
+  test('queda asentado en el log que no se eligió destino', async () => {
+    conUnaSaliente([[A_VERIFICAR, [{ id: 19, activo: 1 }]]]);
+    await cerrarComoGomero();
+    const cambios = JSON.parse(consultaCon('INSERT INTO auditoria').valores[6]);
+    expect(cambios.find(c => c.campo === 'destino de las salientes').despues).toContain('A VERIFICAR');
+  });
+
+  test('el modal le avisa al gomero a dónde van', async () => {
+    baseCon([
+      ['FROM ots o', [{ ...OT_PREVENTIVO, unidad: 'INT 5', tipo_unidad: 3, km_actual: 250000 }]],
+      [FILAS_DE_LA_OT, [fila(50, 'ddi', 'NUEVA')]],
+      [MONTADAS, [{ id: 8, fuego: 'VIEJA', posicion: 'ddi' }]],
+    ]);
+    const res = await request(app)
+      .post('/ajax/mb_cerrar_ot')
+      .set('Cookie', `token=${makeToken(0, 'ot_ver,ot_cerrar_preventivo')}`)
+      .type('form')
+      .send({ ot_id: 7 });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('Cerrar Preventivo');
+    expect(res.text).toMatch(/Las cubiertas que salen \(VIEJA\) van al almacén <strong>A VERIFICAR<\/strong>/);
+  });
+});
+
+describe('POST /ajax/mb_cerrar_ot — vista previa del cierre', () => {
+  const OT = {
+    id: 592, estado: 0, anulada: false, unidad_id: 399, unidad: '5074', tipo_unidad: 3,
+    km_actual: 2362, cambio: true,
+  };
+  const abrir = () => request(app)
+    .post('/ajax/mb_cerrar_ot')
+    .set('Cookie', `token=${makeToken(1, 'ot_ver,ot_cerrar')}`)
+    .type('form')
+    .send({ ot_id: 592 });
+
+  test('muestra como saliente a la que está montada hoy y ofrece cerrar', async () => {
+    baseCon([
+      ['FROM ots o', [OT]],
+      [FILAS_DE_LA_OT, [fila(13220, 'ddi', '14291')]],
+      [MONTADAS, [{ id: 13340, fuego: '14404', posicion: 'ddi' }]],
+    ]);
+    const res = await abrir();
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('14291');
+    expect(res.text).toContain('14404');
+    expect(res.text).toContain('value="Cerrar OT"');
+    expect(res.text).not.toContain('todavía no se puede cerrar');
+  });
+
+  test('una posición con dos cubiertas montadas las muestra a las dos', async () => {
+    // Mientras no se limpien los duplicados, que se vean en vez de elegir una al azar.
+    baseCon([
+      ['FROM ots o', [OT]],
+      [MONTADAS, [{ id: 6218, fuego: '7074', posicion: 'ddi' }, { id: 12671, fuego: '13574', posicion: 'ddi' }]],
+    ]);
+    const res = await abrir();
+    expect(res.text).toContain('7074 / 13574');
+  });
+
+  test('si la OT no se puede cerrar lo explica y no ofrece el botón', async () => {
+    baseCon([
+      ['FROM ots o', [OT]],
+      [FILAS_DE_LA_OT, [fila(13340, 'ddi', '14404'), fila(13220, 'ddi', '14291')]],
+    ]);
+    const res = await abrir();
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('todavía no se puede cerrar');
+    expect(res.text).toContain('Del. Izq.');
+    expect(res.text).not.toContain('value="Cerrar OT"');
+    expect(res.text).toContain('value="Cancelar"');
   });
 });

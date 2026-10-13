@@ -1,6 +1,6 @@
 /**
  * Script de PRUEBA: monta cubiertas de almacén en las posiciones de una unidad.
- * Uso: node db/test_montar_cubiertas.js [ot_id]
+ * Uso: node db/test_montar_cubiertas.js --forzar [ot_id]
  * Si no se pasa ot_id, usa la OT más reciente.
  */
 const { neon } = require('@neondatabase/serverless');
@@ -8,7 +8,14 @@ require('dotenv').config();
 const sql = neon(process.env.DATABASE_URL);
 
 async function main() {
-  const otId = parseInt(process.argv[2]) || null;
+  // El .env local apunta a producción: sin --forzar no toca nada, porque monta
+  // cubiertas reales del almacén en la unidad de la OT que encuentre.
+  if (!process.argv.includes('--forzar')) {
+    console.error('Script de prueba: monta cubiertas del almacén en una unidad de la base configurada en .env.');
+    console.error('Si es lo que querés, corrélo con --forzar.');
+    process.exit(1);
+  }
+  const otId = parseInt(process.argv.slice(2).find(a => /^\d+$/.test(a))) || null;
 
   // 1. Obtener la OT y su unidad
   const otQuery = otId
