@@ -1152,3 +1152,129 @@ describe('POST /ajax/mb_cerrar_ot — vista previa del cierre', () => {
     expect(res.text).toContain('value="Cancelar"');
   });
 });
+
+// ─── La OT cerrada es una foto ────────────────────────────────
+// El taller: "si cambio las cubiertas y cargo hoy, me modifica las órdenes
+// pasadas". La pantalla de una OT cerrada rellenaba lo que esa OT no había tocado
+// con lo que la unidad tiene montado hoy, y nunca mostraba la cubierta que salió.
+describe('POST /ajax/confirmar_cerrar_ot — guarda cómo queda la unidad', () => {
+  const OT = {
+    id: 592, estado: 0, anulada: false, unidad_id: 399, fecha: '2026-10-07',
+    preventivo: false, rotacion: false, arreglo: false, cambio: true,
+    alinear: false, balanceo: false, armar: false,
+  };
+  const cerrarCon = async (filas, montadas) => {
+    baseCon([
+      ['SELECT * FROM ots', [OT]], [FILAS_DE_LA_OT, filas], [MONTADAS, montadas],
+      ['UPDATE ots SET', [{ id: OT.id }]],
+    ]);
+    const res = await request(app)
+      .post('/ajax/confirmar_cerrar_ot')
+      .set('Cookie', `token=${makeToken(1, 'ot_ver,ot_cerrar')}`)
+      .type('form')
+      .send({ ot_id: 592, km_actual: 2362, cambio: '1', destino_almacen_id: '2' });
+    expect(res.text).toBe('ok');
+    const update = consultaCon('UPDATE ots SET estado = 1');
+    return { update, esquema: JSON.parse(update.valores.find(v => typeof v === 'string' && v.startsWith('{"antes"'))) };
+  };
+
+  test('el esquema viaja en el mismo UPDATE que cierra la OT', async () => {
+    const { update, esquema } = await cerrarCon(
+      [fila(13220, 'ddi', '14291')],
+      [{ id: 13340, fuego: '14404', posicion: 'ddi' }, { id: 9, fuego: 'B002', posicion: 'ddd' }]);
+
+    expect(update.texto).toContain('esquema_cierre = ?');
+    expect(enTransaccion()).toContain(update);
+    expect(esquema).toEqual({
+      antes:   { ddi: { id: 13340, fuego: '14404' }, ddd: { id: 9, fuego: 'B002' } },
+      despues: { ddi: { id: 13220, fuego: '14291' }, ddd: { id: 9, fuego: 'B002' } },
+    });
+  });
+
+  test('un preventivo sin cubiertas guarda la unidad tal como estaba ese día', async () => {
+    const { esquema } = await cerrarCon([], [{ id: 9, fuego: 'B002', posicion: 'ddd' }]);
+    expect(esquema.despues).toEqual({ ddd: { id: 9, fuego: 'B002' } });
+    expect(esquema.antes).toEqual(esquema.despues);
+  });
+});
+
+describe('GET /OTs/ver — una OT cerrada no se rellena con la unidad de hoy', () => {
+  const DE_HOY = 'FROM cubiertas c WHERE c.micro_id';     // lo que la unidad tiene montado hoy
+  const FILAS = 'fuego_anterior';                          // las cubiertas de la OT, con la que salió
+  const CERRADA = {
+    id: 394, numero: '394', estado: 1, anulada: false, fecha: '2026-09-02',
+    unidad_id: 140, unidad: '267', tipo_unidad: 3, preventivo: true,
+  };
+  const HOY = [{ id: 1, fuego: 'MONTADA-HOY', posicion: 'tie' }];
+  const ver = () => request(app).get('/OTs/ver?ot=394').set('Cookie', `token=${makeToken()}`);
+  const esquemaEnPantalla = (html) => JSON.parse(html.match(/var ESQUEMA\s+= (.*);/)[1]);
+
+  test('cerrada: ni consulta ni muestra lo que la unidad tiene montado hoy', async () => {
+    baseCon([['FROM ots o', [CERRADA]], [DE_HOY, HOY]]);
+    const res = await ver();
+    expect(res.status).toBe(200);
+    expect(consultaCon(DE_HOY)).toBeUndefined();
+    expect(res.text).not.toContain('MONTADA-HOY');
+  });
+
+  test('abierta: sigue mostrando la unidad de hoy, que es lo que se va a trabajar', async () => {
+    baseCon([['FROM ots o', [{ ...CERRADA, estado: 0 }]], [DE_HOY, HOY]]);
+    const res = await ver();
+    expect(consultaCon(DE_HOY)).toBeDefined();
+    expect(res.text).toContain('MONTADA-HOY');
+    expect(esquemaEnPantalla(res.text)).toBeNull();
+  });
+
+  test('cerrada con esquema guardado: la pantalla recibe la unidad completa de ese momento', async () => {
+    const guardado = {
+      antes:   { ddi: { id: 7, fuego: 'VIEJA' }, ddd: { id: 9, fuego: 'IGUAL' } },
+      despues: { ddi: { id: 50, fuego: 'NUEVA' }, ddd: { id: 9, fuego: 'IGUAL' } },
+    };
+    baseCon([['FROM ots o', [{ ...CERRADA, esquema_cierre: guardado }]], [DE_HOY, HOY]]);
+    const res = await ver();
+    expect(esquemaEnPantalla(res.text)).toEqual({ completo: true, ...guardado });
+    expect(res.text).toContain('Esquema al cerrar la OT');
+    expect(res.text).not.toContain('se cerró antes de que el sistema guardara');
+  });
+
+  test('cerrada sin esquema (OT vieja): solo lo que cambió, y avisa que del resto no hay registro', async () => {
+    baseCon([
+      ['FROM ots o', [CERRADA]],
+      [FILAS, [{ id: 50, fuego: 'NUEVA', posicion: 'ddi', cubierta_anterior_id: 7, fuego_anterior: 'VIEJA' }]],
+    ]);
+    const res = await ver();
+    expect(esquemaEnPantalla(res.text)).toEqual({
+      completo: false, antes: { ddi: { id: 7, fuego: 'VIEJA' } }, despues: { ddi: { id: 50, fuego: 'NUEVA' } },
+    });
+    expect(res.text).toContain('se cerró antes de que el sistema guardara');
+    expect(res.text).toContain('Sin registro');
+  });
+
+  test('la tabla muestra qué cubierta salió de cada posición', async () => {
+    baseCon([
+      ['FROM ots o', [CERRADA]],
+      [FILAS, [{ id: 50, fuego: 'NUEVA', posicion: 'ddi', cubierta_anterior_id: 7, fuego_anterior: 'VIEJA' }]],
+    ]);
+    const res = await ver();
+    expect(res.text).toContain('<th>Sale</th>');
+    expect(res.text).toMatch(/<td[^>]*>NUEVA<\/td>[\s\S]*?<td[^>]*>VIEJA<\/td>/);
+  });
+
+  test('la tabla suma las posiciones que la OT dejó vacías, y dice si la cubierta salió o rotó', async () => {
+    const guardado = {
+      antes:   { ra: { id: 7, fuego: 'AUXILIO' }, tie: { id: 1, fuego: 'ROTADA' } },
+      despues: { tde: { id: 1, fuego: 'ROTADA' } },
+    };
+    baseCon([['FROM ots o', [{ ...CERRADA, esquema_cierre: guardado }]]]);
+    const res = await ver();
+    expect(res.text).toMatch(/Auxilio<\/td>\s*<td[^>]*>queda vacía<\/td>\s*<td[^>]*>AUXILIO</);
+    expect(res.text).toContain('queda vacía: la cubierta pasó a Tras. Der. Ext.');
+  });
+
+  test('una OT vieja sin cubiertas no muestra ninguna: no hay registro', async () => {
+    baseCon([['FROM ots o', [CERRADA]], [DE_HOY, HOY]]);
+    const res = await ver();
+    expect(esquemaEnPantalla(res.text)).toEqual({ completo: false, antes: {}, despues: {} });
+    expect(res.text).toContain('Sin cubiertas registradas');
+  });
+});

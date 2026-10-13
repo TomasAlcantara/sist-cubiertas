@@ -29,9 +29,27 @@ if (ot.preventivo) trabajos.push('Preventivo');
 const cubMap = {};
 cubiertas.forEach(c => { if (c.posicion) cubMap[c.posicion] = c; });
 
-// Cubiertas actuales de la unidad (todas las posiciones montadas)
+// Cubiertas actuales de la unidad (todas las posiciones montadas). Solo llegan
+// mientras la OT está abierta: una OT cerrada se dibuja con su `esquema`.
 const unitMap = {};
 (unitTires || []).forEach(t => { if (t.posicion) unitMap[t.posicion] = t; });
+
+// La cubierta que cada entrante encontró en su posición. En una OT cerrada sale
+// del esquema guardado; en una abierta, de la que quedó anotada al cargarla.
+const saleDe = (c) => {
+  const antes = esquema && esquema.antes[c.posicion];
+  if (antes && antes.id !== c.id) return antes.fuego;
+  return esquema ? null : c.fuego_anterior;
+};
+
+// Posiciones que esta OT dejó sin cubierta: no tienen fila propia, las suma la
+// tabla. `destino` dice si esa cubierta pasó a otra posición o salió de la unidad.
+const vaciadas = !esquema || !esquema.completo ? [] : Object.keys(esquema.antes)
+  .filter(pos => !esquema.despues[pos])
+  .map(pos => {
+    const cubierta = esquema.antes[pos];
+    return { posicion: pos, fuego: cubierta.fuego, destino: Object.keys(esquema.despues).find(p => esquema.despues[p].id === cubierta.id) };
+  });
 
 const tipoUnidad = ot.tipo_unidad || 3;
 
@@ -116,6 +134,25 @@ const body = `
   }
   .rueda-ver.ocupada        { border-color: #888; background: rgba(0,0,0,0.04); }
   .rueda-ver.vacia          { border-style: dashed; opacity: 0.45; }
+  .rueda-ver.vacia.ot-cambiada { opacity: 1; }
+  .rueda-ver.sin-registro   { border-style: dotted; opacity: 0.35; }
+  .rueda-sale {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    color: var(--red-bright, #c62828);
+    line-height: 1.1;
+    text-align: center;
+    word-break: break-all;
+    padding: 0 2px;
+  }
+  .diagrama-nota {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin: 10px 0 0;
+    max-width: 300px;
+    text-align: center;
+    line-height: 1.4;
+  }
 
   .rueda-fuego {
     font-family: var(--font-mono);
@@ -163,6 +200,8 @@ const body = `
   }
   .leyenda-dot.ocupada { border-color: #888; background: rgba(0,0,0,0.06); }
   .leyenda-dot.vacia   { border-color: var(--border-strong); border-style: dashed; background: transparent; }
+  .leyenda-dot.cambiada { border-color: var(--red); background: transparent; }
+  .leyenda-dot.sin-registro { border-color: var(--border-strong); border-style: dotted; background: transparent; opacity: 0.6; }
 
   /* ── Detail table ── */
   .ver-section-title {
@@ -185,6 +224,8 @@ var LAYOUTS = {
 
 var CUBIERTA_MAP = ${JSON.stringify(cubMap)};
 var UNIT_MAP     = ${JSON.stringify(unitMap)};
+// Lo que la OT guardó de la unidad al cerrarse. null mientras está abierta.
+var ESQUEMA      = ${JSON.stringify(esquema)};
 
 var POS_LABELS = {
   ddi:'Del.\\nIzq.', ddd:'Del.\\nDer.',
@@ -193,8 +234,38 @@ var POS_LABELS = {
   ra:'Aux.1', ra2:'Aux.2'
 };
 
+function esc(v) {
+  return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// OT cerrada: se dibuja con lo que la OT guardó, nunca con la unidad de hoy.
+// Sin el esquema completo (OTs anteriores a que se guardara) solo se conocen las
+// posiciones que la OT cambió; del resto no hay registro y no se rellena.
+function mkRuedaCerrada(pos) {
+  var antes = ESQUEMA.antes[pos] || null;
+  var despues = ESQUEMA.despues[pos] || null;
+  var posLabel = '<span class="rueda-pos">' + (POS_LABELS[pos] || pos).replace('\\n', '<br>') + '</span>';
+  if (!ESQUEMA.completo && !despues) {
+    return '<div class="rueda-ver sin-registro" title="Sin registro de qué había en esta posición">' +
+      '<span class="rueda-fuego empty">?</span>' + posLabel + '</div>';
+  }
+  var cambio = !ESQUEMA.completo ||
+    (antes ? antes.id : null) !== (despues ? despues.id : null) ||
+    (antes ? antes.fuego : null) !== (despues ? despues.fuego : null);
+  var salio = cambio && antes ? (antes.fuego || '-') : null;
+  var cls = 'rueda-ver ' + (despues ? 'ocupada' : 'vacia') + (cambio ? ' ot-cambiada' : '');
+  var fuego = despues
+    ? '<span class="rueda-fuego">' + esc(despues.fuego || '-') + '</span>'
+    : '<span class="rueda-fuego empty">·</span>';
+  var sale = salio ? '<span class="rueda-sale">sale ' + esc(salio) + '</span>' : '';
+  var title = (despues ? (despues.fuego || '-') : 'Quedó vacía') +
+    (salio ? ' · salió ' + salio : '') + (cambio ? ' (cambió en esta OT)' : '');
+  return '<div class="' + cls + '" title="' + esc(title) + '">' + fuego + sale + posLabel + '</div>';
+}
+
 function mkRuedaVer(pos) {
-  // Prioridad: cubierta de la OT > cubierta actual de la unidad > vacía
+  if (ESQUEMA) return mkRuedaCerrada(pos);
+  // OT abierta. Prioridad: cubierta de la OT > cubierta actual de la unidad > vacía
   var c   = CUBIERTA_MAP[pos] || UNIT_MAP[pos] || null;
   var isOT = !!CUBIERTA_MAP[pos];
   var cls = 'rueda-ver ' + (c ? 'ocupada' : 'vacia') + (isOT ? ' ot-cambiada' : '');
@@ -272,12 +343,15 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
 
   <!-- Diagrama -->
   <div class="diagrama-panel">
-    <div class="diagrama-title">Esquema de cubiertas</div>
+    <div class="diagrama-title">${esquema ? 'Esquema al cerrar la OT' : 'Esquema de cubiertas'}</div>
     <div id="diagrama-ver"></div>
     <div class="leyenda">
       <div class="leyenda-item"><div class="leyenda-dot ocupada"></div> Con cubierta</div>
       <div class="leyenda-item"><div class="leyenda-dot vacia"></div> Vacía</div>
+      ${esquema ? '<div class="leyenda-item"><div class="leyenda-dot cambiada"></div> Cambió en esta OT</div>' : ''}
+      ${esquema && !esquema.completo ? '<div class="leyenda-item"><div class="leyenda-dot sin-registro"></div> Sin registro</div>' : ''}
     </div>
+    ${esquema && !esquema.completo ? '<p class="diagrama-nota">Esta OT se cerró antes de que el sistema guardara cómo quedaba armada la unidad: se ven solo las posiciones que cambió.</p>' : ''}
   </div>
 
   <!-- Info -->
@@ -309,17 +383,24 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
           <th>Modelo</th>
           <th>Medida</th>
           <th>Km</th>
+          <th>Sale</th>
         </tr>
       </thead>
       <tbody>
-        ${cubiertas.length === 0
-          ? '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
+        ${cubiertas.length === 0 && vaciadas.length === 0
+          ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
           : cubiertas.map((c, i) => `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
               <td>${c.posicion ? posNombre(c.posicion) : '-'}</td>
               <td style="font-family:var(--font-mono)">${c.fuego || '-'}</td>
               <td>${c.marca || ''} ${c.modelo_nombre || ''}</td>
               <td style="font-family:var(--font-mono)">${c.medida || '-'}</td>
               <td style="font-family:var(--font-mono)">${c.km || 0}</td>
+              <td style="font-family:var(--font-mono)">${e(saleDe(c) || '-')}</td>
+            </tr>`).join('')
+          + vaciadas.map(v => `<tr>
+              <td>${posNombre(v.posicion)}</td>
+              <td colspan="4" style="color:var(--text-muted)">${v.destino ? 'queda vacía: la cubierta pasó a ' + posNombre(v.destino) : 'queda vacía'}</td>
+              <td style="font-family:var(--font-mono)">${e(v.fuego || '-')}</td>
             </tr>`).join('')
         }
       </tbody>

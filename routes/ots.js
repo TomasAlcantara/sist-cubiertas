@@ -3,6 +3,7 @@ const router = express.Router();
 const { sql } = require('../db');
 const { requirePerm } = require('../middleware/auth');
 const { parseFecha } = require('../lib/fechas');
+const { esquemaDeOtCerrada } = require('../lib/otCubiertas');
 
 // GET /OTs/list
 router.get('/list', requirePerm('ot_ver'), async (req, res, next) => {
@@ -76,23 +77,31 @@ router.get('/ver', requirePerm('ot_ver'), async (req, res, next) => {
     `;
     if (!rows.length) return res.redirect('/OTs/list');
 
+    // Una OT cerrada es una foto de ese momento. Antes las posiciones que la OT
+    // no había tocado se rellenaban con lo que la unidad tiene montado hoy, así
+    // que una OT vieja "cambiaba" cada vez que cambiaba la unidad.
+    const cerrada = rows[0].estado == 1;
+
     const [cubiertas, unitTires] = await Promise.all([
       sql`
-        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m2.medida, oc.posicion
+        SELECT c.*, mr.marca, mr.modelo AS modelo_nombre, m2.medida, oc.posicion,
+               oc.cubierta_anterior_id, ca.fuego AS fuego_anterior
         FROM ot_cubiertas oc
         JOIN cubiertas c ON oc.cubierta_id = c.id
+        LEFT JOIN cubiertas ca ON oc.cubierta_anterior_id = ca.id
         LEFT JOIN marcas_ruedas mr ON c.modelo_id = mr.id
         LEFT JOIN medidas m2 ON c.medida_id = m2.id
         WHERE oc.ot_id = ${parseInt(ot) || 0}
         ORDER BY oc.posicion
       `,
-      rows[0].unidad_id
+      !cerrada && rows[0].unidad_id
         ? sql`SELECT c.id, c.fuego, c.posicion FROM cubiertas c WHERE c.micro_id = ${rows[0].unidad_id} AND c.activo = 1 AND c.posicion IS NOT NULL`
         : Promise.resolve([]),
     ]);
 
     res.render('OTs/ver', {
       user: req.user, ot: rows[0], cubiertas, unitTires, currentPage: 'inicio',
+      esquema: cerrada ? esquemaDeOtCerrada(rows[0], cubiertas) : null,
     });
   } catch (err) { next(err); }
 });

@@ -973,7 +973,9 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
           preventivo = ${trabajos.preventivo},
           descripcion_cierre = ${descripcion},
           cerrado_por = ${req.user?.usuario || null},
-          cerrado_en = NOW()
+          cerrado_en = NOW(),
+          -- Cómo quedó armada la unidad: la OT cerrada se muestra con esto, no con lo de hoy
+          esquema_cierre = ${JSON.stringify(plan.esquema)}
         WHERE id = ${otIdInt} AND estado = 0 AND anulada = FALSE
         RETURNING id`,
         // Solo esta unidad, y nunca hacia atrás: cerrar una OT vieja no debe pisar

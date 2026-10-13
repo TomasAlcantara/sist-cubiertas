@@ -15,7 +15,7 @@ const { sql } = require('../db');
 const {
   POSICIONES, ALMACEN_A_VERIFICAR, almacenAVerificar,
   normalizarCambios, validarCubiertasDeOt, guardarCubiertasDeOt,
-  leerEstadoParaCierre, planificarCierre, consultasDeCierre,
+  leerEstadoParaCierre, planificarCierre, consultasDeCierre, esquemaDeOtCerrada,
 } = require('../lib/otCubiertas');
 const { consultaEvento, registrarEvento } = require('../lib/cubiertaHistorial');
 
@@ -168,7 +168,7 @@ describe('planificarCierre', () => {
 
   test('una OT sin cubiertas no mueve nada', () => {
     const plan = planificarCierre({ ot: OT, km: 10, filas: [], montadas: [enUnidad(7, 'ddi')] });
-    expect(plan).toEqual({ errores: [], entrantes: [], salientes: [], rotadas: [], anteriores: [], eventos: [] });
+    expect(plan).toMatchObject({ errores: [], entrantes: [], salientes: [], rotadas: [], anteriores: [], eventos: [] });
   });
 
   test('los eventos llevan fecha de la OT, unidad, km de cierre y número de OT', () => {
@@ -256,6 +256,129 @@ describe('planificarCierre', () => {
       });
       expect(plan.eventos.some(e => e.tipo === 'baja')).toBe(false);
     });
+  });
+});
+
+// ─── El esquema que la OT guarda al cerrarse ──────────────────
+// La pantalla de una OT cerrada rellenaba las posiciones que la OT no había
+// tocado con lo que la unidad tiene montado HOY: una OT vieja "cambiaba" cada vez
+// que cambiaba la unidad. Ahora la OT guarda cómo quedó la unidad y se dibuja con eso.
+describe('planificarCierre — esquema de la unidad antes y después', () => {
+  const fuegosDe = (mapa) => Object.fromEntries(Object.entries(mapa).map(([pos, c]) => [pos, c.fuego]));
+
+  test('reemplazo: cambia esa posición y el resto de la unidad queda igual', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10, filas: [libre(50, 'ddi', 'NUEVA')],
+      montadas: [enUnidad(7, 'ddi', 'VIEJA'), enUnidad(8, 'ddd', 'OTRA'), enUnidad(9, 'ra', 'AUX')],
+    });
+    expect(fuegosDe(plan.esquema.antes)).toEqual({ ddi: 'VIEJA', ddd: 'OTRA', ra: 'AUX' });
+    expect(fuegosDe(plan.esquema.despues)).toEqual({ ddi: 'NUEVA', ddd: 'OTRA', ra: 'AUX' });
+    expect(plan.esquema.despues.ddi).toEqual({ id: 50, fuego: 'NUEVA' });
+  });
+
+  test('una OT sin cubiertas (un preventivo) guarda la unidad tal como estaba', () => {
+    const montadas = [enUnidad(7, 'ddi', 'A'), enUnidad(8, 'ddd', 'B')];
+    const plan = planificarCierre({ ot: OT, km: 10, filas: [], montadas });
+    expect(plan.esquema.antes).toEqual({ ddi: { id: 7, fuego: 'A' }, ddd: { id: 8, fuego: 'B' } });
+    expect(plan.esquema.despues).toEqual(plan.esquema.antes);
+  });
+
+  test('intercambio A↔B: las dos cambian de lugar', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10,
+      filas: [montadaAca(1, 'tde', 'tie', 'A'), montadaAca(2, 'tie', 'tde', 'B')],
+      montadas: [enUnidad(1, 'tie', 'A'), enUnidad(2, 'tde', 'B')],
+    });
+    expect(fuegosDe(plan.esquema.antes)).toEqual({ tie: 'A', tde: 'B' });
+    expect(fuegosDe(plan.esquema.despues)).toEqual({ tie: 'B', tde: 'A' });
+  });
+
+  test('movimiento de una vía: el origen queda vacío', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10,
+      filas: [montadaAca(1, 'tde', 'tie', 'A')],
+      montadas: [enUnidad(1, 'tie', 'A'), enUnidad(2, 'tde', 'B')],
+    });
+    expect(fuegosDe(plan.esquema.despues)).toEqual({ tde: 'A' });
+    expect(plan.esquema.despues.tie).toBeUndefined();
+  });
+
+  test('delanteras atrás y nuevas adelante: las traseras viejas ya no están', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10,
+      filas: [
+        libre(91, 'ddd', '13402'), libre(92, 'ddi', '13412'),
+        montadaAca(1, 'tde', 'ddd', '12398'), montadaAca(2, 'tdi', 'ddi', '12389'),
+      ],
+      montadas: [
+        enUnidad(1, 'ddd', '12398'), enUnidad(2, 'ddi', '12389'),
+        enUnidad(3, 'tde', '12394'), enUnidad(4, 'tdi', '11516'),
+      ],
+    });
+    expect(fuegosDe(plan.esquema.despues)).toEqual({ ddd: '13402', ddi: '13412', tde: '12398', tdi: '12389' });
+  });
+
+  test('una entrante que ya estaba en su lugar no cambia el esquema', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10, filas: [montadaAca(1, 'ddi', 'ddi', 'A')], montadas: [enUnidad(1, 'ddi', 'A')],
+    });
+    expect(plan.esquema.despues).toEqual(plan.esquema.antes);
+  });
+
+  test('una posición que tenía dos cubiertas las anota a las dos, no elige', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10, filas: [],
+      montadas: [enUnidad(6218, 'ddi', '7074'), enUnidad(12671, 'ddi', '13574')],
+    });
+    expect(plan.esquema.antes.ddi.fuego).toBe('7074 / 13574');
+  });
+
+  test('si la OT resuelve el duplicado, antes figuran las dos y después una', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10,
+      filas: [montadaAca(12671, 'ddi', 'ddi', '13574')],
+      montadas: [enUnidad(6218, 'ddi', '7074'), enUnidad(12671, 'ddi', '13574')],
+    });
+    expect(plan.esquema.antes.ddi.fuego).toBe('7074 / 13574');
+    expect(plan.esquema.despues.ddi).toEqual({ id: 12671, fuego: '13574' });
+  });
+});
+
+describe('esquemaDeOtCerrada', () => {
+  const GUARDADO = { antes: { ddi: { id: 7, fuego: 'VIEJA' } }, despues: { ddi: { id: 50, fuego: 'NUEVA' } } };
+  const FILAS_OT = [
+    { id: 50, fuego: 'NUEVA', posicion: 'ddi', cubierta_anterior_id: 7, fuego_anterior: 'VIEJA' },
+    { id: 51, fuego: 'OTRA', posicion: 'ddd', cubierta_anterior_id: null, fuego_anterior: null },
+  ];
+
+  test('con el esquema guardado devuelve la unidad completa', () => {
+    expect(esquemaDeOtCerrada({ esquema_cierre: GUARDADO }, FILAS_OT)).toEqual({ completo: true, ...GUARDADO });
+  });
+
+  test('lo entiende también si llega como texto', () => {
+    expect(esquemaDeOtCerrada({ esquema_cierre: JSON.stringify(GUARDADO) }, [])).toEqual({ completo: true, ...GUARDADO });
+  });
+
+  test('sin esquema guardado arma solo lo que la OT cambió', () => {
+    // Las OTs cerradas antes de que existiera la columna: del resto de la unidad no hay registro.
+    expect(esquemaDeOtCerrada({ esquema_cierre: null }, FILAS_OT)).toEqual({
+      completo: false,
+      antes: { ddi: { id: 7, fuego: 'VIEJA' } },
+      despues: { ddi: { id: 50, fuego: 'NUEVA' }, ddd: { id: 51, fuego: 'OTRA' } },
+    });
+  });
+
+  test('una OT vieja sin cubiertas no tiene nada que mostrar, y no inventa', () => {
+    expect(esquemaDeOtCerrada({}, [])).toEqual({ completo: false, antes: {}, despues: {} });
+  });
+
+  test('un esquema guardado ilegible se trata como si no estuviera', () => {
+    expect(esquemaDeOtCerrada({ esquema_cierre: '{roto' }, FILAS_OT).completo).toBe(false);
+    expect(esquemaDeOtCerrada({ esquema_cierre: { otra: 'cosa' } }, FILAS_OT).completo).toBe(false);
+  });
+
+  test('ignora las filas sin posición', () => {
+    expect(esquemaDeOtCerrada({}, [{ id: 1, fuego: 'X', posicion: null }]).despues).toEqual({});
   });
 });
 

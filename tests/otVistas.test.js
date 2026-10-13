@@ -25,10 +25,10 @@ const OT = {
   id: 592, numero: '592', estado: 0, anulada: false, fecha: '2026-10-07',
   unidad_id: 399, unidad: '5074', tipo_unidad: 3, gomeria_id: 1, cambio: true,
 };
-// Lo que la OT ya tiene cargado…
+// Lo que la OT ya tiene cargado… (`id` y la anterior son lo que además lee "Ver OT")
 const FILAS = [
-  { posicion: 'ddi', cubierta_id: 13220, fuego: '14291' },
-  { posicion: 'ddd', cubierta_id: 13219, fuego: '14290' },
+  { posicion: 'ddi', cubierta_id: 13220, id: 13220, fuego: '14291', cubierta_anterior_id: 13340, fuego_anterior: '14404' },
+  { posicion: 'ddd', cubierta_id: 13219, id: 13219, fuego: '14290', cubierta_anterior_id: null, fuego_anterior: null },
 ];
 // …y lo que hay montado en cada unidad (solo la delantera izquierda).
 const MONTADAS = {
@@ -36,11 +36,14 @@ const MONTADAS = {
   140: [{ id: 2, fuego: 'MONTADA-140', posicion: 'ddi' }],
 };
 
+let otEnLaBase;      // la OT que devuelve la base; cada test puede cambiarla
+
 beforeEach(() => {
+  otEnLaBase = OT;
   sql.mockReset();
   sql.mockImplementation((q) => {
     const texto = Array.isArray(q) ? q.join(' ') : String(q);
-    if (/FROM ots/i.test(texto)) return Promise.resolve([OT]);
+    if (/FROM ots/i.test(texto)) return Promise.resolve([otEnLaBase]);
     if (/FROM ot_cubiertas/i.test(texto)) return Promise.resolve(FILAS);
     if (/FROM cubiertas c WHERE c\.micro_id/i.test(texto)) return Promise.resolve(MONTADAS[399]);
     return Promise.resolve([]);
@@ -52,7 +55,7 @@ beforeEach(() => {
  * `$.ajax` no sale a ningún lado: se anota el pedido y, si es el de las
  * cubiertas montadas en una unidad, se contesta en el momento con MONTADAS.
  */
-function abrirPagina(html) {
+function abrirPagina(html, marca = 'var cambios_ot') {
   const elementos = {};
   const crear = (id) => {
     const el = { id, value: '', checked: false, style: {}, clases: new Set(), html: '' };
@@ -85,10 +88,11 @@ function abrirPagina(html) {
     document: { getElementById: porId, addEventListener() {}, querySelector: () => null },
     $, alert: (mensaje) => avisos.push(mensaje), location: {},
     setTimeout: (fn) => fn(),      // el arrastre marca la rueda "en vuelo" con un setTimeout
+    window: { addEventListener: (_evento, fn) => fn() },   // "Ver OT" dibuja al cargar la página
   });
 
   const script = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)]
-    .map(m => m[1]).find(s => s.includes('var cambios_ot'));
+    .map(m => m[1]).find(s => s.includes(marca));
   vm.runInContext(script, pagina);
 
   const guardado = () => pedidos.filter(p => p.type === 'POST' && /actualizar_ot/.test(p.url)).pop();
@@ -114,10 +118,10 @@ function abrirPagina(html) {
   };
 }
 
-const traer = async (url) => {
+const traer = async (url, marca) => {
   const res = await request(app).get(url).set('Cookie', `token=${token}`);
   if (res.status !== 200) throw new Error(`${url} → ${res.status}: ${res.text.slice(0, 300)}`);
-  return abrirPagina(res.text);
+  return abrirPagina(res.text, marca);
 };
 
 // ─── Editar OT ────────────────────────────────────────────────
@@ -401,5 +405,85 @@ describe('Cargar — cubiertas asignadas', () => {
     p.pagina.finalizar();
     p.guardado().error({ status: 400, responseText: 'La cubierta 7074 figura montada en la unidad 153.' });
     expect(p.avisos).toEqual(['La cubierta 7074 figura montada en la unidad 153.']);
+  });
+});
+
+// ─── Ver OT ───────────────────────────────────────────────────
+// Una OT cerrada se dibuja con lo que guardó al cerrarse. Antes las posiciones
+// que no había tocado se rellenaban con la unidad de hoy, así que una OT vieja
+// "cambiaba" sola cada vez que se trabajaba la unidad.
+describe('Ver OT — el diagrama', () => {
+  const ETIQUETA = { ddi: 'Del.<br>Izq.', ddd: 'Del.<br>Der.', tie: 'T.Iz.E', tde: 'T.De.E', ra: 'Aux.1' };
+  // El HTML de la rueda de una posición, tal como queda dibujada.
+  const ruedaDe = (diagrama, pos) => diagrama.split('<div class="rueda-ver').slice(1)
+    .find(r => r.includes('<span class="rueda-pos">' + ETIQUETA[pos] + '</span>'));
+  const diagramaDe = async (ot) => {
+    otEnLaBase = { ...OT, ...ot };
+    return (await traer('/OTs/ver?ot=592', 'var ESQUEMA')).texto('diagrama-ver');
+  };
+
+  describe('OT cerrada con el esquema guardado', () => {
+    const esquema_cierre = {
+      antes:   { ddi: { id: 13340, fuego: '14404' }, ddd: { id: 9, fuego: 'IGUAL' }, ra: { id: 7, fuego: 'AUX' } },
+      despues: { ddi: { id: 13220, fuego: '14291' }, ddd: { id: 9, fuego: 'IGUAL' } },
+    };
+    const cerrada = () => diagramaDe({ estado: 1, esquema_cierre });
+
+    test('la posición que cambió muestra la que entró y la que salió', async () => {
+      const rueda = ruedaDe(await cerrada(), 'ddi');
+      expect(rueda).toContain('ot-cambiada');
+      expect(rueda).toContain('>14291<');
+      expect(rueda).toContain('sale 14404');
+    });
+
+    test('la que no cambió se muestra como estaba, sin marcar', async () => {
+      const rueda = ruedaDe(await cerrada(), 'ddd');
+      expect(rueda).toContain('>IGUAL<');
+      expect(rueda).not.toContain('ot-cambiada');
+      expect(rueda).not.toContain('sale ');
+    });
+
+    test('la que la OT dejó vacía figura vacía, marcada, con la que salió', async () => {
+      const rueda = ruedaDe(await cerrada(), 'ra');
+      expect(rueda).toContain('vacia ot-cambiada');
+      expect(rueda).toContain('sale AUX');
+    });
+
+    test('una posición que no tenía nada es vacía, no "sin registro"', async () => {
+      const rueda = ruedaDe(await cerrada(), 'tie');
+      expect(rueda).toContain(' vacia"');
+      expect(rueda).not.toContain('sin-registro');
+    });
+
+    test('no aparece nada de lo que la unidad tiene montado hoy', async () => {
+      expect(await cerrada()).not.toContain('MONTADA-399');
+    });
+  });
+
+  describe('OT cerrada sin esquema (anterior a que se guardara)', () => {
+    const vieja = () => diagramaDe({ estado: 1 });
+
+    test('muestra lo que la OT cambió, con la que salió si quedó anotada', async () => {
+      const diagrama = await vieja();
+      expect(ruedaDe(diagrama, 'ddi')).toContain('>14291<');
+      expect(ruedaDe(diagrama, 'ddi')).toContain('sale 14404');
+      expect(ruedaDe(diagrama, 'ddd')).toContain('>14290<');
+      expect(ruedaDe(diagrama, 'ddd')).not.toContain('sale ');
+    });
+
+    test('el resto de la unidad figura sin registro, no con las cubiertas de hoy', async () => {
+      const diagrama = await vieja();
+      expect(ruedaDe(diagrama, 'tie')).toContain('sin-registro');
+      expect(ruedaDe(diagrama, 'ra')).toContain('sin-registro');
+      expect(diagrama).not.toContain('MONTADA-399');
+    });
+  });
+
+  test('OT abierta: se sigue dibujando como antes, con lo que la OT tiene cargado', async () => {
+    const diagrama = await diagramaDe({ estado: 0 });
+    expect(ruedaDe(diagrama, 'ddi')).toContain('>14291<');
+    expect(ruedaDe(diagrama, 'ddi')).toContain('ot-cambiada');
+    expect(diagrama).not.toContain('sin-registro');
+    expect(diagrama).not.toContain('sale ');
   });
 });
