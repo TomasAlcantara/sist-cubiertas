@@ -1278,3 +1278,264 @@ describe('GET /OTs/ver — una OT cerrada no se rellena con la unidad de hoy', (
     expect(res.text).toContain('Sin cubiertas registradas');
   });
 });
+
+// ─── Dejar un auxilio vacío ───────────────────────────────────
+// El taller: "con los auxilios solo me permite cambiar un auxilio por otro, no me
+// permite sacarlo por completo, para que quede vacía". La OT ahora puede anotar
+// posiciones de las que sale la cubierta y no entra otra (`ots.posiciones_vaciar`).
+describe('POST /ajax/nueva_ot — posiciones que la OT deja vacías', () => {
+  callarErrores();
+  const crear = (extra = {}) => request(app)
+    .post('/ajax/nueva_ot')
+    .set('Cookie', `token=${makeToken()}`)
+    .type('form')
+    .send({ fecha: '13/10/2026', unidad_id: 399, gomeria_id: 1, cambio: '1', pinchadura: '0', rotura: '0', ...extra });
+  const alta = () => consultaCon('INSERT INTO ots');
+
+  test('las guarda con la OT', async () => {
+    baseCon([['INSERT INTO ots', [{ id: 700 }]]]);
+    const res = await crear({ cambios_ot_json: '{}', vaciar_ot_json: '["ra"]' });
+    expect(res.text).toBe('700');
+    expect(alta().texto).toContain('posiciones_vaciar');
+    expect(alta().valores.pop()).toEqual(['ra']);
+  });
+
+  test('una OT que no vacía nada guarda la lista vacía', async () => {
+    baseCon([['INSERT INTO ots', [{ id: 701 }]]]);
+    await crear({ cambios_ot_json: '{}' });
+    expect(alta().valores.pop()).toEqual([]);
+  });
+
+  test('una rueda de rodado no se puede dejar vacía → 400 y la OT no se crea', async () => {
+    baseCon([['INSERT INTO ots', [{ id: 702 }]]]);
+    const res = await crear({ cambios_ot_json: '{}', vaciar_ot_json: '["ddi"]' });
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('Del. Izq.');
+    expect(alta()).toBeUndefined();
+  });
+
+  test('la misma posición para vaciar y con una cubierta → 400 y la OT no se crea', async () => {
+    baseCon([['INSERT INTO ots', [{ id: 703 }]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    const res = await crear({ cambios_ot_json: '{"ra":13220}', vaciar_ot_json: '["ra"]' });
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('Auxilio');
+    expect(alta()).toBeUndefined();
+  });
+});
+
+describe('POST /ajax/actualizar_ot — posiciones que la OT deja vacías', () => {
+  callarErrores();
+  const OT = { id: 592, estado: 0, anulada: false, unidad_id: 399 };
+  const guardar = (extra = {}) => request(app)
+    .post('/ajax/actualizar_ot')
+    .set('Cookie', `token=${makeToken()}`)
+    .type('form')
+    .send({ ot_id: 592, fecha: '13/10/2026', unidad_id: 399, gomeria_id: 1, cambio: '1', ...extra });
+  // Lo que quedó guardado en ots.posiciones_vaciar: el único valor del UPDATE que es una lista.
+  const guardadas = () => {
+    const update = consultaCon('UPDATE ots SET');
+    expect(update.texto).toContain('posiciones_vaciar = ?');
+    return update.valores.find(Array.isArray);
+  };
+
+  test('guarda las que manda la pantalla', async () => {
+    baseCon([['SELECT * FROM ots', [OT]]]);
+    const res = await guardar({ cambios_ot_json: '{}', vaciar_ot_json: '["ra"]' });
+    expect(res.status).toBe(200);
+    expect(guardadas()).toEqual(['ra']);
+  });
+
+  test('[] las borra: en pantalla se deshizo la marca', async () => {
+    baseCon([['SELECT * FROM ots', [{ ...OT, posiciones_vaciar: ['ra'] }]]]);
+    await guardar({ cambios_ot_json: '{}', vaciar_ot_json: '[]' });
+    expect(guardadas()).toEqual([]);
+  });
+
+  describe('si el formulario no las manda', () => {
+    const CON_MARCAS = { ...OT, posiciones_vaciar: ['ra', 'ra2'] };
+
+    test('conserva las guardadas', async () => {
+      baseCon([['SELECT * FROM ots', [CON_MARCAS]]]);
+      await guardar();
+      expect(guardadas()).toEqual(['ra', 'ra2']);
+    });
+
+    test('pero si la OT cambió de unidad las descarta: eran los auxilios de la otra', async () => {
+      baseCon([['SELECT * FROM ots', [CON_MARCAS]]]);
+      await guardar({ unidad_id: 140 });
+      expect(guardadas()).toEqual([]);
+    });
+
+    test('y descarta la de una posición que en este guardado recibe una cubierta', async () => {
+      baseCon([['SELECT * FROM ots', [CON_MARCAS]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+      const res = await guardar({ cambios_ot_json: '{"ra":13220}' });
+      expect(res.status).toBe(200);
+      expect(guardadas()).toEqual(['ra2']);
+    });
+  });
+
+  test('una rueda de rodado → 400 y no escribe nada', async () => {
+    baseCon([['SELECT * FROM ots', [OT]]]);
+    const res = await guardar({ cambios_ot_json: '{}', vaciar_ot_json: '["tie"]' });
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('Tras. Izq. Ext.');
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('la misma posición para vaciar y con una cubierta → 400 y no escribe nada', async () => {
+    baseCon([['SELECT * FROM ots', [OT]], [CUBIERTAS_ELEGIDAS, LIBRES]]);
+    const res = await guardar({ cambios_ot_json: '{"ra":13220}', vaciar_ot_json: '["ra"]' });
+    expect(res.status).toBe(400);
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+});
+
+describe('POST /ajax/confirmar_cerrar_ot — un auxilio que queda vacío', () => {
+  callarErrores();
+  const OT = {
+    id: 610, estado: 0, anulada: false, unidad_id: 399, fecha: '2026-10-13',
+    preventivo: false, rotacion: false, arreglo: false, cambio: true,
+    alinear: false, balanceo: false, armar: false, posiciones_vaciar: ['ra'],
+  };
+  const AUXILIO = { id: 7, fuego: 'A007', posicion: 'ra' };
+  const DELANTERA = { id: 8, fuego: 'B002', posicion: 'ddi' };
+
+  const escenario = ({ ot = OT, filas = [], montadas = [AUXILIO, DELANTERA], reglas = [] } = {}) => baseCon([
+    ...reglas,
+    ['SELECT * FROM ots', [ot]], [FILAS_DE_LA_OT, filas], [MONTADAS, montadas],
+    ['UPDATE ots SET', [{ id: ot.id }]],
+  ]);
+  const cerrar = (token = makeToken(1, 'ot_ver,ot_cerrar'), extra = { cambio: '1', destino_almacen_id: '2' }) => request(app)
+    .post('/ajax/confirmar_cerrar_ot')
+    .set('Cookie', `token=${token}`)
+    .type('form')
+    .send({ ot_id: 610, km_actual: 5100, ...extra });
+  const escrituras = () => enTransaccion().map(p => p.texto.split(' ').slice(0, 2).join(' ') + (p.texto.startsWith('INSERT INTO cubierta_eventos') ? ':' + p.valores[1] : ''));
+  const salida = () => enTransaccion().find(p => p.texto.startsWith('UPDATE cubiertas SET micro_id = NULL'));
+
+  test('sale el auxilio al destino elegido y no entra ninguna cubierta', async () => {
+    escenario();
+    const res = await cerrar();
+    expect(res.text).toBe('ok');
+    expect(escrituras()).toEqual(['UPDATE ots', 'UPDATE micro', 'UPDATE cubiertas', 'INSERT INTO:retiro']);
+    expect(salida().valores).toEqual([2, [7], 399]);
+  });
+
+  test('la OT guarda que el auxilio estaba y ya no está', async () => {
+    escenario();
+    await cerrar();
+    const update = consultaCon('UPDATE ots SET estado = 1');
+    const esquema = JSON.parse(update.valores.find(v => typeof v === 'string' && v.startsWith('{"antes"')));
+    expect(esquema.antes.ra).toEqual({ id: 7, fuego: 'A007' });
+    expect(esquema.despues).toEqual({ ddi: { id: 8, fuego: 'B002' } });
+  });
+
+  test('el log dice qué auxilio salió', async () => {
+    escenario();
+    await cerrar();
+    const cambios = JSON.parse(consultaCon('INSERT INTO auditoria').valores[6]);
+    expect(cambios).toContainEqual({ campo: 'cubiertas', antes: 'Auxilio: A007', despues: null });
+  });
+
+  test('sin destino elegido (preventivo que cierra el gomero) va a "A VERIFICAR"', async () => {
+    const preventivo = { ...OT, cambio: false, preventivo: true };
+    escenario({ ot: preventivo, reglas: [[A_VERIFICAR, [{ id: 19, activo: 1 }]]] });
+    const res = await cerrar(makeToken(0, 'ot_ver,ot_cerrar_preventivo'), { descripcion_cierre: 'Se retiró el auxilio' });
+    expect(res.text).toBe('ok');
+    expect(salida().valores).toEqual([19, [7], 399]);
+  });
+
+  test('si el auxilio ya no está montado, la OT se cierra igual y no mueve nada', async () => {
+    escenario({ montadas: [DELANTERA] });
+    const res = await cerrar();
+    expect(res.text).toBe('ok');
+    expect(escrituras()).toEqual(['UPDATE ots', 'UPDATE micro']);
+  });
+
+  test('si además tiene una cubierta cargada en ese lugar → 400 y no se escribe nada', async () => {
+    escenario({ filas: [fila(50, 'ra', 'NUEVA')] });
+    const res = await cerrar();
+    expect(res.status).toBe(400);
+    expect(res.text).toContain('Auxilio');
+    expect(consultas().some(esEscritura)).toBe(false);
+  });
+
+  test('una OT sin posiciones a vaciar (o anterior a que existieran) cierra como siempre', async () => {
+    escenario({ ot: { ...OT, posiciones_vaciar: undefined } });
+    const res = await cerrar();
+    expect(res.text).toBe('ok');
+    expect(escrituras()).toEqual(['UPDATE ots', 'UPDATE micro']);
+  });
+});
+
+describe('POST /ajax/mb_cerrar_ot — vista previa de un auxilio que queda vacío', () => {
+  const OT = {
+    id: 610, estado: 0, anulada: false, unidad_id: 399, unidad: 'PRUEBA 01', tipo_unidad: 4,
+    km_actual: 5000, cambio: true, posiciones_vaciar: ['ra'],
+  };
+  const MONTADO = [{ id: 7, fuego: 'A007', posicion: 'ra' }, { id: 8, fuego: 'B002', posicion: 'ddi' }];
+  const abrir = () => request(app)
+    .post('/ajax/mb_cerrar_ot')
+    .set('Cookie', `token=${makeToken(1, 'ot_ver,ot_cerrar')}`)
+    .type('form')
+    .send({ ot_id: 610 });
+
+  test('muestra la que sale y que el lugar queda vacío, y ofrece cerrar', async () => {
+    baseCon([['FROM ots o', [OT]], [MONTADAS, MONTADO]]);
+    const res = await abrir();
+    expect(res.status).toBe(200);
+    // La rueda del auxilio: arriba la que sale, abajo "VACÍA" en vez de una entrante
+    expect(res.text).toMatch(/>A007<\/span><span[^>]*>VACÍA<\/span>/);
+    expect(res.text).toContain('Queda vacía');
+    expect(res.text).toContain('value="Cerrar OT"');
+  });
+
+  test('sin posiciones a vaciar no aparece esa leyenda', async () => {
+    baseCon([['FROM ots o', [{ ...OT, posiciones_vaciar: [] }]], [MONTADAS, MONTADO]]);
+    const res = await abrir();
+    expect(res.text).not.toContain('Queda vacía');
+    expect(res.text).not.toContain('VACÍA');
+  });
+
+  test('si el auxilio ya no está montado no dibuja ningún cambio', async () => {
+    baseCon([['FROM ots o', [OT]], [MONTADAS, [MONTADO[1]]]]);
+    const res = await abrir();
+    expect(res.text).not.toContain('VACÍA');
+    expect(res.text).toContain('value="Cerrar OT"');
+  });
+
+  test('con una cubierta cargada en ese mismo lugar explica por qué no se puede cerrar', async () => {
+    baseCon([['FROM ots o', [OT]], [FILAS_DE_LA_OT, [fila(50, 'ra', 'NUEVA')]], [MONTADAS, MONTADO]]);
+    const res = await abrir();
+    expect(res.text).toContain('todavía no se puede cerrar');
+    expect(res.text).not.toContain('value="Cerrar OT"');
+  });
+});
+
+describe('GET /OTs/ver — una OT abierta que va a dejar un auxilio vacío', () => {
+  const ABIERTA = {
+    id: 610, numero: '610', estado: 0, anulada: false, fecha: '2026-10-13',
+    unidad_id: 399, unidad: 'PRUEBA 01', tipo_unidad: 4, cambio: true, posiciones_vaciar: ['ra'],
+  };
+  const DE_HOY = 'FROM cubiertas c WHERE c.micro_id';
+  const ver = () => request(app).get('/OTs/ver?ot=610').set('Cookie', `token=${makeToken()}`);
+  const porVaciar = (html) => JSON.parse(html.match(/var POR_VACIAR\s+= (.*);/)[1]);
+
+  test('lo avisa en la tabla, con la cubierta que va a salir', async () => {
+    baseCon([['FROM ots o', [ABIERTA]], [DE_HOY, [{ id: 7, fuego: 'A007', posicion: 'ra' }]]]);
+    const res = await ver();
+    expect(res.status).toBe(200);
+    expect(porVaciar(res.text)).toEqual(['ra']);
+    expect(res.text).toMatch(/Auxilio<\/td>\s*<td[^>]*>queda vacía al cerrar la OT<\/td>\s*<td[^>]*>A007</);
+    expect(res.text).not.toContain('Sin cubiertas registradas');
+  });
+
+  test('una vez cerrada ya no se lee la marca: manda lo que la OT guardó', async () => {
+    const guardado = { antes: { ra: { id: 7, fuego: 'A007' } }, despues: {} };
+    baseCon([['FROM ots o', [{ ...ABIERTA, estado: 1, esquema_cierre: guardado }]]]);
+    const res = await ver();
+    expect(porVaciar(res.text)).toEqual([]);
+    expect(res.text).toMatch(/Auxilio<\/td>\s*<td[^>]*>queda vacía<\/td>\s*<td[^>]*>A007</);
+    expect(res.text).not.toContain('al cerrar la OT</td>');
+  });
+});

@@ -1,6 +1,6 @@
 /**
- * Lógica de pantalla de "Editar OT" y "Cargar": qué queda asignado en cada
- * posición después de cada clic y qué se manda al guardar.
+ * Lógica de pantalla de "Nueva OT", "Editar OT" y "Cargar": qué queda asignado
+ * en cada posición después de cada clic y qué se manda al guardar.
  *
  * El proyecto no tiene un navegador para tests, así que la vista se renderiza de
  * verdad (ruta + EJS) y su <script> se corre contra un documento de mentira que
@@ -70,6 +70,8 @@ function abrirPagina(html, marca = 'var cambios_ot') {
         }
       },
     });
+    // Acá texto y HTML son lo mismo: lo que importa es qué quedó escrito.
+    Object.defineProperty(el, 'textContent', { get: () => el.html, set: (valor) => { el.html = String(valor); } });
     return el;
   };
   const porId = (id) => elementos[id] || (elementos[id] = crear(id));
@@ -95,11 +97,13 @@ function abrirPagina(html, marca = 'var cambios_ot') {
     .map(m => m[1]).find(s => s.includes(marca));
   vm.runInContext(script, pagina);
 
-  const guardado = () => pedidos.filter(p => p.type === 'POST' && /actualizar_ot/.test(p.url)).pop();
+  const guardado = () => pedidos.filter(p => p.type === 'POST' && /\/(actualizar_ot|nueva_ot)$/.test(p.url)).pop();
   return {
     pagina, avisos,
     // Lo asignado: posición → id de cubierta. Pasa por JSON porque nace en otro contexto.
     asignadas: () => JSON.parse(JSON.stringify(pagina.cambios_ot)),
+    // Las posiciones marcadas para quedar vacías.
+    porVaciar: () => Object.keys(pagina.vaciar_ot),
     texto: (id) => (elementos[id] ? elementos[id].innerHTML : undefined),
     marcada: (id, clase) => !!elementos[id] && elementos[id].clases.has(clase),
     abierto: (id) => !!elementos[id] && elementos[id].style.display === 'block',
@@ -115,6 +119,7 @@ function abrirPagina(html, marca = 'var cambios_ot') {
     },
     guardado,
     cubiertasEnviadas: () => JSON.parse(guardado().data.cambios_ot_json),
+    vaciarEnviado: () => JSON.parse(guardado().data.vaciar_ot_json),
   };
 }
 
@@ -485,5 +490,249 @@ describe('Ver OT — el diagrama', () => {
     expect(ruedaDe(diagrama, 'ddi')).toContain('ot-cambiada');
     expect(diagrama).not.toContain('sin-registro');
     expect(diagrama).not.toContain('sale ');
+  });
+});
+
+// ─── Dejar un auxilio vacío ───────────────────────────────────
+// El taller: "con los auxilios solo me permite cambiar un auxilio por otro, no me
+// permite sacarlo por completo, para que quede vacía". No había forma de anotar
+// "de acá sale y no entra nada": ahora el selector de un auxilio lo ofrece.
+describe('Dejar un auxilio vacío', () => {
+  // En estos tests la unidad 399 tiene, además de la delantera, un auxilio montado.
+  const SIN_AUXILIO = MONTADAS[399];
+  beforeEach(() => { MONTADAS[399] = [...SIN_AUXILIO, { id: 7, fuego: 'A007', posicion: 'ra' }]; });
+  afterEach(() => { MONTADAS[399] = SIN_AUXILIO; });
+
+  const marcar = (p, pos = 'ra') => { p.pagina.abrir_modal(pos); p.pagina.vaciar_posicion(); };
+
+  describe('en Editar', () => {
+    const abrir = () => traer('/OTs/editar?ot=592');
+
+    test('el selector de un auxilio con cubierta lo ofrece, y dice cuál sale', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('ra');
+      expect(p.abierto('filter_list')).toBe(true);
+      expect(p.abierto('vaciar_box')).toBe(true);
+      expect(p.texto('vaciar_txt')).toContain('A007');
+    });
+
+    test('en una rueda de rodado no se ofrece, aunque tenga cubierta', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('ddi');               // deshace la asignación
+      p.pagina.abrir_modal('ddi');               // abre el selector: ahí está montada la MONTADA-399
+      expect(p.abierto('filter_list')).toBe(true);
+      expect(p.abierto('vaciar_box')).toBe(false);
+    });
+
+    test('en un auxilio que ya está vacío tampoco: no hay nada que sacar', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('ra2');
+      expect(p.abierto('vaciar_box')).toBe(false);
+    });
+
+    test('el aviso de un auxilio no queda a la vista al abrir después otra posición', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('ra');
+      p.pagina.cerrar_modal();
+      p.pagina.abrir_modal('tie');
+      expect(p.abierto('vaciar_box')).toBe(false);
+    });
+
+    test('al elegirlo la rueda queda marcada VACÍA y el selector se cierra', async () => {
+      const p = await abrir();
+      marcar(p);
+      expect(p.porVaciar()).toEqual(['ra']);
+      expect(p.texto('fn-ra')).toBe('VACÍA');
+      expect(p.marcada('pos-ra', 'seleccionada')).toBe(true);
+      expect(p.abierto('filter_list')).toBe(false);
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219 });   // no toca lo demás
+    });
+
+    test('un clic sobre la marcada lo deshace y vuelve a mostrar la que está montada', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.pagina.abrir_modal('ra');
+      expect(p.porVaciar()).toEqual([]);
+      expect(p.texto('fn-ra')).toBe('A007');
+      expect(p.marcada('pos-ra', 'seleccionada')).toBe(false);
+      expect(p.abierto('filter_list')).toBe(false);
+    });
+
+    test('asignarle una cubierta quita la marca: en una posición o entra una o queda vacía', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.arrastrar('ddi', 'ra');                  // la delantera montada pasa al lugar del auxilio
+      expect(p.porVaciar()).toEqual([]);
+      expect(p.asignadas()).toEqual({ ddi: 13220, ddd: 13219, ra: 1 });
+      expect(p.texto('fn-ra')).toBe('MONTADA-399');
+    });
+
+    test('guardar manda las posiciones a vaciar junto con las cubiertas', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.pagina.guardar_ot();
+      expect(p.vaciarEnviado()).toEqual(['ra']);
+      expect(p.cubiertasEnviadas()).toEqual({ ddi: 13220, ddd: 13219 });
+    });
+
+    test('sin ninguna marcada manda la lista vacía, no la omite', async () => {
+      // Omitirla le dice al servidor "no sé": conservaría una marca que en pantalla ya se deshizo.
+      const p = await abrir();
+      p.pagina.guardar_ot();
+      expect(p.vaciarEnviado()).toEqual([]);
+    });
+
+    test('al reabrir la OT la marca guardada sigue ahí', async () => {
+      otEnLaBase = { ...OT, posiciones_vaciar: ['ra'] };
+      const p = await abrir();
+      expect(p.porVaciar()).toEqual(['ra']);
+      expect(p.texto('fn-ra')).toBe('VACÍA');
+      expect(p.marcada('pos-ra', 'seleccionada')).toBe(true);
+    });
+
+    test('cambiar la unidad descarta las marcas: eran los auxilios de la otra', async () => {
+      otEnLaBase = { ...OT, posiciones_vaciar: ['ra'] };
+      const p = await abrir();
+      p.elegirUnidad('140');
+      expect(p.porVaciar()).toEqual([]);
+      p.pagina.guardar_ot();
+      expect(p.vaciarEnviado()).toEqual([]);
+    });
+  });
+
+  describe('en Cargar', () => {
+    const abrir = () => traer('/OTs/cargar?ot=592');
+
+    test('el selector de un auxilio con cubierta lo ofrece; el de una rueda de rodado, no', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('ra');
+      expect(p.abierto('vaciar_box')).toBe(true);
+      expect(p.texto('vaciar_txt')).toContain('A007');
+      p.pagina.cerrar_modal();
+      p.pagina.abrir_modal('tie');
+      expect(p.abierto('vaciar_box')).toBe(false);
+    });
+
+    test('al elegirlo: abajo de la que sale dice VACÍA, y el resumen lo suma', async () => {
+      const p = await abrir();
+      marcar(p);
+      expect(p.porVaciar()).toEqual(['ra']);
+      expect(p.texto('fn-in-ra')).toContain('VACÍA');
+      expect(p.marcada('pos-ra', 'con-entrante')).toBe(true);
+      expect(p.texto('resumen-body')).toContain('<td>Auxilio</td><td>(queda vacía)</td>');
+      expect(p.abierto('filter_list')).toBe(false);
+    });
+
+    test('un clic sobre la marcada lo deshace, en la rueda y en el resumen', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.pagina.abrir_modal('ra');
+      expect(p.porVaciar()).toEqual([]);
+      expect(p.texto('fn-in-ra')).toBe('+');
+      expect(p.marcada('pos-ra', 'con-entrante')).toBe(false);
+      expect(p.texto('resumen-body')).not.toContain('queda vacía');
+    });
+
+    test('arrastrar una cubierta sobre el auxilio marcado quita la marca y hace el intercambio', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.arrastrar('ddi', 'ra');
+      expect(p.porVaciar()).toEqual([]);
+      expect(p.asignadas()).toEqual({ ddi: 7, ddd: 13219, ra: 13220 });
+      expect(p.texto('fn-in-ra')).toBe('14291');
+      expect(p.texto('resumen-body')).not.toContain('queda vacía');
+    });
+
+    test('finalizar manda las posiciones a vaciar', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.pagina.finalizar();
+      expect(p.vaciarEnviado()).toEqual(['ra']);
+      expect(p.cubiertasEnviadas()).toEqual({ ddi: 13220, ddd: 13219 });
+    });
+
+    test('al abrir una OT que ya la tenía marcada, se ve en la rueda y en el resumen', async () => {
+      otEnLaBase = { ...OT, posiciones_vaciar: ['ra'] };
+      const p = await abrir();
+      expect(p.porVaciar()).toEqual(['ra']);
+      expect(p.texto('fn-in-ra')).toContain('VACÍA');
+      expect(p.texto('resumen-body')).toContain('(queda vacía)');
+      // …y las cubiertas que entran siguen en el resumen
+      expect(p.texto('resumen-body')).toContain('14291');
+    });
+  });
+
+  describe('en Nueva', () => {
+    const abrir = async () => {
+      const p = await traer('/OTs/nueva');
+      p.elegirUnidad('399');
+      return p;
+    };
+
+    test('el selector de un auxilio con cubierta lo ofrece y marca la rueda', async () => {
+      const p = await abrir();
+      p.pagina.abrir_modal('ra');
+      expect(p.abierto('vaciar_box')).toBe(true);
+      expect(p.texto('vaciar_txt')).toContain('A007');
+      p.pagina.vaciar_posicion();
+      expect(p.porVaciar()).toEqual(['ra']);
+      expect(p.texto('fn-in-ra')).toContain('VACÍA');
+      expect(p.abierto('filter_list')).toBe(false);
+    });
+
+    test('un clic sobre la marcada lo deshace', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.pagina.abrir_modal('ra');
+      expect(p.porVaciar()).toEqual([]);
+      expect(p.texto('fn-in-ra')).toBe('+');
+    });
+
+    test('arrastrar una cubierta al auxilio marcado quita la marca', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.arrastrar('ddi', 'ra');
+      expect(p.porVaciar()).toEqual([]);
+      expect(p.asignadas()).toEqual({ ra: 1 });
+    });
+
+    test('elegir otra unidad descarta las marcas', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.elegirUnidad('140');
+      expect(p.porVaciar()).toEqual([]);
+    });
+
+    test('al crear la OT viajan las posiciones a vaciar', async () => {
+      const p = await abrir();
+      marcar(p);
+      p.pagina.document.getElementById('cb_cambio').checked = true;
+      p.pagina.document.querySelector = () => ({ value: '0' });   // pinchadura y rotura: No
+      p.pagina.guardar_ot();
+      expect(p.guardado().url).toBe('/ajax/nueva_ot');
+      expect(p.vaciarEnviado()).toEqual(['ra']);
+      expect(p.cubiertasEnviadas()).toEqual({});
+    });
+  });
+
+  describe('en Ver, mientras la OT sigue abierta', () => {
+    const diagrama = async (ot) => {
+      otEnLaBase = { ...OT, ...ot };
+      return (await traer('/OTs/ver?ot=592', 'var ESQUEMA')).texto('diagrama-ver');
+    };
+    const ruedaDelAuxilio = (html) => html.split('<div class="rueda-ver').slice(1)
+      .find(r => r.includes('<span class="rueda-pos">Aux.1</span>'));
+
+    test('el auxilio marcado figura vacío, resaltado, con la cubierta que va a salir', async () => {
+      const rueda = ruedaDelAuxilio(await diagrama({ posiciones_vaciar: ['ra'] }));
+      expect(rueda).toContain('vacia ot-cambiada');
+      expect(rueda).toContain('sale A007');
+    });
+
+    test('sin la marca se ve la cubierta montada, como siempre', async () => {
+      const rueda = ruedaDelAuxilio(await diagrama({}));
+      expect(rueda).toContain('>A007<');
+      expect(rueda).not.toContain('sale ');
+    });
   });
 });

@@ -44,6 +44,7 @@ const body = `
 
 <script>
 var cambios_ot = {};
+var vaciar_ot = {};       // posiciones (auxilios) que la OT deja vacías: sale la que hay y no entra otra
 var current_pos = '';
 var unidadActual = {};
 var LAYOUTS = {
@@ -109,6 +110,7 @@ function cargar_tires(unidad_id) {
     document.getElementById('diagrama-wrap').innerHTML  = msgVacio;
     unidadActual = {};
     cambios_ot = {};
+    vaciar_ot = {};
     return;
   }
   $.ajax({ type:'GET', url:'/ajax/cubiertas_unidad?unidad_id='+unidad_id,
@@ -120,12 +122,14 @@ function cargar_tires(unidad_id) {
       });
       renderDiagrama(tipo);
       cambios_ot = {};
+      vaciar_ot = {};
     }
   });
 }
 
 function clearPos(pos) {
   delete cambios_ot[pos];
+  delete vaciar_ot[pos];
   var elIn = document.getElementById('fn-in-'+pos);
   var pEl  = document.getElementById('pos-'+pos);
   if (elIn) { elIn.innerHTML = '+'; elIn.classList.remove('con-valor'); }
@@ -133,13 +137,40 @@ function clearPos(pos) {
 }
 
 function abrir_modal(pos) {
-  // Si ya tiene asignación, el click la deshace
-  if (cambios_ot[pos] !== undefined) { clearPos(pos); return; }
+  // Si ya tiene asignación, o está marcada para quedar vacía, el click la deshace
+  if (cambios_ot[pos] !== undefined || vaciar_ot[pos]) { clearPos(pos); return; }
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
   document.getElementById('filter_list').style.display = 'block';
   document.getElementById('rueda_list').innerHTML = '';
+  mostrar_vaciar(pos);
   filtrar_ot();
+}
+
+// Solo los auxilios se pueden dejar sin cubierta. En su selector, si tienen una
+// montada, se ofrece sacarla sin poner otra.
+var VACIABLES = ['ra', 'ra2'];
+
+function mostrar_vaciar(pos) {
+  var actual = unidadActual[pos];
+  var ofrecer = VACIABLES.indexOf(pos) >= 0 && !!actual;
+  document.getElementById('vaciar_box').style.display = ofrecer ? 'block' : 'none';
+  if (ofrecer) document.getElementById('vaciar_txt').textContent = 'Sale la ' + (actual.fuego || '-') + ' y no entra otra.';
+}
+
+function pintarVacia(pos) {
+  var elIn = document.getElementById('fn-in-'+pos);
+  var pEl  = document.getElementById('pos-'+pos);
+  // En otro color que un número de fuego: acá no entra ninguna cubierta.
+  if (elIn) { elIn.innerHTML = '<span style="color:#ffb74d;">VACÍA</span>'; elIn.classList.add('con-valor'); }
+  if (pEl)  pEl.classList.add('con-entrante');
+}
+
+function vaciar_posicion() {
+  delete cambios_ot[current_pos];
+  vaciar_ot[current_pos] = true;
+  pintarVacia(current_pos);
+  cerrar_modal();
 }
 
 function cerrar_modal() {
@@ -172,6 +203,7 @@ function seleccionar_ot(id, fuego) {
     }
   }
   cambios_ot[current_pos] = id;
+  delete vaciar_ot[current_pos];
   var elIn = document.getElementById('fn-in-'+current_pos);
   if (elIn) { elIn.innerHTML = fuego || id; elIn.classList.add('con-valor'); }
   var p = document.getElementById('pos-'+current_pos);
@@ -228,6 +260,7 @@ function dDrop(e, pos) {
 
   // Movimiento de una sola vía: solo cambia el destino
   cambios_ot[pos] = u.id;
+  delete vaciar_ot[pos];
   var elIn = document.getElementById('fn-in-'+pos);
   var pEl  = document.getElementById('pos-'+pos);
   if (elIn) { elIn.innerHTML = u.fuego || '-'; elIn.classList.add('con-valor'); }
@@ -265,7 +298,8 @@ function guardar_ot() {
             preventivo: document.getElementById('cb_preventivo').checked ? '1':'0',
             pinchadura: pinchaduraSel.value,
             rotura: roturaSel.value,
-            cambios_ot_json: JSON.stringify(cambios_ot) },
+            cambios_ot_json: JSON.stringify(cambios_ot),
+            vaciar_ot_json: JSON.stringify(Object.keys(vaciar_ot)) },
     success: function(id) {
       if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al crear la OT');
@@ -318,6 +352,11 @@ $(function() {
     </select>
     <input type="button" value="Filtrar" onclick="filtrar_ot()" style="margin-left:10px; width:75px;" />
   </form>
+  <!-- Solo se muestra en el selector de un auxilio que tiene cubierta -->
+  <div id="vaciar_box" style="display:none; margin:6px; padding:8px 10px; border:1px dashed #c62828; background:rgba(198,40,40,0.06); font-size:12px;">
+    <input type="button" value="Dejar vacía esta posición" onclick="vaciar_posicion();" />
+    <span id="vaciar_txt" style="margin-left:8px;"></span>
+  </div>
   <div id="rueda_list"></div>
 </div>
 
@@ -396,7 +435,7 @@ $(function() {
 <!-- Diagrama de cubiertas -->
 <div style="max-width:520px; margin:10px auto; border:1px solid #ccc; padding:8px;">
   <strong>Cambio de cubiertas:</strong>
-  <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar entre posiciones &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para cambiar desde almacén</p>
+  <p style="font-size:11px; color:#666; margin:2px 0 8px 0;">Arrastrá para rotar entre posiciones &nbsp;·&nbsp; Clic en asignada para deshacer &nbsp;·&nbsp; Clic en vacía para cambiar desde almacén &nbsp;·&nbsp; Un auxilio también se puede dejar vacío</p>
   <p style="font-size:11px; color:#666; margin:0 0 8px 0;">En cada rueda: arriba la cubierta actual, abajo la que entra.</p>
   <div id="diagrama-wrap" style="text-align:center;">
     <p style="color:#999; font-size:12px;">Seleccione una unidad para ver el diagrama</p>

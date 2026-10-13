@@ -5,6 +5,9 @@ const cubCargadas = {};
 ot_cubiertas.forEach(c => { cubCargadas[c.posicion] = { id: c.cubierta_id, fuego: c.fuego }; });
 const cambiosIniciales = {};
 ot_cubiertas.forEach(c => { cambiosIniciales[c.posicion] = c.cubierta_id; });
+// Posiciones (auxilios) que la OT ya tiene marcadas para dejar vacías.
+const vaciarInicial = {};
+(ot.posiciones_vaciar || []).forEach(p => { vaciarInicial[p] = true; });
 const body = `
 <style>
 .bus-row { display:flex; align-items:center; justify-content:center; }
@@ -28,6 +31,8 @@ const body = `
 var cambios_ot = ${JSON.stringify(cambiosIniciales)};
 // Lo que se ve asignado en cada posición (id y fuego). Va siempre a la par de cambios_ot.
 var seleccion = ${JSON.stringify(cubCargadas)};
+var vaciar_ot = ${JSON.stringify(vaciarInicial)};   // posiciones que la OT deja vacías: sale la que hay y no entra otra
+var VACIABLES = ['ra', 'ra2'];                       // solo los auxilios
 var current_pos = '';
 var unidadActual = {};     // posición → cubierta montada hoy en la unidad elegida
 var unidadCargada = null;  // unidad a la que corresponden las asignaciones en pantalla
@@ -86,14 +91,16 @@ function renderDiagrama(tipo) {
   document.getElementById('diagrama-wrap').innerHTML = h;
 }
 
-// Deja la posición mostrando lo que le toca: su asignación, lo montado en la unidad, o vacía.
+// Deja la posición mostrando lo que le toca: que va a quedar vacía, su
+// asignación, lo montado en la unidad, o nada.
 function pintarPos(pos) {
   var el = document.getElementById('fn-'+pos);
   var p  = document.getElementById('pos-'+pos);
   if (!el || !p) return;
   var sel = seleccion[pos];
   var act = unidadActual[pos];
-  if (sel)      { el.innerHTML = sel.fuego || '-'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
+  if (vaciar_ot[pos]) { el.innerHTML = 'VACÍA'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
+  else if (sel) { el.innerHTML = sel.fuego || '-'; el.classList.remove('vacia'); p.classList.add('seleccionada'); }
   else if (act) { el.innerHTML = act.fuego || '-'; el.classList.remove('vacia'); p.classList.remove('seleccionada'); }
   else          { el.innerHTML = '+';              el.classList.add('vacia');    p.classList.remove('seleccionada'); }
 }
@@ -101,6 +108,7 @@ function pintarPos(pos) {
 function clearPos(pos) {
   delete cambios_ot[pos];
   delete seleccion[pos];
+  delete vaciar_ot[pos];
   pintarPos(pos);
 }
 
@@ -110,6 +118,7 @@ function cargar_tires(unidad_id) {
   if (unidadCargada !== null && String(unidad_id) !== String(unidadCargada)) {
     cambios_ot = {};
     seleccion = {};
+    vaciar_ot = {};
   }
   unidadCargada = unidad_id;
   unidadActual = {};
@@ -134,19 +143,36 @@ function cargar_tires(unidad_id) {
       (data.cubiertas || []).forEach(function(c) {
         unidadActual[c.posicion] = { id: c.id, fuego: c.fuego };
       });
-      Object.keys(unidadActual).concat(Object.keys(seleccion)).forEach(pintarPos);
+      Object.keys(unidadActual).concat(Object.keys(seleccion), Object.keys(vaciar_ot)).forEach(pintarPos);
     }
   });
 }
 
 function abrir_modal(pos) {
-  // Si ya tiene asignación, el click la deshace
-  if (cambios_ot[pos] !== undefined) { clearPos(pos); return; }
+  // Si ya tiene asignación, o está marcada para quedar vacía, el click la deshace
+  if (cambios_ot[pos] !== undefined || vaciar_ot[pos]) { clearPos(pos); return; }
   current_pos = pos;
   document.getElementById('back').style.display = 'block';
   document.getElementById('filter_list').style.display = 'block';
   document.getElementById('rueda_list').innerHTML = '';
+  mostrar_vaciar(pos);
   filtrar_ot();
+}
+
+// En el selector de un auxilio que tiene cubierta se ofrece sacarla sin poner otra.
+function mostrar_vaciar(pos) {
+  var actual = unidadActual[pos];
+  var ofrecer = VACIABLES.indexOf(pos) >= 0 && !!actual;
+  document.getElementById('vaciar_box').style.display = ofrecer ? 'block' : 'none';
+  if (ofrecer) document.getElementById('vaciar_txt').textContent = 'Sale la ' + (actual.fuego || '-') + ' y no entra otra.';
+}
+
+function vaciar_posicion() {
+  delete cambios_ot[current_pos];
+  delete seleccion[current_pos];
+  vaciar_ot[current_pos] = true;
+  pintarPos(current_pos);
+  cerrar_modal();
 }
 
 function cerrar_modal() {
@@ -178,6 +204,7 @@ function asignar(pos, id, fuego) {
   }
   cambios_ot[pos] = id;
   seleccion[pos] = { id: id, fuego: fuego || id };
+  delete vaciar_ot[pos];
   pintarPos(pos);
   return true;
 }
@@ -254,7 +281,8 @@ function guardar_ot() {
             armar:     document.getElementById('cb_armar').checked     ? '1':'0',
             preventivo: document.getElementById('cb_preventivo').checked ? '1':'0',
             pinchadura: document.getElementById('cb_pinchadura').checked ? '1':'0',
-            cambios_ot_json: JSON.stringify(cambios_ot) },
+            cambios_ot_json: JSON.stringify(cambios_ot),
+            vaciar_ot_json: JSON.stringify(Object.keys(vaciar_ot)) },
     success: function(id) {
       if (id) location.href = '/OTs/ver?ot='+id;
       else alert('Error al guardar la OT');
@@ -296,6 +324,11 @@ $(function() {
     </select>
     <button type="button" class="btn-filter" onclick="filtrar_ot()">Filtrar</button>
   </form>
+  <!-- Solo se muestra en el selector de un auxilio que tiene cubierta -->
+  <div id="vaciar_box" style="display:none; margin:0 14px 10px; padding:8px 10px; border:1px dashed #c62828; background:rgba(198,40,40,0.06); font-size:12px;">
+    <input type="button" value="Dejar vacía esta posición" onclick="vaciar_posicion();" />
+    <span id="vaciar_txt" style="margin-left:8px;"></span>
+  </div>
   <div id="rueda_list" style="padding:0 14px 14px;"></div>
 </div>
 
@@ -347,7 +380,7 @@ $(function() {
 
   <div class="form-section">
     <div class="form-section-title">Cambio de cubiertas — clic en posición para cambiar</div>
-    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Arrastrá una cubierta montada para rotarla &nbsp;·&nbsp; Clic en una asignada para deshacer &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
+    <p style="font-size:11px; color:var(--text-muted); margin:2px 0 0 0;">Arrastrá una cubierta montada para rotarla &nbsp;·&nbsp; Clic en una asignada para deshacer &nbsp;·&nbsp; Un auxilio también se puede dejar vacío &nbsp;·&nbsp; Si cambiás la unidad, las cubiertas asignadas se vacían.</p>
     <div id="diagrama-wrap" style="text-align:center; padding:10px 0;">
       <p style="color:var(--text-muted); font-size:12px;">Cargando...</p>
     </div>

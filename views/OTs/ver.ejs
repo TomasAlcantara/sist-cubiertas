@@ -51,6 +51,9 @@ const vaciadas = !esquema || !esquema.completo ? [] : Object.keys(esquema.antes)
     return { posicion: pos, fuego: cubierta.fuego, destino: Object.keys(esquema.despues).find(p => esquema.despues[p].id === cubierta.id) };
   });
 
+// Posiciones que la OT, todavía sin cerrar, tiene anotadas para dejar vacías.
+const porVaciar = esquema ? [] : (ot.posiciones_vaciar || []).filter(pos => !cubMap[pos]);
+
 const tipoUnidad = ot.tipo_unidad || 3;
 
 const motivos = [];
@@ -226,6 +229,8 @@ var CUBIERTA_MAP = ${JSON.stringify(cubMap)};
 var UNIT_MAP     = ${JSON.stringify(unitMap)};
 // Lo que la OT guardó de la unidad al cerrarse. null mientras está abierta.
 var ESQUEMA      = ${JSON.stringify(esquema)};
+// Posiciones que la OT abierta va a dejar sin cubierta cuando se cierre.
+var POR_VACIAR   = ${JSON.stringify(porVaciar)};
 
 var POS_LABELS = {
   ddi:'Del.\\nIzq.', ddd:'Del.\\nDer.',
@@ -265,6 +270,15 @@ function mkRuedaCerrada(pos) {
 
 function mkRuedaVer(pos) {
   if (ESQUEMA) return mkRuedaCerrada(pos);
+  // OT abierta que va a dejar vacía esta posición: se ve cuál es la que sale.
+  if (POR_VACIAR.indexOf(pos) >= 0) {
+    var hoy = UNIT_MAP[pos] || null;
+    return '<div class="rueda-ver vacia ot-cambiada" title="' +
+      esc('Queda vacía al cerrar la OT' + (hoy ? ' · sale ' + (hoy.fuego || '-') : '')) + '">' +
+      '<span class="rueda-fuego empty">·</span>' +
+      (hoy ? '<span class="rueda-sale">sale ' + esc(hoy.fuego || '-') + '</span>' : '') +
+      '<span class="rueda-pos">' + (POS_LABELS[pos] || pos).replace('\\n', '<br>') + '</span></div>';
+  }
   // OT abierta. Prioridad: cubierta de la OT > cubierta actual de la unidad > vacía
   var c   = CUBIERTA_MAP[pos] || UNIT_MAP[pos] || null;
   var isOT = !!CUBIERTA_MAP[pos];
@@ -387,7 +401,7 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
         </tr>
       </thead>
       <tbody>
-        ${cubiertas.length === 0 && vaciadas.length === 0
+        ${cubiertas.length === 0 && vaciadas.length === 0 && porVaciar.length === 0
           ? '<tr><td colspan="6" style="text-align:center;color:var(--text-muted);font-family:var(--font-mono);font-size:12px;">Sin cubiertas registradas</td></tr>'
           : cubiertas.map((c, i) => `<tr class="${i % 2 === 0 ? 'light' : 'dark'}">
               <td>${c.posicion ? posNombre(c.posicion) : '-'}</td>
@@ -401,6 +415,11 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
               <td>${posNombre(v.posicion)}</td>
               <td colspan="4" style="color:var(--text-muted)">${v.destino ? 'queda vacía: la cubierta pasó a ' + posNombre(v.destino) : 'queda vacía'}</td>
               <td style="font-family:var(--font-mono)">${e(v.fuego || '-')}</td>
+            </tr>`).join('')
+          + porVaciar.map(pos => `<tr>
+              <td>${posNombre(pos)}</td>
+              <td colspan="4" style="color:var(--text-muted)">queda vacía al cerrar la OT</td>
+              <td style="font-family:var(--font-mono)">${e((unitMap[pos] && unitMap[pos].fuego) || '-')}</td>
             </tr>`).join('')
         }
       </tbody>

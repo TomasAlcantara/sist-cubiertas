@@ -13,8 +13,8 @@ jest.mock('../db', () => {
 
 const { sql } = require('../db');
 const {
-  POSICIONES, ALMACEN_A_VERIFICAR, almacenAVerificar,
-  normalizarCambios, validarCubiertasDeOt, guardarCubiertasDeOt,
+  POSICIONES, POSICIONES_VACIABLES, ALMACEN_A_VERIFICAR, almacenAVerificar,
+  normalizarCambios, normalizarVaciar, validarCubiertasDeOt, guardarCubiertasDeOt,
   leerEstadoParaCierre, planificarCierre, consultasDeCierre, esquemaDeOtCerrada,
 } = require('../lib/otCubiertas');
 const { consultaEvento, registrarEvento } = require('../lib/cubiertaHistorial');
@@ -341,6 +341,138 @@ describe('planificarCierre — esquema de la unidad antes y después', () => {
     });
     expect(plan.esquema.antes.ddi.fuego).toBe('7074 / 13574');
     expect(plan.esquema.despues.ddi).toEqual({ id: 12671, fuego: '13574' });
+  });
+});
+
+// ─── Dejar una posición vacía ─────────────────────────────────
+// El taller: "con los auxilios solo me permite cambiar un auxilio por otro, no me
+// permite sacarlo por completo". Una OT solo sabía decir "acá entra esta cubierta".
+describe('planificarCierre — posiciones que la OT deja vacías', () => {
+  const montadas = [enUnidad(7, 'ra', 'AUX'), enUnidad(8, 'ddi', 'DEL')];
+
+  test('sale la que está montada y no entra ninguna', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra'], montadas });
+    expect(plan.errores).toEqual([]);
+    expect(ids(plan.salientes, 'id')).toEqual([7]);
+    expect(plan.entrantes).toEqual([]);
+    expect(eventos(plan)).toEqual(['retiro:7@ra']);
+  });
+
+  test('el esquema la tiene antes y ya no después; el resto de la unidad queda igual', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra'], montadas });
+    expect(plan.esquema.antes.ra).toEqual({ id: 7, fuego: 'AUX' });
+    expect(plan.esquema.despues).toEqual({ ddi: { id: 8, fuego: 'DEL' } });
+  });
+
+  test('convive con un cambio en otra posición de la misma OT', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra'], filas: [libre(50, 'ddi')], montadas });
+    expect(ids(plan.salientes, 'id')).toEqual([7, 8]);
+    expect(eventos(plan)).toEqual(['retiro:7@ra', 'retiro:8@ddi', 'colocacion:50@ddi']);
+  });
+
+  test('una posición que ya estaba vacía no mueve nada ni impide cerrar', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra2'], montadas });
+    expect(plan).toMatchObject({ errores: [], salientes: [], eventos: [] });
+    expect(plan.esquema.despues).toEqual(plan.esquema.antes);
+  });
+
+  test('si la posición tenía dos cubiertas, salen las dos', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10, vaciar: ['ra'], montadas: [enUnidad(7, 'ra'), enUnidad(9, 'ra')],
+    });
+    expect(ids(plan.salientes, 'id')).toEqual([7, 9]);
+    expect(plan.esquema.despues).toEqual({});
+  });
+
+  test('el auxilio que pasa a una rueda no sale de la unidad, aunque su lugar esté marcado para vaciar', () => {
+    // Se usa el auxilio para reemplazar una rueda: rota. El lugar queda vacío igual.
+    const plan = planificarCierre({
+      ot: OT, km: 10, vaciar: ['ra'], filas: [montadaAca(7, 'ddi', 'ra', 'AUX')], montadas,
+    });
+    expect(plan.errores).toEqual([]);
+    expect(ids(plan.salientes, 'id')).toEqual([8]);
+    expect(ids(plan.rotadas)).toEqual([7]);
+    expect(plan.esquema.despues).toEqual({ ddi: { id: 7, fuego: 'AUX' } });
+  });
+
+  test('con destino CEAMSE el auxilio que sale se da de baja', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra'], destinoEsCeamse: true, montadas });
+    expect(eventos(plan)).toEqual(['retiro:7@ra', 'baja:7@ra']);
+  });
+
+  test('con arreglo: a la que rota desde un lugar que queda vacío no se le anota, nadie la desplazó', () => {
+    const plan = planificarCierre({
+      ot: OT, km: 10, arreglo: true, vaciar: ['ra'], filas: [montadaAca(7, 'ddi', 'ra')], montadas,
+    });
+    expect(eventos(plan).filter(e => e.startsWith('reparacion'))).toEqual(['reparacion:8@ddi']);
+  });
+
+  test('vaciar una posición y cargarle una cubierta en la misma OT impide cerrar', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra'], filas: [libre(50, 'ra', 'NUEVA')], montadas });
+    expect(plan.errores).toHaveLength(1);
+    expect(plan.errores[0]).toContain('Auxilio');
+    expect(plan.errores[0]).toContain('NUEVA');
+  });
+
+  test('las consultas del cierre lo mandan al destino como a cualquier saliente', () => {
+    const plan = planificarCierre({ ot: OT, km: 10, vaciar: ['ra'], montadas });
+    consultasDeCierre(plan, { ot: OT, destinoEsCeamse: false, destinoAlmacenId: 2 });
+    const [salen, evento, ...resto] = llamadas();
+    expect(salen.texto).toMatch(/^UPDATE cubiertas SET micro_id = NULL, posicion = NULL, almacen_id = \?/);
+    expect(salen.valores).toEqual([2, [7], UNIDAD]);
+    expect(evento.texto).toMatch(/^INSERT INTO cubierta_eventos/);
+    expect(resto).toEqual([]);
+  });
+});
+
+describe('normalizarVaciar', () => {
+  const rechazo = (json, cambios) => {
+    try { normalizarVaciar(json, cambios); } catch (e) { return e; }
+    return null;
+  };
+
+  test('solo los auxilios se pueden dejar vacíos', () => {
+    expect(POSICIONES_VACIABLES).toEqual(['ra', 'ra2']);
+    expect(POSICIONES_VACIABLES.every(p => POSICIONES.includes(p))).toBe(true);
+  });
+
+  test.each([undefined, null, ''])('%p → null: el formulario no las mandó', (valor) => {
+    expect(normalizarVaciar(valor)).toBeNull();
+  });
+
+  test('[] → lista vacía: la OT no deja ninguna vacía, que no es lo mismo', () => {
+    expect(normalizarVaciar('[]')).toEqual([]);
+  });
+
+  test('devuelve las posiciones, sin repetidas', () => {
+    expect(normalizarVaciar('["ra","ra2","ra"]')).toEqual(['ra', 'ra2']);
+    expect(normalizarVaciar(['ra'])).toEqual(['ra']);
+  });
+
+  test('una rueda de rodado no se puede vaciar → 400 que la nombra', () => {
+    const e = rechazo('["ra","ddi"]');
+    expect(e.status).toBe(400);
+    expect(e.message).toContain('Del. Izq.');
+    expect(e.message).toContain('auxilios');
+  });
+
+  test('la misma posición para vaciar y con una cubierta asignada → 400', () => {
+    const e = rechazo('["ra"]', { ra: 50 });
+    expect(e.status).toBe(400);
+    expect(e.message).toContain('Auxilio');
+  });
+
+  test('una cubierta asignada en otra posición no molesta', () => {
+    expect(normalizarVaciar('["ra"]', { ddi: 50 })).toEqual(['ra']);
+  });
+
+  test.each([
+    ['un objeto', '{"ra":true}'],
+    ['un número', '5'],
+    ['JSON roto', '["ra"'],
+    ['una posición que no existe', '["xyz"]'],
+  ])('%s → 400', (_caso, json) => {
+    expect(rechazo(json)).toMatchObject({ status: 400 });
   });
 });
 

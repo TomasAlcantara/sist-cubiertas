@@ -8,7 +8,7 @@ const { enviarAvisoPinchadura } = require('../lib/mailer');
 const { registrarEvento } = require('../lib/cubiertaHistorial');
 const {
   nombrePosicion, ALMACEN_A_VERIFICAR, almacenAVerificar,
-  normalizarCambios, validarCubiertasDeOt, guardarCubiertasDeOt,
+  normalizarCambios, normalizarVaciar, validarCubiertasDeOt, guardarCubiertasDeOt,
   leerEstadoParaCierre, planificarCierre, consultasDeCierre,
 } = require('../lib/otCubiertas');
 const { sanitizarPermisos, tienePermiso } = require('../lib/permisos');
@@ -687,7 +687,8 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
     // El diagrama se arma con el mismo plan que va a ejecutar el cierre: lo que
     // entra por la OT contra lo que está montado en la unidad en este momento.
     const estadoUnidad = await leerEstadoParaCierre(ot);
-    const plan = planificarCierre({ ot, ...estadoUnidad });
+    const vaciar = ot.posiciones_vaciar || [];
+    const plan = planificarCierre({ ot, vaciar, ...estadoUnidad });
     const fuegos = (cubs) => cubs.map(c => c.fuego || '-').join(' / ');
 
     // Mapas: entrantes (OT), salientes (lo que hoy ocupa ese lugar), actuales (unidad)
@@ -697,6 +698,15 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
       mapaIn[f.posicion] = f.fuego || 'S/N';
       const ocupan = estadoUnidad.montadas.filter(t => t.posicion === f.posicion && t.id !== f.cubierta_id);
       if (ocupan.length) mapaOut[f.posicion] = fuegos(ocupan);
+    });
+    // Una posición que la OT deja vacía se dibuja como un cambio más: arriba la
+    // que sale y abajo, en vez de una entrante, que queda vacía.
+    const quedanVacias = new Set();
+    vaciar.forEach(pos => {
+      const ocupan = estadoUnidad.montadas.filter(t => t.posicion === pos);
+      if (!ocupan.length || mapaIn[pos]) return;
+      quedanVacias.add(pos);
+      mapaOut[pos] = fuegos(ocupan);
     });
     const mapaUnidad = {}; // pos → fuego(s) actualmente montados
     estadoUnidad.montadas.forEach(t => {
@@ -735,7 +745,12 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
       const saliente = mapaOut[pos] || null;
       const actual   = mapaUnidad[pos];
 
-      if (entrante) {
+      if (quedanVacias.has(pos)) {
+        // Posición que queda vacía: fila superior = saliente (rojo), fila inferior = nada entra (ámbar)
+        return `<div style="width:62px;height:90px;background:#1f1508;border:2px solid #ef6c00;display:inline-flex;align-items:stretch;margin:2px;flex-direction:column;overflow:hidden;">` +
+               `<span style="${fMono}font-size:9px;color:#e57373;border-bottom:1px solid #333;width:100%;display:flex;align-items:center;justify-content:center;flex:1;">${escapeHtml(saliente)}</span>` +
+               `<span style="${fMono}font-size:9px;color:#ffb74d;width:100%;display:flex;align-items:center;justify-content:center;flex:1;">VACÍA</span></div>`;
+      } else if (entrante) {
         // Posición con cambio: fila superior = saliente (rojo), fila inferior = entrante (verde)
         const rowOut = saliente
           ? `<span style="${fMono}font-size:9px;color:#e57373;border-bottom:1px solid #333;width:100%;display:flex;align-items:center;justify-content:center;flex:1;">${escapeHtml(saliente)}</span>`
@@ -785,6 +800,7 @@ router.post('/mb_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventivo'), a
       <div style="display:flex;gap:14px;justify-content:center;margin-top:8px;font-size:11px;flex-wrap:wrap;">
         <span style="color:#66bb6a;">▪ Entrante (nueva)</span>
         <span style="color:#e57373;">▪ Saliente</span>
+        ${quedanVacias.size ? '<span style="color:#ffb74d;">▪ Queda vacía</span>' : ''}
         <span style="color:#aaa;">▪ Sin cambio</span>
       </div>`;
 
@@ -944,7 +960,8 @@ router.post('/confirmar_cerrar_ot', requirePerm('ot_cerrar', 'ot_cerrar_preventi
     // queda como estaba y el usuario ve por qué.
     const estadoUnidad = await leerEstadoParaCierre(ot);
     const plan = planificarCierre({
-      ot, km: kmCierre, arreglo: trabajos.arreglo, destinoEsCeamse, ...estadoUnidad,
+      ot, km: kmCierre, arreglo: trabajos.arreglo, destinoEsCeamse,
+      vaciar: ot.posiciones_vaciar || [], ...estadoUnidad,
     });
     if (plan.errores.length) return res.status(400).send(plan.errores.join('\n'));
 
@@ -1031,17 +1048,18 @@ router.post('/nueva_ot', requirePerm('ot_crear'), async (req, res, next) => {
     // Las cubiertas se validan antes de crear la OT: si alguna no se puede usar,
     // que el usuario lo vea y no quede una OT cargada a medias.
     const cambios = normalizarCambios(req.body.cambios_ot_json);
+    const vaciar = normalizarVaciar(req.body.vaciar_ot_json, cambios) || [];
     const filas = cambios
       ? await validarCubiertasDeOt({ unidadId: parseInt(unidad_id) || null, cambios })
       : [];
 
     const result = await sql`
-      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura, solicitado_por)
+      INSERT INTO ots (fecha, gomeria_id, unidad_id, observaciones, rotacion, arreglo, cambio, alinear, balanceo, armar, preventivo, pinchadura, rotura, solicitado_por, posiciones_vaciar)
       VALUES (
         ${fechaISO}, ${parseInt(gomeria_id)||null}, ${parseInt(unidad_id)||null}, ${observaciones||null},
         ${rotacion === '1'}, ${arreglo === '1'}, ${cambio === '1'},
         ${alinear === '1'}, ${balanceo === '1'}, ${armar === '1'}, ${preventivo === '1'},
-        ${pinchadura === '1'}, ${rotura === '1'}, ${req.user?.usuario || null}
+        ${pinchadura === '1'}, ${rotura === '1'}, ${req.user?.usuario || null}, ${vaciar}
       )
       RETURNING id
     `;
@@ -1121,6 +1139,15 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
       ? await validarCubiertasDeOt({ unidadId: parseInt(unidad_id) || null, cambios })
       : null;
 
+    // Posiciones a vaciar. Si el formulario no las mandó se conservan las
+    // guardadas, menos las que dejaron de valer: las de otra unidad, si la OT
+    // cambió de unidad, y las que en este guardado reciben una cubierta.
+    const vaciarEnviado = normalizarVaciar(req.body.vaciar_ot_json, cambios);
+    const guardada = antesOt[0] || {};
+    const mismaUnidad = (guardada.unidad_id || null) === (parseInt(unidad_id) || null);
+    const vaciar = vaciarEnviado
+      || (mismaUnidad ? guardada.posiciones_vaciar || [] : []).filter(p => !(cambios && cambios[p]));
+
     await sql`
       UPDATE ots SET
         fecha = ${fechaISO}, gomeria_id = ${parseInt(gomeria_id)||null}, unidad_id = ${parseInt(unidad_id)||null},
@@ -1129,7 +1156,8 @@ router.post('/actualizar_ot', requirePerm('ot_editar'), async (req, res, next) =
         alinear = ${alinear === '1'}, balanceo = ${balanceo === '1'}, armar = ${armar === '1'},
         preventivo = CASE WHEN ${preventivo === undefined} THEN preventivo ELSE ${preventivo === '1'} END,
         pinchadura = CASE WHEN ${pinchadura === undefined} THEN pinchadura ELSE ${pinchadura === '1'} END,
-        rotura = CASE WHEN ${rotura === undefined} THEN rotura ELSE ${rotura === '1'} END
+        rotura = CASE WHEN ${rotura === undefined} THEN rotura ELSE ${rotura === '1'} END,
+        posiciones_vaciar = ${vaciar}
       WHERE id = ${otIdInt} AND estado = 0
     `;
 
