@@ -103,6 +103,7 @@ async function leer(c) {
     SELECT oc.ot_id, o.unidad_id, o.estado, o.anulada,
            COALESCE(o.fecha, DATE '1900-01-01')::text AS fecha,
            oc.posicion, oc.cubierta_id, c.fuego,
+           oc.xmin::text AS xmin, age(oc.xmin)::int AS edad, oc.ctid::text AS ctid,
            ROW_NUMBER() OVER (PARTITION BY oc.ot_id, oc.posicion ORDER BY age(oc.xmin) DESC, oc.ctid ASC)::int AS orden
     FROM ot_cubiertas oc
     JOIN ots o ON o.id = oc.ot_id
@@ -181,11 +182,66 @@ function mostrarPlan(plan, huella, datos) {
       + (f.ot_abierta ? '   (OT ABIERTA)' : ''));
   }
 
+  mostrarOrdenDeCarga(plan, datos.filasOt);
+
   escribir(`\nFilas de OT con "anterior" igual a la que entra: ${datos.anteriorIgual.length} (la anterior pasa a vacía)`);
   for (const a of datos.anteriorIgual) escribir(`    OT ${a.ot_id} ${nombrePosicion(a.posicion)}: ${a.fuego}`);
 
   escribir(`\nCubiertas montadas que además figuran en un almacén: ${datos.montadasConAlmacen.length} (se les quita el almacén)`);
   for (const m of datos.montadasConAlmacen) escribir(`    ${m.fuego}: unidad ${m.unidad} ${nombrePosicion(m.posicion)}, y almacén ${m.almacen}`);
+}
+
+/**
+ * La evidencia detrás de "lo último que se cargó": cada OT con más de una fila en
+ * la misma posición, fila por fila, para poder revisar el orden a ojo. Es lo que
+ * decide qué fila fantasma se borra y, en las posiciones resueltas por R1, qué
+ * cubierta queda montada. No decide nada: muestra lo que ya decidió el plan.
+ */
+function mostrarOrdenDeCarga(plan, filasOt) {
+  const grupos = new Map();
+  for (const f of filasOt) {
+    const k = `${f.ot_id}:${f.posicion}`;
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(f);
+  }
+  const repetidos = [...grupos.values()].filter(g => g.length > 1)
+    .map(g => [...g].sort((a, b) => a.orden - b.orden))
+    .sort((a, b) => a[0].ot_id - b[0].ot_id || a[0].posicion.localeCompare(b[0].posicion));
+  const seBorra = new Set(plan.fantasmas.map(f => `${f.ot_id}:${f.posicion}:${f.cubierta_id}`));
+  const R1 = new Map(plan.posiciones.filter(p => p.regla === 'R1').map(p => [`${p.ot_id}:${p.posicion}`, p]));
+
+  escribir(`\nOrden de carga dentro de cada OT: ${repetidos.length} posición(es) con más de una fila`);
+  if (!repetidos.length) return;
+  escribir('    xmin = número de la transacción que escribió la fila; edad = cuántas transacciones atrás fue (a más edad, más vieja).');
+  escribir('    ctid = (página, lugar) físico de la fila: solo desempata entre filas de una misma transacción.');
+
+  let porTransaccion = 0;
+  const dudosas = [];
+  for (const filas of repetidos) {
+    const queda = filas.find(f => !seBorra.has(`${f.ot_id}:${f.posicion}:${f.cubierta_id}`));
+    const r1 = R1.get(`${filas[0].ot_id}:${filas[0].posicion}`);
+    filas.forEach((f, i) => {
+      const cabeza = i === 0 ? `OT ${String(f.ot_id).padEnd(5)} ${nombrePosicion(f.posicion).padEnd(16)}` : ' '.repeat(25);
+      escribir(`    ${cabeza} ${i + 1}° ${String(f.fuego).padEnd(7)} xmin ${String(f.xmin).padStart(9)}  edad ${String(f.edad).padStart(8)}  ctid ${String(f.ctid).padEnd(9)} `
+        + (f === queda ? 'QUEDA' : 'se borra')
+        + (i === 0 && r1 ? `   → decide la unidad ${r1.unidad}: queda montada la ${r1.queda.fuego}` : ''));
+    });
+    // La que queda tiene que ser de una transacción posterior a todas las que se borran.
+    const flojas = filas.filter(f => f !== queda && !(queda && queda.edad < f.edad));
+    const congelada = filas.some(f => f.edad >= 2147483647);
+    if (!queda || flojas.length || congelada) {
+      const motivo = !queda ? 'el plan no deja ninguna de estas filas'
+        : congelada ? 'hay una fila sin transacción propia (congelada): su edad no dice cuándo se escribió'
+        : queda.xmin === flojas[0].xmin ? 'se escribieron en la misma transacción: el orden lo da solo el lugar físico'
+        : 'la que queda NO es la de la transacción más nueva: la decidió otra regla (decisión manual o posición de la unidad)';
+      escribir(' '.repeat(29) + `(!) ${motivo}`);
+      dudosas.push(`OT ${filas[0].ot_id} ${nombrePosicion(filas[0].posicion)}`);
+    } else {
+      porTransaccion++;
+    }
+  }
+  escribir(`    Resumen: en ${porTransaccion} de ${repetidos.length} la fila que queda es de una transacción posterior a las que se borran.`
+    + (dudosas.length ? ` Para mirar a mano: ${dudosas.join('; ')}.` : ''));
 }
 
 // ─── Ejecución ────────────────────────────────────────────────────────────────
@@ -375,8 +431,15 @@ async function verificar(c, plan) {
 // ─── Principal ────────────────────────────────────────────────────────────────
 
 async function main() {
-  const c = new Client({ connectionString: process.env.DATABASE_URL, ssl: true });
+  // La URL de Neon dice sslmode=require, que pg hoy trata como verify-full y avisa por
+  // consola que eso va a cambiar. Se pide verify-full explícito: mismo control, sin aviso.
+  const url = process.env.DATABASE_URL.replace(/([?&])sslmode=[^&]*/, '$1sslmode=verify-full');
+  // Sin límite, si el puerto no abre connect() se queda esperando para siempre.
+  const c = new Client({ connectionString: url, ssl: true, connectionTimeoutMillis: 15000 });
   await c.connect();
+  escribir(APLICAR ? 'Modo: APLICAR (COMMIT al final, si la huella coincide)' : 'Modo: SIMULACIÓN (ROLLBACK al final, no cambia ningún dato)');
+  let bloqueoDesde = null;
+  const bloqueadas = () => `Las tablas estuvieron bloqueadas para escritura ${((Date.now() - bloqueoDesde) / 1000).toFixed(1)} s.`;
   let codigo = 0;
   let abierta = false;
   try {
@@ -386,10 +449,13 @@ async function main() {
     // dejar a la app esperando.
     await c.query("SET LOCAL lock_timeout = '5s'");
     await c.query("SET LOCAL statement_timeout = '60s'");
-    await c.query("SET LOCAL idle_in_transaction_session_timeout = '120s'");
+    // Si esta conexión se cuelga con la transacción abierta, el servidor la corta
+    // a los 30 s y suelta los bloqueos: ninguna consulta de acá tarda tanto.
+    await c.query("SET LOCAL idle_in_transaction_session_timeout = '30s'");
     // Nadie escribe en estas tablas mientras se lee, se decide y se corrige.
     // Las lecturas de la app siguen funcionando.
     await c.query('LOCK TABLE cubiertas, ot_cubiertas, cubierta_eventos, almacen IN SHARE ROW EXCLUSIVE MODE');
+    bloqueoDesde = Date.now();
 
     const datos = await leer(c);
     const { porDefecto, destinoDe } = resolverDestinos(datos.almacenes);
@@ -431,11 +497,11 @@ async function main() {
         await c.query('COMMIT');
         desenlace = 'aplicado';
         abierta = false;
-        escribir(`\nAPLICADO. Verificar con:  node db/auditar_cubiertas.js`);
+        escribir(`\nAPLICADO. ${bloqueadas()} Verificar con:  node db/auditar_cubiertas.js`);
       } else {
         await c.query('ROLLBACK');
         abierta = false;
-        escribir('\nSIMULACIÓN: se deshizo todo (ROLLBACK). La base quedó como estaba.');
+        escribir(`\nSIMULACIÓN: se deshizo todo (ROLLBACK). La base quedó como estaba. ${bloqueadas()}`);
         escribir(`Para aplicar exactamente este plan:  node db/corregir_cubiertas_2026_10.js --aplicar --huella ${huella}`);
       }
     }
