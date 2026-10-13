@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS cubiertas (
   precio DECIMAL(10,2),
   activo SMALLINT DEFAULT 1
 );
+-- Una sola cubierta activa por posición de cada unidad. Las dadas de baja y las
+-- que no están montadas no entran en el índice. El cierre de una OT suelta las
+-- que rotan antes de colocar las que entran, para no chocar con él a mitad de camino.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_cubiertas_unidad_posicion
+  ON cubiertas (micro_id, posicion)
+  WHERE activo = 1 AND micro_id IS NOT NULL AND posicion IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS ots (
   id SERIAL PRIMARY KEY,
@@ -129,6 +135,11 @@ CREATE TABLE IF NOT EXISTS ot_cubiertas (
   cubierta_anterior_id INTEGER REFERENCES cubiertas(id),
   PRIMARY KEY (ot_id, cubierta_id)
 );
+-- Una sola fila por posición dentro de cada OT. Las filas sin posición (cubiertas
+-- enviadas a gomería desde la OT) no entran en el índice.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_ot_cubiertas_ot_posicion
+  ON ot_cubiertas (ot_id, posicion)
+  WHERE posicion IS NOT NULL;
 
 -- Historial de vida de cada cubierta. Se llena solo al cerrar OTs.
 -- Para datos ya existentes: node db/backfill_cubierta_eventos.js
