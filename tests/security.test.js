@@ -4,7 +4,7 @@
  * Verifica que los headers de seguridad estén presentes,
  * que el rate limiting funcione y que el error handler no filtre info.
  */
-const request = require('supertest');
+const request = require('./pedido');
 const jwt = require('jsonwebtoken');
 
 jest.mock('../db', () => {

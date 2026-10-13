@@ -10,7 +10,7 @@
  * y ni ahí ni en "Cargar" había forma de quitar una asignación.
  */
 const vm = require('vm');
-const request = require('supertest');
+const request = require('./pedido');
 const jwt = require('jsonwebtoken');
 
 jest.mock('../db', () => ({ sql: jest.fn() }));
