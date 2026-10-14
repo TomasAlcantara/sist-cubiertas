@@ -120,7 +120,10 @@ CREATE TABLE IF NOT EXISTS ots (
   motivo_anulacion TEXT,
   -- Cómo quedó armada la unidad al cerrar la OT: { antes, despues }, cada uno
   -- posicion → { id, fuego }. La OT cerrada se dibuja con esto, no con lo que la
-  -- unidad tenga montado hoy. NULL en las OTs cerradas antes de que existiera.
+  -- unidad tenga montado hoy. En las cerradas entre el 20/08 y el 13/10/2026 está
+  -- reconstruido desde el historial (db/reconstruir_esquemas_2026_10.js) y lleva
+  -- reconstruido: true, más sin_registro: [posiciones] si alguna no se pudo saber.
+  -- NULL en las cerradas antes.
   esquema_cierre JSONB,
   -- Posiciones (solo auxilios) que la OT deja sin cubierta: sale lo que haya y no entra nada.
   posiciones_vaciar TEXT[] NOT NULL DEFAULT '{}',
