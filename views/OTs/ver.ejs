@@ -245,12 +245,13 @@ function esc(v) {
 
 // OT cerrada: se dibuja con lo que la OT guardó, nunca con la unidad de hoy.
 // Sin el esquema completo (OTs anteriores a que se guardara) solo se conocen las
-// posiciones que la OT cambió; del resto no hay registro y no se rellena.
+// posiciones que la OT cambió; del resto no hay registro y no se rellena. En uno
+// reconstruido desde el historial, tampoco las que el historial no permitió saber.
 function mkRuedaCerrada(pos) {
   var antes = ESQUEMA.antes[pos] || null;
   var despues = ESQUEMA.despues[pos] || null;
   var posLabel = '<span class="rueda-pos">' + (POS_LABELS[pos] || pos).replace('\\n', '<br>') + '</span>';
-  if (!ESQUEMA.completo && !despues) {
+  if ((!ESQUEMA.completo && !despues) || (ESQUEMA.sinRegistro || []).indexOf(pos) >= 0) {
     return '<div class="rueda-ver sin-registro" title="Sin registro de qué había en esta posición">' +
       '<span class="rueda-fuego empty">?</span>' + posLabel + '</div>';
   }
@@ -363,9 +364,11 @@ ${ot.anulada ? `<div style="margin-bottom:1.25rem; padding:12px 16px; border:1px
       <div class="leyenda-item"><div class="leyenda-dot ocupada"></div> Con cubierta</div>
       <div class="leyenda-item"><div class="leyenda-dot vacia"></div> Vacía</div>
       ${esquema ? '<div class="leyenda-item"><div class="leyenda-dot cambiada"></div> Cambió en esta OT</div>' : ''}
-      ${esquema && !esquema.completo ? '<div class="leyenda-item"><div class="leyenda-dot sin-registro"></div> Sin registro</div>' : ''}
+      ${esquema && (!esquema.completo || (esquema.sinRegistro || []).length) ? '<div class="leyenda-item"><div class="leyenda-dot sin-registro"></div> Sin registro</div>' : ''}
     </div>
     ${esquema && !esquema.completo ? '<p class="diagrama-nota">Esta OT se cerró antes de que el sistema guardara cómo quedaba armada la unidad: se ven solo las posiciones que cambió.</p>' : ''}
+    ${esquema && esquema.reconstruido ? '<p class="diagrama-nota">Esta OT se cerró antes de que el sistema guardara cómo quedaba armada la unidad: el esquema se reconstruyó con el historial de movimientos de cubiertas.'
+      + ((esquema.sinRegistro || []).length ? ' De las posiciones sin registro el historial no alcanza para saber qué tenían.' : '') + '</p>' : ''}
   </div>
 
   <!-- Info -->

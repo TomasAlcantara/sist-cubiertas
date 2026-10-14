@@ -484,6 +484,31 @@ describe('Ver OT — el diagrama', () => {
     });
   });
 
+  // Las cerradas entre el 20/08 y el 13/10 tienen el esquema reconstruido desde el
+  // historial: se dibuja como uno guardado, salvo lo que el historial no permitió saber.
+  describe('OT cerrada con el esquema reconstruido', () => {
+    const esquema_cierre = {
+      antes:   { ddi: { id: 13220, fuego: '14291' }, ddd: { id: 9, fuego: 'IGUAL' } },
+      despues: { ddi: { id: 13220, fuego: '14291' }, ddd: { id: 9, fuego: 'IGUAL' } },
+      sin_registro: ['ra'], reconstruido: true,
+    };
+    const reconstruida = () => diagramaDe({ estado: 1, esquema_cierre });
+
+    test('las posiciones conocidas se ven con su fuego, sin marcar como cambiadas', async () => {
+      const diagrama = await reconstruida();
+      expect(ruedaDe(diagrama, 'ddi')).toContain('>14291<');
+      expect(ruedaDe(diagrama, 'ddi')).not.toContain('ot-cambiada');
+      expect(ruedaDe(diagrama, 'ddd')).toContain('>IGUAL<');
+    });
+
+    test('la que el historial no permitió saber figura sin registro; la que no tenía nada, vacía', async () => {
+      const diagrama = await reconstruida();
+      expect(ruedaDe(diagrama, 'ra')).toContain('sin-registro');
+      expect(ruedaDe(diagrama, 'tie')).toContain(' vacia"');
+      expect(diagrama).not.toContain('MONTADA-399');
+    });
+  });
+
   test('OT abierta: se sigue dibujando como antes, con lo que la OT tiene cargado', async () => {
     const diagrama = await diagramaDe({ estado: 0 });
     expect(ruedaDe(diagrama, 'ddi')).toContain('>14291<');

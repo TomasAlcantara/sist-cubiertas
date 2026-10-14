@@ -491,6 +491,14 @@ describe('esquemaDeOtCerrada', () => {
     expect(esquemaDeOtCerrada({ esquema_cierre: JSON.stringify(GUARDADO) }, [])).toEqual({ completo: true, ...GUARDADO });
   });
 
+  test('uno reconstruido desde el historial viene marcado, con lo que no se pudo saber', () => {
+    const reconstruido = { ...GUARDADO, sin_registro: ['ra'], reconstruido: true };
+    expect(esquemaDeOtCerrada({ esquema_cierre: reconstruido }, FILAS_OT)).toEqual({
+      completo: true, ...GUARDADO, reconstruido: true, sinRegistro: ['ra'],
+    });
+    expect(esquemaDeOtCerrada({ esquema_cierre: { ...GUARDADO, reconstruido: true } }, []).sinRegistro).toEqual([]);
+  });
+
   test('sin esquema guardado arma solo lo que la OT cambió', () => {
     // Las OTs cerradas antes de que existiera la columna: del resto de la unidad no hay registro.
     expect(esquemaDeOtCerrada({ esquema_cierre: null }, FILAS_OT)).toEqual({

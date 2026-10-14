@@ -1235,6 +1235,34 @@ describe('GET /OTs/ver — una OT cerrada no se rellena con la unidad de hoy', (
     expect(esquemaEnPantalla(res.text)).toEqual({ completo: true, ...guardado });
     expect(res.text).toContain('Esquema al cerrar la OT');
     expect(res.text).not.toContain('se cerró antes de que el sistema guardara');
+    expect(res.text).not.toContain('leyenda-dot sin-registro');
+  });
+
+  test('cerrada con esquema reconstruido (OT vieja): lo aclara, y marca lo que no se pudo saber', async () => {
+    const guardado = {
+      antes:   { ddi: { id: 7, fuego: 'VIEJA' }, ddd: { id: 9, fuego: 'IGUAL' } },
+      despues: { ddi: { id: 7, fuego: 'VIEJA' }, ddd: { id: 9, fuego: 'IGUAL' } },
+      sin_registro: ['ra'], reconstruido: true,
+    };
+    baseCon([['FROM ots o', [{ ...CERRADA, esquema_cierre: guardado }]], [DE_HOY, HOY]]);
+    const res = await ver();
+    expect(consultaCon(DE_HOY)).toBeUndefined();
+    expect(esquemaEnPantalla(res.text)).toEqual({
+      completo: true, antes: guardado.antes, despues: guardado.despues, reconstruido: true, sinRegistro: ['ra'],
+    });
+    expect(res.text).toContain('el esquema se reconstruyó con el historial de movimientos de cubiertas');
+    expect(res.text).toContain('De las posiciones sin registro el historial no alcanza');
+    expect(res.text).toContain('leyenda-dot sin-registro');
+    expect(res.text).not.toContain('se ven solo las posiciones que cambió');
+  });
+
+  test('reconstruido sin posiciones dudosas: la nota, sin hablar de "sin registro"', async () => {
+    const guardado = { antes: { ddd: { id: 9, fuego: 'IGUAL' } }, despues: { ddd: { id: 9, fuego: 'IGUAL' } }, reconstruido: true };
+    baseCon([['FROM ots o', [{ ...CERRADA, esquema_cierre: guardado }]]]);
+    const res = await ver();
+    expect(res.text).toContain('el esquema se reconstruyó');
+    expect(res.text).not.toContain('leyenda-dot sin-registro');
+    expect(res.text).not.toContain('De las posiciones sin registro');
   });
 
   test('cerrada sin esquema (OT vieja): solo lo que cambió, y avisa que del resto no hay registro', async () => {
