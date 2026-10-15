@@ -40,6 +40,60 @@ describe('Headers de seguridad HTTP', () => {
     expect(res.headers['content-security-policy']).toBeDefined();
   });
 
+  // Las librerías del layout que vienen de CDN: la CSP las dejaba afuera y la
+  // consola se llenaba de bloqueos (sin íconos, sin toasts, sin TomSelect).
+  describe('CSP y las librerías del layout', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const directivas = async () => {
+      const res = await request(app).get('/login');
+      return Object.fromEntries(res.headers['content-security-policy'].split(';')
+        .map(d => d.trim().split(/\s+/)).filter(d => d[0]).map(([nombre, ...valores]) => [nombre, valores]));
+    };
+    // Una fuente con ruta: terminada en "/" vale para todo lo de adentro; si no, solo esa URL.
+    const permite = (fuentes, url) => fuentes.some((f) => {
+      if (!/^https:\/\//.test(f)) return false;
+      const u = new URL(url);
+      const s = new URL(f);
+      if (u.origin !== s.origin) return false;
+      if (s.pathname === '/') return true;
+      return s.pathname.endsWith('/') ? u.pathname.startsWith(s.pathname) : u.pathname === s.pathname;
+    });
+    const layout = fs.readFileSync(path.join(__dirname, '../views/layout.ejs'), 'utf8');
+    const scripts = [...layout.matchAll(/<script[^>]+src="(https:[^"]+)"/g)].map(m => m[1]);
+    const estilos = [...layout.matchAll(/<link[^>]+href="(https:\/\/(?!fonts\.)[^"]+)"[^>]*>/g)]
+      .filter(m => /stylesheet/.test(m[0])).map(m => m[1]);
+
+    test('cada script de CDN del layout está permitido', async () => {
+      const d = await directivas();
+      expect(scripts).toHaveLength(3);
+      scripts.forEach(url => expect([url, permite(d['script-src'], url)]).toEqual([url, true]));
+    });
+
+    test('cada hoja de estilo de CDN del layout está permitida', async () => {
+      const d = await directivas();
+      expect(estilos).toHaveLength(2);
+      estilos.forEach(url => expect([url, permite(d['style-src'], url)]).toEqual([url, true]));
+    });
+
+    test('Phosphor: las hojas que agrega su script y la fuente de los íconos', async () => {
+      const d = await directivas();
+      const base = 'https://cdn.jsdelivr.net/npm/@phosphor-icons/web@2.1.2/src/regular/';
+      expect(permite(d['style-src'], base + 'style.css')).toBe(true);
+      expect(permite(d['font-src'], base + 'Phosphor.woff2')).toBe(true);
+    });
+
+    test('no habilita los CDN enteros: un paquete cualquiera de npm sigue bloqueado', async () => {
+      const d = await directivas();
+      for (const url of ['https://cdn.jsdelivr.net/npm/otro-paquete/index.js', 'https://unpkg.com/otro-paquete',
+        'https://cdn.jsdelivr.net/npm/toastify-js-falso/index.js']) {
+        expect([url, permite(d['script-src'], url)]).toEqual([url, false]);
+      }
+      expect(d['script-src']).not.toContain('https:');
+      expect(d['script-src']).not.toContain('*');
+    });
+  });
+
   test('X-Powered-By eliminado (no expone Express)', async () => {
     const res = await request(app).get('/login');
     expect(res.headers['x-powered-by']).toBeUndefined();
