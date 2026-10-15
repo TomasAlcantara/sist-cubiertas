@@ -16,15 +16,28 @@ const isProd = process.env.NODE_ENV === 'production';
 // mandando el header a mano.
 app.set('trust proxy', 1);
 
+// Librerías que el layout (views/layout.ejs) carga de CDN. Se habilita la ruta de
+// cada una y no el CDN entero: jsDelivr y unpkg sirven cualquier paquete de npm,
+// y abrirlos completos dejaría cargar cualquier script publicado ahí.
+// Phosphor: el script de unpkg agrega las hojas de estilo de los íconos desde
+// jsDelivr, y esas traen la fuente de la misma carpeta.
+const CDN = {
+  phosphorScript:  'https://unpkg.com/@phosphor-icons/',
+  phosphorEstilos: 'https://cdn.jsdelivr.net/npm/@phosphor-icons/',
+  toastifyScript:  'https://cdn.jsdelivr.net/npm/toastify-js',   // sin barra final: solo esa URL
+  toastifyEstilos: 'https://cdn.jsdelivr.net/npm/toastify-js/',
+  tomSelect:       'https://cdn.jsdelivr.net/npm/tom-select@2.3.1/',
+};
+
 // Security headers
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", CDN.phosphorScript, CDN.toastifyScript, CDN.tomSelect],
       scriptSrcAttr: ["'unsafe-inline'"],        // permite onclick= en toda la app (necesario por arquitectura actual)
-      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", CDN.phosphorEstilos, CDN.toastifyEstilos, CDN.tomSelect],
+      fontSrc: ["'self'", "https://fonts.gstatic.com", CDN.phosphorEstilos],
       imgSrc: ["'self'", 'data:'],
       connectSrc: ["'self'"],
     },
